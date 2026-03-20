@@ -112,7 +112,7 @@ const ChatLog = styled.div`
   }
   
   @media (max-width: 768px) {
-    padding: var(--space);
+    padding: var(--space) calc(var(--space) * 2);
   }
 `;
 
@@ -632,8 +632,8 @@ const SuggestionChips = styled.div`
   @media (max-width: 768px) {
     margin-left: -10px;
     margin-right: -10px;
-    padding-left: var(--space);
-    padding-right: var(--space);
+    padding-left: calc(var(--space) + 2px);
+    padding-right: calc(var(--space) + 2px);
     margin-bottom: 0px;
     width: calc(100% + 20px);
     max-width: calc(100% + 20px);

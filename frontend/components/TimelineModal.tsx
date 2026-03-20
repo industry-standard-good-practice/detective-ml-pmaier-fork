@@ -174,7 +174,7 @@ const TimeGroupDot = styled.div`
 
   @media (max-width: 600px) {
     position: absolute;
-    left: 10px;
+    left: 12px;
     top: 0px;
     transform: translateX(-50%) translateY(100%);
   }
