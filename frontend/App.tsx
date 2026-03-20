@@ -1025,6 +1025,14 @@ const App: React.FC = () => {
 
   const handleEditCase = (caseId?: string | any) => {
     const idToEdit = (typeof caseId === 'string') ? caseId : gameState.selectedCaseId;
+
+    // If returning to edit a case that's already in draft (e.g. after test play),
+    // just switch to the editor — keep edits and originalDraftRef intact.
+    if (draftCase && draftCase.id === idToEdit) {
+      setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
+      return;
+    }
+
     const caseToEdit = communityCases.find(c => c.id === idToEdit) || localDrafts.find(d => d.id === idToEdit);
     if (!caseToEdit) return;
 
@@ -1442,6 +1450,7 @@ const App: React.FC = () => {
             <CaseReview 
                 key="screen-review"
                 draftCase={draftCase}
+                originalBaseline={originalDraftRef.current}
                 onUpdateDraft={(updated) => {
                     const withDiff = { ...updated, difficulty: calculateDifficulty(updated) };
                     setDraftCase(withDiff);
