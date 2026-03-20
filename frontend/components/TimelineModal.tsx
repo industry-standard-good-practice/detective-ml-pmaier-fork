@@ -2,7 +2,7 @@
 import React from 'react';
 import { type } from '../theme';
 import styled, { keyframes } from 'styled-components';
-import { TimelineStatement, Suspect } from '../types';
+import { TimelineStatement, TimelineEvent, Suspect } from '../types';
 import SuspectPortrait from './SuspectPortrait';
 
 const fadeIn = keyframes`
@@ -94,6 +94,11 @@ const TimelineLineWrapper = styled.div`
       left: 20px;
     }
   }
+
+  /* Inline (narrow panel) mode: spine on the left */
+  &.timeline-inline::before {
+    left: 20px;
+  }
 `;
 
 const TimelineContainer = styled.div`
@@ -114,6 +119,11 @@ const ScrollContent = styled.div`
 
   @media (max-width: 600px) {
     padding: calc(var(--space) * 3) var(--space);
+  }
+
+  .timeline-inline & {
+    padding: var(--space);
+    padding-bottom: calc(var(--space) * 3);
   }
 `;
 
@@ -141,6 +151,11 @@ const TimeGroupLabel = styled.div`
     align-items: flex-start;
     padding-left: calc(var(--space) * 5);
   }
+
+  .timeline-inline & {
+    align-items: flex-start;
+    padding-left: calc(var(--space) * 5);
+  }
 `;
 
 const TimeBadge = styled.div`
@@ -157,6 +172,12 @@ const TimeBadge = styled.div`
   margin-bottom: var(--space);
 
   @media (max-width: 600px) {
+    ${type.bodyLg}
+    padding: 0 calc(var(--space) * 2);
+    margin-top: var(--space);
+  }
+
+  .timeline-inline & {
     ${type.bodyLg}
     padding: 0 calc(var(--space) * 2);
     margin-top: var(--space);
@@ -178,6 +199,13 @@ const TimeGroupDot = styled.div`
     top: 0px;
     transform: translateX(-50%) translateY(100%);
   }
+
+  .timeline-inline & {
+    position: absolute;
+    left: 12px;
+    top: 0px;
+    transform: translateX(-50%) translateY(100%);
+  }
 `;
 
 const EventsRow = styled.div`
@@ -187,6 +215,13 @@ const EventsRow = styled.div`
   padding: 0 30px;
 
   @media (max-width: 600px) {
+    flex-direction: column;
+    padding-left: calc(var(--space) * 5);
+    padding-right: var(--space);
+    gap: var(--space);
+  }
+
+  .timeline-inline & {
     flex-direction: column;
     padding-left: calc(var(--space) * 5);
     padding-right: var(--space);
@@ -204,6 +239,10 @@ const LeftEvents = styled.div`
   @media (max-width: 600px) {
     align-items: flex-start;
   }
+
+  .timeline-inline & {
+    align-items: flex-start;
+  }
 `;
 
 const RightEvents = styled.div`
@@ -218,6 +257,8 @@ const RightEvents = styled.div`
 const Spacer = styled.div`
   flex: 1;
   @media (max-width: 600px) { display: none; }
+
+  .timeline-inline & { display: none; }
 `;
 
 const StatementCard = styled.div<{ $isInitial?: boolean }>`
@@ -298,7 +339,7 @@ const EmptyState = styled.div`
 
 interface TimelineModalProps {
   statements: TimelineStatement[];
-  initialTimeline?: TimelineStatement[];
+  initialTimeline?: TimelineEvent[];
   suspects: Suspect[];
   onClose: () => void;
   inline?: boolean;
@@ -357,6 +398,12 @@ const DayDivider = styled.div`
     padding: calc(var(--space) * 3) var(--space) calc(var(--space) * 3) calc(var(--space) * 5);
     &::before { display: none; }
   }
+
+  .timeline-inline & {
+    background: none;
+    padding: calc(var(--space) * 3) var(--space) calc(var(--space) * 3) calc(var(--space) * 5);
+    &::before { display: none; }
+  }
 `;
 
 const DayLabel = styled.div`
@@ -369,6 +416,11 @@ const DayLabel = styled.div`
   text-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
 
   @media (max-width: 600px) {
+    ${type.bodyLg}
+    letter-spacing: 2px;
+  }
+
+  .timeline-inline & {
     ${type.bodyLg}
     letter-spacing: 2px;
   }
@@ -390,7 +442,7 @@ const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeli
     ...initialTimeline.map((e, idx) => ({
       id: `initial-${idx}`,
       time: e.time,
-      text: e.statement,
+      text: e.activity,
       suspectId: null as string | null,
       suspectName: null as string | null,
       isInitial: true,
@@ -530,7 +582,7 @@ const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeli
 
   if (inline) {
     return (
-      <TimelineLineWrapper>
+      <TimelineLineWrapper className="timeline-inline">
         <TimelineContainer>
           {timelineContent}
         </TimelineContainer>

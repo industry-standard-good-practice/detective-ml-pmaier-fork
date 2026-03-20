@@ -40,6 +40,7 @@ const MainLayout = styled.div`
   flex: 1;
   overflow: hidden;
   margin-top: 0;
+  container-type: inline-size;
   
   @media (max-width: 768px) {
     display: none; /* Desktop layout hidden on mobile */
@@ -392,6 +393,11 @@ const TimelineButton = styled.button`
   @media (max-width: 768px) {
     ${type.bodyLg}
     padding: calc(var(--space) * 2);
+  }
+
+  /* Hide when the inline timeline panel is visible */
+  @container (min-width: 1300px) {
+    display: none;
   }
 `;
 
@@ -752,6 +758,41 @@ const InlineEvidenceWrap = styled.div`
   
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb { background: var(--color-border); }
+`;
+
+const DesktopTimelinePanel = styled.div`
+  width: 380px;
+  flex-shrink: 0;
+  display: none;
+  flex-direction: column;
+  border: 2px solid #415a77;
+  background: #0d1b2a;
+  overflow: hidden;
+
+  /* Only show when container has enough room for 2-column evidence + timeline */
+  @container (min-width: 1300px) {
+    display: flex;
+  }
+`;
+
+const DesktopTimelinePanelHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: calc(var(--space) * 2) calc(var(--space) * 2);
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(0, 0, 0, 0.3);
+  color: #4af;
+  ${type.body}
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
 `;
 
 interface CaseHubProps {
@@ -1174,6 +1215,32 @@ const CaseHub: React.FC<CaseHubProps> = ({
         {/* DESKTOP LAYOUT */}
         <BoardSection>
           <MainLayout>
+            <DesktopTimelinePanel>
+              <DesktopTimelinePanelHeader>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                TIMELINE ({timelineStatements.length})
+                {newTimelineIds.size > 0 && (
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: '#4af',
+                    boxShadow: '0 0 6px #4af, 0 0 12px rgba(68,170,255,0.4)',
+                    animation: 'notif-pulse 1.5s ease-in-out infinite',
+                    marginLeft: 6, flexShrink: 0,
+                  }} />
+                )}
+              </DesktopTimelinePanelHeader>
+              <TimelineModal
+                statements={timelineStatements}
+                suspects={caseData.suspects}
+                onClose={() => { onClearNewTimeline?.(); }}
+                inline
+                newTimelineIds={newTimelineIds}
+              />
+            </DesktopTimelinePanel>
+
             <EvidenceBoard id="evidence-board">
               <h2 style={{
                 marginTop: 0,
@@ -1344,6 +1411,7 @@ const CaseHub: React.FC<CaseHubProps> = ({
             newTimelineIds={newTimelineIds}
           />
         )}
+
 
         {/* EVIDENCE LIGHTBOX */}
         <AnimatePresence>
