@@ -1,14 +1,11 @@
 
 import React from 'react';
 import { type } from '../theme';
-import styled, { keyframes } from 'styled-components';
+import styled from 'styled-components';
 import { TimelineStatement, TimelineEvent, Suspect } from '../types';
 import SuspectPortrait from './SuspectPortrait';
 
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
+
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -132,7 +129,6 @@ const ScrollContent = styled.div`
 const TimeGroup = styled.div`
   position: relative;
   margin-bottom: calc(var(--space) * 4);
-  animation: ${fadeIn} 0.3s ease-out both;
   
   &:last-child {
     margin-bottom: 0;
@@ -541,7 +537,7 @@ const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeli
               const allRight = leftItems.length === 0;
 
               return (
-                <TimeGroup key={group.time + '-' + idx} style={{ animationDelay: `${idx * 0.05}s` }}>
+                <TimeGroup key={group.time + '-' + idx}>
                   <TimeGroupLabel>
                     <TimeBadge>{group.time}</TimeBadge>
                     <TimeGroupDot />
