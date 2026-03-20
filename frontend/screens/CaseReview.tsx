@@ -291,7 +291,7 @@ const PortraitCol = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space);
-  width: 120px;
+  width: 160px;
   flex-shrink: 0;
 
   @media (max-width: 1080px) {
@@ -308,6 +308,10 @@ const PortraitBtnGrid = styled.div`
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space);
+
+    & > *:first-child {
+      grid-column: 1 / -1;
+    }
   }
 `;
 
