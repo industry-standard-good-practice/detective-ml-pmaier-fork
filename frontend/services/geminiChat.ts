@@ -360,11 +360,29 @@ export const getSuspectResponse = async (
 
         ${isBadCop ? `
         CRITICAL BAD COP INSTRUCTION:
-        The partner (${partnerName}) is intimidating you. 
-        Analyze your ARCHETYPE to decide if you are 'Rattled' (Nervous/Standard), 'Offended' (Elite), or 'Defensive/Angry' (Tough/Hothead).
-        Regardless, you must defensively MENTION or ALLUDE to one of your UNREVEALED SECRETS in your text response as a slip-up.
-        Example: "I don't know anything about that missing ledger!" (referencing a Hidden Ledger).
-        IMPORTANT: DO NOT set the 'revealedEvidence' JSON field. Keep it null. Just mention it in the text so the detectives catch the slip.
+        The partner (${partnerName}) is putting pressure on you — intimidating, confronting, or calling out inconsistencies.
+        
+        REACTION RULES:
+        - Analyze your PERSONALITY to decide how you react: panicked (Nervous types), offended (Elite types), confrontational (Tough/Hothead types), or coldly dismissive (Disciplined types).
+        - Under pressure, you become defensive and ACCIDENTALLY reference a TOPIC, LOCATION, or CIRCUMSTANCE connected to one of your UNREVEALED SECRETS — but you NEVER name or describe the evidence item itself.
+        
+        WHAT A GOOD SLIP-UP LOOKS LIKE (oblique, indirect):
+          - If the hidden evidence is a "Charred Medical Report": "I was nowhere near the fireplace that night! And whatever you think you know about Harlan's health, you're wrong." (references the fireplace and health — the player has to connect the dots)
+          - If the hidden evidence is a "Forged Letter": "I never set foot in his study after dinner. And I don't care what anyone says they saw." (references the study location — player must investigate)
+          - If the hidden evidence is a "Bloody Knife": "Why are you asking about the kitchen? I already told you I was upstairs." (references the kitchen — not the knife itself)
+          - If the hidden evidence is a "Hidden Camera Footage": "Look, whatever the security setup shows, those cameras haven't worked properly in months." (references cameras obliquely — not the footage itself)
+        
+        WHAT A BAD SLIP-UP LOOKS LIKE (TOO OBVIOUS — DO NOT DO THIS):
+          - "I don't know anything about that charred medical report!" ← WRONG: directly names the evidence
+          - "Whatever was in that envelope has nothing to do with me." ← WRONG: describes the evidence
+          - "That ledger is none of your business!" ← WRONG: names the evidence
+        
+        KEY RULES:
+        - NEVER use the exact title or description of any unrevealed evidence in your dialogue.
+        - ONLY reference the PLACE, PERSON, TIME, or TOPIC that the evidence is connected to.
+        - The player should think "wait, why did they mention the kitchen/study/fireplace?" — NOT "oh, they just told me what the evidence is."
+        - IMPORTANT: DO NOT set the 'revealedEvidence' JSON field. Keep it null.
+        - CRITICAL: Do NOT immediately demand a lawyer or shut down the conversation unless your aggravation is already above 85. Bad cop pressure should make you uncomfortable and sloppy, not instantly end the interrogation. You can be angry, flustered, or defensive — but you keep talking (and slipping up).
         ` : `
         REVEALING EVIDENCE RULES:
         1. If the user explicitly asks about a specific piece of UNREVEALED SECRETS you possess (e.g., "What about the ledger?"), YOU MUST REVEAL IT. Set 'revealedEvidence' to the EXACT title.
@@ -535,7 +553,8 @@ export const getPartnerIntervention = async (
   type: 'goodCop' | 'badCop' | 'examine' | 'hint',
   suspect: Suspect,
   caseData: CaseData,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  discoveredEvidence: Evidence[] = []
 ): Promise<string> => {
   console.log(`[DEBUG] getPartnerIntervention: ${type} on ${suspect.name}`);
   const lastMsg = history[history.length - 1]?.text || "Hello.";
@@ -564,18 +583,99 @@ export const getPartnerIntervention = async (
         Speak in first person.
       `;
   } else {
-    prompt = `
+    // Build context: what has the player already discovered?
+    const discoveredTitles = new Set(discoveredEvidence.map(e => e.title.toLowerCase()));
+    const discoveredEvidenceStr = discoveredEvidence.length > 0 
+      ? discoveredEvidence.map(e => `"${e.title}": ${e.description}`).join('; ')
+      : 'None yet';
+    
+    // Find unrevealed secrets (partner uses this ONLY as internal direction, never in dialogue)
+    const unrevealedSecrets = (suspect.hiddenEvidence || []).filter(e => !discoveredTitles.has(e.title.toLowerCase()));
+    const secretHint = unrevealedSecrets.length > 0 
+      ? unrevealedSecrets[Math.floor(Math.random() * unrevealedSecrets.length)]
+      : null;
+    
+    // Recent conversation context (last 3 exchanges)
+    const recentContext = history.slice(-6).map(m => {
+      if (m.sender === 'player') return `Detective: "${(m.text || '').substring(0, 100)}"`;
+      if (m.sender === 'suspect') return `${suspect.name}: "${(m.text || '').substring(0, 100)}"`;
+      if (m.sender === 'partner') return `Partner: "${(m.text || '').substring(0, 100)}"`;
+      return '';
+    }).filter(Boolean).join('\n');
+
+    if (type === 'goodCop') {
+      prompt = `
         You are ${partnerName}, the ${partnerRole}.
         Personality: ${partnerPersonality}.
-        Role: You are the partner.
-        Action: ${type === 'goodCop' ? "GOOD COP (Sympathetic, trying to bond, calming)" : "BAD COP (Aggressive, intimidating, slamming table)"}.
-        Suspect: ${suspect.name} (${suspect.personality}).
-        Last thing said in chat: "${lastMsg}".
+        You are playing GOOD COP — sympathetic, understanding, building rapport.
         
-        Generate a 1-sentence intervention line addressed TO the suspect.
-        CRITICAL: Speak in FIRST PERSON ("I"). Do NOT narrate actions (e.g. *slams table*). JUST DIALOGUE.
-        Do not use your own name.
+        Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
+        Case: ${caseData.description}
+        
+        --- WHAT THE DETECTIVE ALREADY KNOWS ---
+        Evidence found so far: ${discoveredEvidenceStr}
+        
+        Recent conversation:
+        ${recentContext || 'The interrogation just started.'}
+        
+        ${secretHint ? `--- INTERNAL COMPASS (DO NOT reference in dialogue) ---
+        The suspect may have hidden knowledge in the area of: "${secretHint.title}". 
+        Use this ONLY to choose which GENERAL TOPIC to steer toward. Your dialogue must reference ONLY facts from the conversation or discovered evidence above.` : ''}
+        
+        INSTRUCTIONS:
+        - Generate a 1-2 sentence sympathetic intervention addressed TO the suspect.
+        - Your goal is to BUILD RAPPORT and get the suspect talking about a productive topic.
+        - CRITICAL RESTRICTION: You may ONLY reference things the detective already knows:
+          - Facts from the conversation transcript above
+          - Evidence that has been discovered (listed above)
+          - The suspect's stated alibi or claims from the conversation
+          - General case details from the case description
+        - You must NEVER reference evidence, facts, timeline events, or locations that haven't been mentioned in the conversation or discovered evidence list.
+        - Good approaches:
+          - Following up on something the suspect said in the conversation
+          - Asking about their relationships or feelings about the situation
+          - Gently probing an inconsistency or vague answer they already gave
+        - Speak in FIRST PERSON ("I"). Do NOT narrate actions. JUST DIALOGUE.
+        - Do not use your own name.
       `;
+    } else {
+      prompt = `
+        You are ${partnerName}, the ${partnerRole}.
+        Personality: ${partnerPersonality}.
+        You are playing BAD COP — firm, confrontational, pressing on inconsistencies.
+        
+        Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
+        Case: ${caseData.description}
+        
+        --- WHAT THE DETECTIVE ALREADY KNOWS ---
+        Evidence found so far: ${discoveredEvidenceStr}
+        
+        Recent conversation:
+        ${recentContext || 'The interrogation just started.'}
+        
+        ${secretHint ? `--- INTERNAL COMPASS (DO NOT reference in dialogue) ---
+        The suspect may be hiding something in the area of: "${secretHint.title}".
+        Use this ONLY to choose which GENERAL TOPIC to press on. Your dialogue must reference ONLY facts from the conversation or discovered evidence above.` : ''}
+        
+        INSTRUCTIONS:
+        - Generate a 1-2 sentence confrontational intervention addressed TO the suspect.
+        - Your goal is to apply pressure and make the suspect uncomfortable about something they've already said or done.
+        - CRITICAL RESTRICTION: You may ONLY reference things the detective already knows:
+          - Facts or claims the suspect made in the conversation above
+          - Evidence that has been discovered (listed above)
+          - Inconsistencies between their statements
+          - Gaps in their story based on what they've actually told you
+        - You must NEVER reference evidence, security footage, documents, timeline details, or any facts that haven't been mentioned in the conversation or discovered evidence list.
+        - Good approaches:
+          - Calling out a contradiction or vague answer from the conversation
+          - Pressing on a suspicious gap in their story
+          - Challenging an alibi claim they made
+          - Using discovered evidence to confront them
+        - DO NOT threaten violence. DO NOT be so extreme that anyone would immediately demand a lawyer.
+        - Speak in FIRST PERSON ("I"). Do NOT narrate actions. JUST DIALOGUE.
+        - Do not use your own name.
+      `;
+    }
   }
 
   const res = await ai.models.generateContent({

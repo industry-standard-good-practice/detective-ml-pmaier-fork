@@ -817,6 +817,7 @@ interface CaseHubProps {
   onClearNewEvidence?: (title: string) => void;
   onClearAllNewEvidence?: () => void;
   onClearNewTimeline?: () => void;
+  onClearSingleTimelineId?: (id: string) => void;
   suspectEmotions?: Record<string, Emotion>;
 }
 
@@ -842,6 +843,7 @@ const CaseHub: React.FC<CaseHubProps> = ({
   onClearNewEvidence,
   onClearAllNewEvidence,
   onClearNewTimeline,
+  onClearSingleTimelineId,
   suspectEmotions = {}
 }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1238,6 +1240,7 @@ const CaseHub: React.FC<CaseHubProps> = ({
                 onClose={() => { onClearNewTimeline?.(); }}
                 inline
                 newTimelineIds={newTimelineIds}
+                onHoverClearId={onClearSingleTimelineId}
               />
             </DesktopTimelinePanel>
 

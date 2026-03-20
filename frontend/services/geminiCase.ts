@@ -641,6 +641,19 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
             }
         });
 
+        // --- STATUS: derive from baseAggravation if still missing after carry-forward ---
+        if (!s.status || typeof s.status !== 'string' || s.status.trim().length === 0) {
+            if (s.isDeceased) {
+                s.status = 'Deceased';
+            } else {
+                const agg = typeof s.baseAggravation === 'number' ? s.baseAggravation : 0;
+                if (agg <= 25) s.status = 'Cooperative';
+                else if (agg <= 50) s.status = 'Guarded';
+                else if (agg <= 75) s.status = 'Tense';
+                else s.status = 'Hostile';
+            }
+        }
+
         // --- REQUIRED NUMBER FIELDS: carry forward ---
         if (typeof s.age !== 'number' || isNaN(s.age)) s.age = orig.age ?? s.age;
         if (typeof s.baseAggravation !== 'number' || isNaN(s.baseAggravation)) s.baseAggravation = orig.baseAggravation ?? s.baseAggravation;
@@ -1262,6 +1275,7 @@ ${userChangeLog}
     
     **STRUCTURAL RULES (check but only fix if actually broken):**
     ${PROMPT_RULES.DATA_COMPLETENESS}
+    ${PROMPT_RULES.SUSPECT_PROFILES}
     ${PROMPT_RULES.RELATIONSHIP_QUALITY}
     ${PROMPT_RULES.INITIAL_TIMELINE_SPOILER_PROTECTION}
     ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
@@ -1516,13 +1530,15 @@ ${userChangeLog}
 
       9. ${PROMPT_RULES.DATA_COMPLETENESS}
 
-      10. ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
+      10. ${PROMPT_RULES.SUSPECT_PROFILES}
 
-      11. ${PROMPT_RULES.START_TIME_ALIGNMENT}
+      11. ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
+
+      12. ${PROMPT_RULES.START_TIME_ALIGNMENT}
            
-      12. ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
+      13. ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
       
-      13. ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
+      14. ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
       
       CASE DATA:
       ${JSON.stringify(lightweightCase, null, 2)}`,

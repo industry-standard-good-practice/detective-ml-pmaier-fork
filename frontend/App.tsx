@@ -451,17 +451,17 @@ const App: React.FC = () => {
            action, 
            suspect,
            currentCase,
-           chatHistory[currentSuspectId] || []
+           chatHistory[currentSuspectId] || [],
+           evidenceDiscovered
         );
 
         let newAgg = currentAgg;
         let whisperComment = "";
-
         if (action === 'goodCop') {
-            newAgg = Math.floor(currentAgg * 0.5);
+            newAgg = Math.floor(currentAgg * (0.5 + Math.random() * 0.2)); // Reduce by 30-50%
             whisperComment = "I smoothed things over. They seem calmer now.";
         } else if (action === 'badCop') {
-            let aggIncrease = 20 + Math.floor(Math.random() * 15);
+            let aggIncrease = 8 + Math.floor(Math.random() * 10); // +8 to +18 base (AI response adds more)
             newAgg = Math.min(100, currentAgg + aggIncrease);
             whisperComment = "Reading their reaction...";
         } else if (action === 'examine') {
@@ -1508,6 +1508,13 @@ const App: React.FC = () => {
               }}
               onClearAllNewEvidence={() => setNewEvidenceTitles(new Set())}
               onClearNewTimeline={() => setNewTimelineIds(new Set())}
+              onClearSingleTimelineId={(id) => {
+                setNewTimelineIds(prev => {
+                  const next = new Set(prev);
+                  next.delete(id);
+                  return next;
+                });
+              }}
               initialMobileTab={previousScreenRef.current === ScreenState.INTERROGATION || previousScreenRef.current === ScreenState.ACCUSATION ? 'BOARD' : 'HQ'}
               initialAccordion={boardAccordionTab}
               onAccordionChange={setBoardAccordionTab}

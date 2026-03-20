@@ -340,6 +340,7 @@ interface TimelineModalProps {
   onClose: () => void;
   inline?: boolean;
   newTimelineIds?: Set<string>;
+  onHoverClearId?: (id: string) => void;
 }
 
 /**
@@ -422,7 +423,7 @@ const DayLabel = styled.div`
   }
 `;
 
-const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeline = [], suspects, onClose, inline = false, newTimelineIds = new Set() }) => {
+const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeline = [], suspects, onClose, inline = false, newTimelineIds = new Set(), onHoverClearId }) => {
   // Combine discovered statements with initial timeline events
   const allEvents = [
     ...statements.map(s => ({
@@ -484,7 +485,9 @@ const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeli
   const renderEvent = (e: typeof sortedEvents[0]) => {
     const suspect = e.suspectId ? suspects.find(sus => sus.id === e.suspectId) : null;
     return (
-      <StatementCard key={e.id} $isInitial={e.isInitial}>
+      <StatementCard key={e.id} $isInitial={e.isInitial}
+        onMouseEnter={newTimelineIds.has(e.id) && onHoverClearId ? () => onHoverClearId(e.id) : undefined}
+      >
         {newTimelineIds.has(e.id) && <NewEntryDot />}
         <CardHeader>
           {suspect ? (
