@@ -266,6 +266,8 @@ const Title = styled.h1`
   
   @media (max-width: 768px) {
     ${type.h3}
+    /* Never show ellipsis on mobile — the marquee handles overflow instead */
+    text-overflow: clip;
   }
 `;
 
@@ -699,7 +701,7 @@ const Layout: React.FC<LayoutProps> = ({
   const [marqueeAnimName, setMarqueeAnimName] = useState('');
   const marqueeStyleRef = useRef<HTMLStyleElement | null>(null);
 
-  // Phase 1: Detect overflow. Title stays in original layout for reliable measurement.
+  // Phase 1: Detect overflow using ResizeObserver for reliable mobile measurement.
   useEffect(() => {
     setIsTitleOverflowing(false);
     setMarqueeAnimName('');
@@ -711,18 +713,31 @@ const Layout: React.FC<LayoutProps> = ({
     const el = titleRef.current;
     if (!el) return;
 
+    const checkOverflow = () => {
+      if (window.innerWidth > 768) return;
+      if (el.scrollWidth > el.clientWidth + 2) {
+        setMarqueeWidth(el.clientWidth);
+        setIsTitleOverflowing(true);
+      }
+    };
+
+    // Check immediately after layout settles
     const timer = setTimeout(() => {
-      requestAnimationFrame(() => {
-        if (window.innerWidth > 768) return;
-        if (el.scrollWidth > el.clientWidth + 2) {
-          setMarqueeWidth(el.clientWidth);
-          setIsTitleOverflowing(true);
-        }
+      requestAnimationFrame(checkOverflow);
+    }, 50);
+
+    // Also observe the element for resize changes (handles late grid layout)
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        requestAnimationFrame(checkOverflow);
       });
-    }, 200);
+      observer.observe(el);
+    }
 
     return () => {
       clearTimeout(timer);
+      observer?.disconnect();
       if (marqueeStyleRef.current) {
         marqueeStyleRef.current.remove();
         marqueeStyleRef.current = null;
