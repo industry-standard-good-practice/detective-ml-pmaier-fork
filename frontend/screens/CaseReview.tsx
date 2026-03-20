@@ -351,6 +351,21 @@ const UploadButton = styled.button`
   &:disabled { opacity: 0.5; cursor: wait; }
 `;
 
+const PasteButton = styled.button`
+  background: #324;
+  color: #daf;
+  border: 1px solid #546;
+  cursor: pointer;
+  padding: var(--space) calc(var(--space) * 2);
+  font-family: inherit;
+  ${type.small}
+  width: 100%;
+  transition: all 0.2s;
+  
+  &:hover { background: #435; }
+  &:disabled { opacity: 0.5; cursor: wait; }
+`;
+
 const CameraButton = styled.button`
   background: #422;
   color: #fa0;
@@ -1048,6 +1063,36 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
+  const handlePasteFromClipboard = async (callback: (base64: string) => void) => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const base64 = e.target?.result as string;
+            if (base64) {
+              callback(base64);
+              toast.success('Image pasted from clipboard!');
+            }
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+      toast.error('No image found on clipboard.');
+    } catch (err: any) {
+      console.error('Clipboard paste failed:', err);
+      if (err?.name === 'NotAllowedError') {
+        toast.error('Clipboard access denied. Please allow clipboard permissions.');
+      } else {
+        toast.error('Could not read clipboard. Try copying an image first.');
+      }
+    }
+  };
+
   // --- CAMERA LOGIC ---
 
   const startCamera = async () => {
@@ -1644,6 +1689,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
                       }} style={{ flex: 1 }}>
                         UPLOAD IMAGE
                       </SmallButton>
+                      <SmallButton onClick={() => handlePasteFromClipboard((base64) => handleCaseChange('heroImageUrl', base64))} style={{ flex: 1 }}>
+                        PASTE
+                      </SmallButton>
                     </div>
                   )}
 
@@ -1901,6 +1949,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
                   <UploadButton onClick={triggerUpload} disabled={loadingState.visible}>
                     UPLOAD REF
                   </UploadButton>
+                  <PasteButton onClick={() => handlePasteFromClipboard(processSuspectImage)} disabled={loadingState.visible}>
+                    PASTE
+                  </PasteButton>
                   <CameraButton onClick={startCamera} disabled={loadingState.visible}>
                     TAKE PHOTO
                   </CameraButton>

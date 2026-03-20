@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { type } from '../theme';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wand2, Save, Undo, Loader2, AlertCircle, ImagePlus } from 'lucide-react';
+import { X, Wand2, Save, Undo, Loader2, AlertCircle, ImagePlus, ClipboardPaste } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiImages';
 
@@ -239,6 +239,38 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
+  const handlePasteFromClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const base64 = e.target?.result as string;
+            if (base64) {
+              setHistory(prev => [...prev, base64]);
+              setCurrentImageUrl(base64);
+              setError(null);
+              toast.success('Image pasted from clipboard!');
+            }
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+      toast.error('No image found on clipboard.');
+    } catch (err: any) {
+      console.error('Clipboard paste failed:', err);
+      if (err?.name === 'NotAllowedError') {
+        toast.error('Clipboard access denied. Please allow clipboard permissions.');
+      } else {
+        toast.error('Could not read clipboard. Try copying an image first.');
+      }
+    }
+  };
+
   useEffect(() => {
     // If the initial image is a remote URL, try to fetch it and convert to base64
     // to avoid CORS issues during editing.
@@ -381,6 +413,23 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'calc(var(--space) * 2)', color: 'rgba(255,255,255,0.3)', padding: 'calc(var(--space) * 5)', textAlign: 'center' }}>
                   <ImagePlus size={48} />
                   <span style={{ fontSize: 'var(--type-small)' }}>Describe your character below to generate a portrait</span>
+                  <button
+                    onClick={handlePasteFromClipboard}
+                    disabled={isGenerating || isSaving}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 16px', background: 'rgba(255,255,255,0.08)',
+                      border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.5)',
+                      cursor: 'pointer', fontSize: 'var(--type-small)', transition: 'all 0.2s',
+                      marginTop: 'var(--space)',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                    title="Paste image from clipboard"
+                  >
+                    <ClipboardPaste size={14} />
+                    Paste from Clipboard
+                  </button>
                 </div>
               )}
               {isGenerating && (
@@ -426,14 +475,24 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '6px 8px',
                     }}>
-                    <Button
-                      onClick={handleUndo}
-                      disabled={isGenerating || isSaving || history.length <= 1}
-                      style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
-                    >
-                      <Undo size={14} />
-                      Undo
-                    </Button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <Button
+                        onClick={handleUndo}
+                        disabled={isGenerating || isSaving || history.length <= 1}
+                        style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
+                      >
+                        <Undo size={14} />
+                        Undo
+                      </Button>
+                      <Button
+                        onClick={handlePasteFromClipboard}
+                        disabled={isGenerating || isSaving}
+                        style={{ flex: 'none', width: '36px', height: '36px', padding: 0 }}
+                        title="Paste image from clipboard"
+                      >
+                        <ClipboardPaste size={14} />
+                      </Button>
+                    </div>
                     <Button
                       $variant="primary"
                       onClick={handleEdit}

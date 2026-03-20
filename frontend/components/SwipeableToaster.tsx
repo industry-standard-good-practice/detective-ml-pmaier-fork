@@ -94,6 +94,7 @@ const SwipeableToaster: React.FC<{ containerStyle?: React.CSSProperties }> = ({
         bottom: 0,
         left: 0,
         right: 0,
+        paddingTop: 80,
         pointerEvents: 'none',
         zIndex: 50,
         ...containerStyle,
@@ -102,7 +103,7 @@ const SwipeableToaster: React.FC<{ containerStyle?: React.CSSProperties }> = ({
       onMouseLeave={endPause}
     >
       {toasts.map((t) => {
-        const pos = t.position || 'bottom-right';
+        const pos = t.position || 'top-right';
         const isTop = pos.includes('top');
 
         const offset = calculateOffset(t, {
