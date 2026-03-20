@@ -1689,7 +1689,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
           <ChatLog ref={scrollRef}>
             {chatHistory.map((msg, idx) => (
               <MessageBubble
-                key={`${msg.sender}-${idx}-${msg.text.substring(0, 10)}`}
+                key={`${msg.sender}-${idx}-${(msg.text || '').substring(0, 10)}`}
                 $sender={msg.sender}
                 $isAction={msg.type === 'action'}
                 $customColor={msg.sender === 'suspect' ? getSuspectColor(suspect.id) : undefined}

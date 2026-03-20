@@ -582,7 +582,7 @@ export const getPartnerIntervention = async (
     model: GEMINI_MODELS.CHAT,
     contents: prompt
   });
-  return res.text!;
+  return res.text || "...";
 };
 
 export const getBadCopHint = async (suspect: Suspect, unrevealed: Evidence[], responseText: string): Promise<string> => {
