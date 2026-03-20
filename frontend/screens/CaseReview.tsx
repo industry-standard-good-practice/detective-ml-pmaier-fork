@@ -26,6 +26,8 @@ const Container = styled.div`
     flex-direction: column;
     padding: 10px var(--screen-edge-horizontal) calc(var(--screen-edge-bottom) + 20px) var(--screen-edge-horizontal);
     gap: 0;
+    overflow-x: hidden;
+    min-width: 0;
   }
 `;
 
@@ -69,6 +71,7 @@ const Panel = styled.div<{ $mobileHidden?: boolean }>`
     display: ${props => props.$mobileHidden ? 'none' : 'flex'};
     padding: calc(var(--space) * 2);
     min-height: 0;
+    min-width: 0;
     flex: 1;
     overflow-x: hidden;
   }
@@ -115,6 +118,7 @@ const InputGroup = styled.div`
   flex-direction: column;
   gap: var(--space);
   min-width: 0;
+  max-width: 100%;
 
   label {
     color: var(--color-text-disabled);
@@ -131,6 +135,7 @@ const InputGroup = styled.div`
     ${type.body}
     box-sizing: border-box;
     max-width: 100%;
+    width: 100%;
 
     &:focus {
       border-color: var(--color-text-subtle);
@@ -171,6 +176,8 @@ const StyledInput = styled.input`
   padding: var(--space);
   ${type.body}
   width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
   
   &:focus {
     border-bottom-color: var(--color-accent-green);
@@ -189,6 +196,8 @@ const StyledTextArea = styled.textarea`
   ${type.body}
   resize: none;
   width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
   field-sizing: content;
   
   &:focus {
@@ -212,6 +221,8 @@ const ModuleItem = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space);
+  min-width: 0;
+  max-width: 100%;
 `;
 
 // -----------------------------------------
@@ -230,9 +241,16 @@ const SuspectRow = styled.div<{ $selected: boolean }>`
   background: ${props => props.$selected ? 'var(--color-border-subtle)' : '#0f0f0f'};
   border: 1px solid ${props => props.$selected ? 'var(--color-text-bright)' : 'var(--color-border)'};
   cursor: pointer;
+  min-width: 0;
 
   &:hover {
     background: var(--color-border-subtle);
+  }
+
+  & > div {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `;
 
@@ -296,9 +314,11 @@ const PortraitBtnGrid = styled.div`
 const InputsCol = styled.div`
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space);
+  overflow: hidden;
 `;
 
 const RandomizeButton = styled.button`
@@ -410,6 +430,7 @@ const Fieldset = styled.fieldset`
   padding: 15px 0 0 0;
   margin: 20px 0 0 0;
   background: transparent;
+  min-width: 0;
   
   legend {
     color: var(--color-text-subtle);
@@ -1811,7 +1832,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, onUpdateDraft, onSta
         </SuspectList>
 
         {activeSuspect && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(var(--space) * 2)', marginTop: 'calc(var(--space) * 3)', borderTop: '1px solid #333', paddingTop: 'calc(var(--space) * 3)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(var(--space) * 2)', marginTop: 'calc(var(--space) * 3)', borderTop: '1px solid #333', paddingTop: 'calc(var(--space) * 3)', minWidth: 0, maxWidth: '100%' }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space)' }}>
               <h3 style={{ margin: 0, color: '#aaa', fontSize: 'var(--type-h3)' }}>
@@ -1870,7 +1891,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, onUpdateDraft, onSta
 
               {/* Right: All the input fields */}
               <InputsCol>
-                <div style={{ display: 'flex', gap: 'var(--space)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space)', minWidth: 0, maxWidth: '100%' }}>
                   <InputGroup style={{ flex: 1 }}>
                     <label>Name</label>
                     <input
