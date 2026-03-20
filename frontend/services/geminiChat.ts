@@ -258,6 +258,7 @@ export const getSuspectResponse = async (
            - POSITIVE numbers (+1 to +100): The suspect got more annoyed, offended, impatient, or angry.
            - ZERO (0): Neutral interaction.
            - NEGATIVE numbers (-1 to -100): The suspect calmed down, felt respected, or appreciated the detective's kindness.
+           - **LUDONARRATIVE HARMONY (CRITICAL):** The change in aggravation MUST match the tone of your text response. If your generated response is hostile, dismissive, defensive, sarcastic, or mocking, aggravation MUST go up (+). If your response shows you genuinely calming down and being cooperative, aggravation goes down (-). NEVER decrease aggravation if you are verbally rejecting the detective's empathy or answering aggressively.
 
            --- UNIVERSAL RULES ---
            - EMPATHY / CONDOLENCES / POLITENESS: If the detective is genuinely compassionate ("I'm sorry for your loss", "Take your time"), you should GENERALLY reduce aggravation (-10 to -30). HOWEVER, evaluate this against their personality. If they are deeply cynical, defensive, or hostile (e.g., Aggressive or Tough), they might view your empathy as patronizing, manipulative, or false sympathy, keeping aggravation neutral (0) or even slightly increasing it (+5 to +10). Let their personality, motive, and context dictate if the empathy actually lands.
