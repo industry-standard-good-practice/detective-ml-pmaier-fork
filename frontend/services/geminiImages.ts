@@ -345,14 +345,17 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
     // 1. Convert User Photo -> Pixel Art Neutral
     // We use the 'create' mode but pass the user image as reference to guide the structure/content
     const conversionPrompt = `
-      [STRICT OVERRIDE]: You MUST strictly use the 16-bit pixel art style. If a second reference image is provided, match its exact art style.
-      The provided FIRST image is the SUBJECT. Convert this subject into heavy, stylised, blocky pixel art.
-      - MAINTAIN their gender, facial features, and likeness so they remain recognizable.
-      - OVERWRITE THE STYLE. Destroy all photorealism. Ensure visible, jagged pixels, dithered shading, and a limited color palette. Do NOT output a smooth photograph or 3D render.
+      [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
+      The FIRST image provided is the exact ART STYLE you must use.
+      The SECOND image provided is the SUBJECT. 
+      Draw the SUBJECT from the second image using the EXACT pixel art style of the first image.
+      - DO NOT use the style of the subject photograph. DESTROY all photorealism.
+      - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
+      - MAINTAIN the subject's core facial features, hairstyle, and gender so they are recognizable, but translated perfectly into true 16-bit pixel art rather than a photo filter.
       Output Style: ${PIXEL_ART_BASE}
-      Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges of the frame (full bleed) without any background gaps on the sides.
+      Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
       Background: Solid ${colorDesc} background.
-      NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render.
+      NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter, pixelated photo.
     `;
 
     let styleRefBase64: string | null = null;
@@ -365,13 +368,13 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
 
     let neutralRaw: string | null = null;
     try {
-        const parts: any[] = [
-            { inlineData: { mimeType: 'image/png', data: userImageBase64.split(',')[1] } }
-        ];
+        const parts: any[] = [];
         
         if (styleRefBase64) {
             parts.push({ inlineData: { mimeType: 'image/png', data: styleRefBase64 } });
         }
+        
+        parts.push({ inlineData: { mimeType: 'image/png', data: userImageBase64.split(',')[1] } });
         
         parts.push({ text: conversionPrompt });
         
