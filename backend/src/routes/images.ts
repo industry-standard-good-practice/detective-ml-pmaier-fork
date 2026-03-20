@@ -40,13 +40,14 @@ router.post('/upload', async (req: Request, res: Response) => {
     await file.save(buffer, {
       metadata: {
         contentType: 'image/png',
-        cacheControl: 'public, max-age=31536000',
+        cacheControl: 'public, max-age=3600',
       },
     });
 
     // Make the file publicly readable and get the download URL
+    // Append a cache-busting query param so rerolled images bypass browser cache
     await file.makePublic();
-    const url = `https://storage.googleapis.com/${getBucket().name}/${path}`;
+    const url = `https://storage.googleapis.com/${getBucket().name}/${path}?v=${Date.now()}`;
 
     console.log(`[Images] Uploaded to ${path} -> ${url}`);
     res.json({ url });
