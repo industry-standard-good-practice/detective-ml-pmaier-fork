@@ -1119,6 +1119,14 @@ const Interrogation: React.FC<InterrogationProps> = ({
     }
   }, [volume]);
 
+  // Immediately stop any playing audio when sound is toggled off
+  useEffect(() => {
+    if (!soundEnabled && audioRef.current) {
+      audioRef.current.stop();
+      audioRef.current = null;
+    }
+  }, [soundEnabled]);
+
   useEffect(() => {
     voiceRef.current = suspect.voice || null;
   }, [suspect.id]);
@@ -1127,6 +1135,11 @@ const Interrogation: React.FC<InterrogationProps> = ({
     isMounted.current = true;
     return () => {
       isMounted.current = false;
+      // Stop any playing TTS when leaving interrogation (case hub, suspect switch, etc.)
+      if (audioRef.current) {
+        audioRef.current.stop();
+        audioRef.current = null;
+      }
     };
   }, []);
 
