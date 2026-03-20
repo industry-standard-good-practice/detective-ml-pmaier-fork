@@ -320,6 +320,11 @@ const Interrogation: React.FC<InterrogationProps> = ({
   // --- Input Handlers ---
   const handleSend = () => {
     if (inputVal.trim() && !isThinking) {
+      // Stop any currently playing TTS
+      if (audioRef.current) {
+        audioRef.current.stop();
+        audioRef.current = null;
+      }
       const evidenceTitle = selectedEvidence.length > 0
         ? selectedEvidence.map(ev => 'title' in ev ? ev.title : `Timeline: ${ev.time} - ${ev.statement}`).join(' | ')
         : undefined;

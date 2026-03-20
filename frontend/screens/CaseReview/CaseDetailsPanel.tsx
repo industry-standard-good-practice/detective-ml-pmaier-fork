@@ -456,8 +456,10 @@ const TimelineDayInput = styled(StyledInput)`
 `;
 
 const TimelineOffsetInput = styled(StyledInput)`
-  flex: 0;
-  width: 70px;
+  flex: 0 0 auto;
+  width: 90px;
+  min-width: 90px;
+  text-align: center;
 `;
 
 const SideDeleteButton = styled(DeleteButton)`

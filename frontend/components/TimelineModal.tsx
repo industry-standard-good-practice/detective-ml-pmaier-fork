@@ -448,6 +448,37 @@ const TimelineModal: React.FC<TimelineModalProps> = ({ statements, initialTimeli
     }))
   ];
 
+  // --- Midnight correction ---
+  // Early AM times (12:00 AM – 4:59 AM) that share a dayOffset with PM events
+  // logically belong to the NEXT day (e.g. "drove home at midnight" after an 11:30 PM party).
+  // Group events by dayOffset, check for PM+early-AM overlap, and bump the early-AM ones forward.
+  const EARLY_AM_THRESHOLD = 5 * 60; // 5:00 AM in minutes
+  const PM_START = 12 * 60; // 12:00 PM in minutes
+
+  const dayOffsetLabel = (offset: number): string => {
+    if (offset === 0) return 'Today';
+    if (offset === -1) return 'Yesterday';
+    if (offset === 1) return 'Tomorrow';
+    if (offset < -1) return `${Math.abs(offset)} Days Ago`;
+    return `${offset} Days From Now`;
+  };
+
+  // Build a set of dayOffsets that contain at least one PM event
+  const dayOffsetsWithPM = new Set<number>();
+  allEvents.forEach(e => {
+    const mins = parseTimeToMinutes(e.time);
+    if (mins >= PM_START) dayOffsetsWithPM.add(e.dayOffset);
+  });
+
+  // Bump early-AM events to the next day if their current day also has PM events
+  allEvents.forEach(e => {
+    const mins = parseTimeToMinutes(e.time);
+    if (mins >= 0 && mins < EARLY_AM_THRESHOLD && dayOffsetsWithPM.has(e.dayOffset)) {
+      e.dayOffset += 1;
+      e.day = dayOffsetLabel(e.dayOffset);
+    }
+  });
+
   // Sort all events by day offset first, then by time within each day
   const sortedEvents = [...allEvents].sort((a, b) => {
     // Sort by dayOffset first (ascending: earliest day first)
