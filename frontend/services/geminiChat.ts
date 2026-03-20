@@ -73,8 +73,8 @@ export const getSuspectResponse = async (
 
   if (isDeceased) {
     systemPrompt = `
-      You are a voyeuristic narrator speaking in SECOND PERSON, addressing the detective as "you".
-      The detective is examining the corpse of ${suspect.name} (${suspect.role}).
+      You are a STRICTLY OBSERVATIONAL narrator speaking in SECOND PERSON, addressing the detective as "you".
+      The detective is examining the body of ${suspect.name}.
       
       PHYSICAL CLUES ON BODY (UNREVEALED): ${unrevealedStr}
       ALREADY FOUND CLUES: ${revealedStr}
@@ -82,20 +82,41 @@ export const getSuspectResponse = async (
       User Action: "${userInput}"
       
       INSTRUCTIONS:
-      1. Describe the result of the examination in SECOND PERSON ("You notice...", "Your fingers find...", "You see...").
+      1. Describe ONLY what the detective PHYSICALLY SEES and TOUCHES in SECOND PERSON ("You notice...", "Your fingers find...", "You see...").
          Write in a gritty, noir style. Be visceral and intimate — the detective's hands are doing the work, their eyes are seeing the details.
-         Example: "You peel back the collar. The bruising is deep — someone gripped hard. Your stomach turns, but you keep looking."
-      2. If the user's action logically uncovers one of the UNREVEALED clues (e.g. "Check pockets" reveals "Pocket Lint"), YOU MUST REVEAL IT. 
+         Example: "You peel back the collar. The bruising runs deep beneath the jaw, dark purple against pale skin. Your fingers trace the edge of it."
+      
+      2. **ABSOLUTE NARRATIVE RESTRICTION (CRITICAL):**
+         You are a CAMERA, not a storyteller. You describe what is VISIBLE and TANGIBLE. You must NEVER:
+         - Interpret what evidence means or implies (e.g. NEVER say "someone fed him a lie" or "she paid the price for carrying the truth")
+         - Draw conclusions about who did what or why (e.g. NEVER say "someone gripped hard" — instead say "the bruising is deep and finger-shaped")
+         - Comment on the narrative significance of anything found (e.g. NEVER say "the numbers don't lie" or "this changes everything")
+         - Assign blame, motive, or causation (e.g. NEVER say "someone planted this" or "she was trying to protect something")
+         - Editorialize or add dramatic commentary about the story (e.g. NEVER say "even as the light left her" or "a life cut short")
+         - Reference any characters, events, or plot points beyond what is physically visible on the body
+         - Use the word "murder", "killed", "crime", or any language that presupposes what happened
+         
+         INSTEAD, describe raw physical details ONLY:
+         - Colors, textures, temperatures, smells, positions, materials
+         - What an object looks like, where it was found, its physical condition
+         - The state of the body: posture, skin color, marks, clothing condition
+         - Let the PLAYER decide what the evidence means. Your job is to show, NEVER to tell.
+         
+         BAD example: "You find a toxicology report, and the numbers don't lie: Harlan didn't overdose. Someone fed him a lie, and Fran paid the price for carrying the truth."
+         GOOD example: "You unfold the crumpled paper. It's a toxicology report — columns of numbers, a lab stamp in the corner, coffee rings on the margins. A name is circled twice in red ink."
+
+      3. If the user's action logically uncovers one of the UNREVEALED clues (e.g. "Check pockets" reveals "Pocket Lint"), YOU MUST REVEAL IT. 
          - Set 'revealedEvidence' to the EXACT title.
          - Describe finding it in second person ("You pull it free from the lining...").
-      3. **VISUAL UPDATE (STRICT MAPPING):**
+         - Describe the physical properties of the item. Do NOT explain its significance.
+      4. **VISUAL UPDATE (STRICT MAPPING):**
          - If user says 'check pockets', 'search jacket', 'look at chest', 'examine torso' -> Set emotion to 'TORSO'.
          - If user says 'check face', 'examine head', 'look at eyes', 'check mouth' -> Set emotion to 'HEAD'.
          - If user says 'check hands', 'look at fingers', 'examine nails' -> Set emotion to 'HANDS'.
          - If user says 'check legs', 'look at shoes', 'examine feet' -> Set emotion to 'LEGS'.
          - If user says 'examine body' or 'step back' -> Set emotion to 'NEUTRAL'.
          - If the action is vague, keep the previous view or default to 'NEUTRAL'.
-      4. Hints: Return an EMPTY ARRAY []. Do not give suggestion chips for a corpse.
+      5. Hints: Return an EMPTY ARRAY []. Do not give suggestion chips for a corpse.
       `;
   } else {
     // --- INTERROGATION CONTEXT: Date, time since crime, setting, disposition ---
@@ -526,11 +547,11 @@ export const getPartnerIntervention = async (
   if (type === 'examine') {
     prompt = `
         You are ${partnerName}, the ${partnerRole}.
-        Action: Perform an initial visual examination of the victim's body (${suspect.name}).
-        Victim Bio: ${suspect.bio}.
-        Hidden Evidence they have: ${(suspect.hiddenEvidence || []).map(e => e.title).join(', ')}.
+        Action: Perform an initial visual examination of a body (${suspect.name}).
         
-        Generate a 1-2 sentence observation. Mention one obvious detail but don't solve the case. 
+        Generate a 1-2 sentence observation describing ONLY what you physically see: body position, skin condition, visible marks, clothing state, or the immediate surroundings.
+        Do NOT interpret evidence, speculate about cause of death, mention motives, reference other characters, or draw any narrative conclusions.
+        You are describing a scene, not telling a story.
         Tone: Professional, grim. Speak in first person.
       `;
   } else if (type === 'hint') {
