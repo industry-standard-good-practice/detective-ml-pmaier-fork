@@ -1145,9 +1145,15 @@ ${userChangeLog}
        This case was JUST transformed by an AI edit with the following user request:
        "${editContext}"
        
-       All changes made by that edit are INTENTIONAL and should be PRESERVED. Do NOT flag them as issues.
-       For example, if the user asked to change the setting to a different time period, do NOT flag the startTime as "too far in the past".
-       Your job is to ensure the EDITED case is internally consistent — not to undo the edit.
+       All changes made by that edit are INTENTIONAL and MUST be PRESERVED. Do NOT flag them as issues.
+       
+       **CRITICAL EXAMPLES OF WHAT NOT TO DO:**
+       - If the edit removed alibi corroboration → do NOT re-add witnesses or confirmations
+       - If the edit weakened alibis → do NOT strengthen them back
+       - If the edit changed the difficulty → do NOT "fix" it to be easier or harder
+       - If the edit changed the setting/time period → do NOT flag the startTime as wrong
+       
+       Your ONLY job is to check for factual contradictions (wrong names, impossible locations, broken references) — NOT to undo the edit or "improve" the mystery design.
 ` : '';
 
     if (onProgress) onProgress("Initializing Narrative Audit...");
@@ -1177,22 +1183,32 @@ ${userChangeLog}
     I will provide a JSON object representing a detective mystery game case.
     
     YOUR MISSION:
-    Perform a deep narrative audit and structural repair. The case must be perfectly consistent, logically sound, and satisfyingly solvable.
+    Perform a deep narrative audit and structural repair. The case must be internally consistent and logically coherent.
+    **CRITICAL BOUNDARY: You must NEVER alter the mystery's difficulty or solvability. Your job is narrative consistency, NOT game balancing.**
     ${editContextSection}
     ${userEditsSection}
-    1. **NARRATIVE INTEGRITY & SOLVABILITY (CRITICAL):**
+    **⚠ ABSOLUTE RULE — NEVER ALTER MYSTERY DIFFICULTY (HIGHEST PRIORITY):**
+       This rule overrides ALL other instructions. You may add, edit, or remove content freely to make the narrative coherent — but you must NEVER change how easy or hard the case is to solve. Specifically:
+       - Do NOT make alibis corroborate each other to "clear" innocent suspects. If Suspect A says they were alone, do NOT add Suspect B as a witness confirming it.
+       - Do NOT strengthen or weaken alibis. If an alibi has no witnesses, leave it that way.
+       - Do NOT add evidence hints or clues that make the guilty party more obvious.
+       - Do NOT add or remove information that changes the difficulty of identifying the killer.
+       - The case creator designed the alibi structure intentionally. Alibis that don't corroborate are BY DESIGN—that IS the puzzle.
+       
+       **What you SHOULD do:** Fix timelines so events don't contradict each other, fix names, fix broken references, ensure motives make sense, ensure evidence descriptions are consistent with the narrative. All of this is fine. Just don't touch the alibi corroboration structure or the difficulty of the puzzle.
+       
+    1. **NARRATIVE INTEGRITY (CRITICAL):**
        - **GROUND TRUTH:** The 'isGuilty' flags in the provided JSON are the ABSOLUTE SOURCE OF TRUTH.
        - The suspects currently marked as 'isGuilty: true' (${guiltyNames}) MUST remain the killers. 
-       - **DO NOT CHANGE WHO IS GUILTY.** If the user has changed the killers, you must RE-ALIGN the entire narrative (Bio, Role, Motive, Secret, Evidence, Alibis, Relationships, Witness Observations) to support this new reality.
-       - Ensure the crime is actually solvable based on the evidence provided.
-       - The 'Guilty' suspects MUST have a logical path to being caught (via hidden evidence, alibi cracks, or witness testimony).
+       - **DO NOT CHANGE WHO IS GUILTY.** If the user has changed the killers, you must RE-ALIGN the entire narrative (Bio, Role, Motive, Secret, Evidence, Relationships, Witness Observations) to support this new reality.
        - **IF YOU ADD NEW EVIDENCE, YOU MUST INCLUDE IT IN THE \`updatedCase\` JSON OBJECT.**
        - If the crime type is "Murder", ensure the victim's cause of death aligns with the evidence.
        
-    2. **TIMELINE RECONCILIATION:**
-       - Audit every suspect's 'timeline'. Times and locations MUST match up across suspects.
-       - If Suspect A says they were with Suspect B at 9:00 PM, Suspect B's timeline MUST reflect this.
-       - Ensure the victim's time of death is consistent with all witness observations and forensic evidence.
+    2. **TIMELINE & FACTUAL COHERENCE:**
+       - Audit every suspect's 'timeline'. Fix events that are factually impossible (e.g., a suspect in two places at the same time).
+       - Ensure the victim's time of death is consistent with forensic evidence.
+       - Fix name mismatches, broken cross-references, and references to people/places/events that don't exist.
+       - **DO NOT "reconcile" alibis by adding corroborating witnesses or confirmations. Alibi corroboration is a game design choice, not a continuity error.**
        
     3. **MOTIVE & CHARACTER ALIGNMENT:**
        - Ensure motives are compelling and consistent with the character's bio and secret.
