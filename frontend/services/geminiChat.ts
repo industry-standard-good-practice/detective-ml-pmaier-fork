@@ -427,13 +427,10 @@ export const getSuspectResponse = async (
   const data = JSON.parse(response.text!);
   console.log(`[DEBUG] getSuspectResponse: AI Output`, data);
 
-  // Normalize revealedEvidence: accept array, single string, or null from AI
+  // Normalize revealedEvidence to a clean string array
   let parsedEvidence: string[] = [];
   if (Array.isArray(data.revealedEvidence)) {
     parsedEvidence = data.revealedEvidence.filter((e: any) => typeof e === 'string' && e.trim().length > 0);
-  } else if (typeof data.revealedEvidence === 'string' && data.revealedEvidence.trim().length > 0) {
-    // Backwards compat: AI may still return a single string
-    parsedEvidence = [data.revealedEvidence];
   }
 
   return {
