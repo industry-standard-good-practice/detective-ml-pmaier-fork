@@ -1179,56 +1179,87 @@ ${userChangeLog}
     try {
         const result = await ai.models.generateContent({
             model: GEMINI_MODELS.CASE_ENGINE,
-            contents: `You are a Master Mystery Editor and Narrative Architect.
+            contents: `You are a Continuity Proofreader — a careful, conservative editor.
     I will provide a JSON object representing a detective mystery game case.
     
     YOUR MISSION:
-    Perform a deep narrative audit and structural repair. The case must be internally consistent and logically coherent.
-    **CRITICAL BOUNDARY: You must NEVER alter the mystery's difficulty or solvability. Your job is narrative consistency, NOT game balancing.**
+    Perform a **minimalist quality-control pass**. You are looking for ACTUAL ERRORS — factual contradictions, broken references, impossible timelines.
+    **If the case is already consistent, you should make ZERO changes and return the case data exactly as-is.**
+    You are NOT rewriting content. You are NOT improving prose. You are NOT redesigning the mystery.
+    Your job is to find and fix ONLY genuine contradictions and broken references — nothing else.
+    
     ${editContextSection}
     ${userEditsSection}
-    **⚠ ABSOLUTE RULE — NEVER ALTER MYSTERY DIFFICULTY (HIGHEST PRIORITY):**
-       This rule overrides ALL other instructions. You may add, edit, or remove content freely to make the narrative coherent — but you must NEVER change how easy or hard the case is to solve. Specifically:
-       - Do NOT make alibis corroborate each other to "clear" innocent suspects. If Suspect A says they were alone, do NOT add Suspect B as a witness confirming it.
-       - Do NOT strengthen or weaken alibis. If an alibi has no witnesses, leave it that way.
+    
+    **🔒 ABSOLUTE IMMUTABLE RULES (HIGHEST PRIORITY — VIOLATION = FAILURE):**
+    
+    1. **NEVER CHANGE WHO IS GUILTY.**
+       - The 'isGuilty' flags are LOCKED. The suspects marked 'isGuilty: true' (${guiltyNames}) MUST remain exactly as they are.
+       - The 'isDeceased' flags are LOCKED. Do NOT change any suspect's living/dead status.
+       - If you change isGuilty or isDeceased for ANY suspect, your entire output is INVALID and will be rejected.
+    
+    2. **NEVER CHANGE THE STORY.**
+       - The overall narrative, plot, setting, characters, and creative choices are the CREATOR'S work and are NOT yours to alter.
+       - Do NOT rewrite bios, secrets, motives, personalities, or descriptions unless they contain a factual contradiction with another field.
+       - Do NOT change character names, roles, ages, or genders.
+       - Do NOT add, remove, or rename suspects.
+       - Do NOT add, remove, or substantially rewrite evidence items.
+       - Do NOT change the case title, type, or description.
+       - "I would write it differently" is NOT a reason to change something. Only "this directly contradicts another field in the case" is a valid reason.
+    
+    3. **NEVER ALTER MYSTERY DIFFICULTY.**
+       - Do NOT make alibis corroborate each other. If Suspect A says they were alone, leave it that way.
+       - Do NOT strengthen or weaken alibis.
        - Do NOT add evidence hints or clues that make the guilty party more obvious.
-       - Do NOT add or remove information that changes the difficulty of identifying the killer.
-       - The case creator designed the alibi structure intentionally. Alibis that don't corroborate are BY DESIGN—that IS the puzzle.
-       
-       **What you SHOULD do:** Fix timelines so events don't contradict each other, fix names, fix broken references, ensure motives make sense, ensure evidence descriptions are consistent with the narrative. All of this is fine. Just don't touch the alibi corroboration structure or the difficulty of the puzzle.
-       
-    1. **NARRATIVE INTEGRITY (CRITICAL):**
-       - **GROUND TRUTH:** The 'isGuilty' flags in the provided JSON are the ABSOLUTE SOURCE OF TRUTH.
-       - The suspects currently marked as 'isGuilty: true' (${guiltyNames}) MUST remain the killers. 
-       - **DO NOT CHANGE WHO IS GUILTY.** If the user has changed the killers, you must RE-ALIGN the entire narrative (Bio, Role, Motive, Secret, Evidence, Relationships, Witness Observations) to support this new reality.
-       - **IF YOU ADD NEW EVIDENCE, YOU MUST INCLUDE IT IN THE \`updatedCase\` JSON OBJECT.**
-       - If the crime type is "Murder", ensure the victim's cause of death aligns with the evidence.
-       
-    2. **TIMELINE & FACTUAL COHERENCE:**
-       - Audit every suspect's 'timeline'. Fix events that are factually impossible (e.g., a suspect in two places at the same time).
-       - Ensure the victim's time of death is consistent with forensic evidence.
-       - Fix name mismatches, broken cross-references, and references to people/places/events that don't exist.
-       - **DO NOT "reconcile" alibis by adding corroborating witnesses or confirmations. Alibi corroboration is a game design choice, not a continuity error.**
-       
-    3. **MOTIVE & CHARACTER ALIGNMENT:**
-       - Ensure motives are compelling and consistent with the character's bio and secret.
-       - If a suspect has a secret, ensure there is a way for the player to discover it.
-       
-    4. ${PROMPT_RULES.RELATIONSHIP_QUALITY}
-        
-    5. ${PROMPT_RULES.TIMELINE_FORMAT}
-        
-    6. ${PROMPT_RULES.INITIAL_TIMELINE_SPOILER_PROTECTION}
-        
-    7. ${PROMPT_RULES.DATA_COMPLETENESS}
+       - Do NOT add or remove alibi witnesses.
+       - Alibi structure is a GAME DESIGN choice, not a continuity error.
     
-    8. ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
+    4. **PREFER NO CHANGES OVER UNNECESSARY CHANGES.**
+       - If a field is imperfect but not contradictory, LEAVE IT ALONE.
+       - If evidence is vague but not wrong, LEAVE IT ALONE.
+       - If a timeline has gaps but no conflicts, LEAVE IT ALONE.
+       - If prose is mediocre but accurate, LEAVE IT ALONE.
+       - When in doubt, DO NOT CHANGE IT.
     
-    9. ${PROMPT_RULES.START_TIME_ALIGNMENT}
+    ${editContextSection ? '' : `**CRITICAL RESTATEMENT:** If you cannot identify a specific, concrete factual contradiction between two fields in the case, you should return the case UNCHANGED with an empty changesMade array and a report saying "No inconsistencies found."`}
     
-    10. ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
+    **WHAT YOU MAY FIX (the ONLY valid reasons to change something):**
+    - A suspect's timeline says they were at Location A at 8 PM, but their alibi says Location B at 8 PM → fix the contradiction
+    - A relationship references a person who doesn't exist in the case → fix the broken reference
+    - A name is misspelled differently across fields → unify the spelling
+    - A timeline entry has the activity stuffed into the time field → fix the format
+    - Evidence description references a suspect by the wrong name → fix the name
+    - Required fields are completely empty/missing → populate them minimally
+    - Timeline uses 24-hour format → convert to 12-hour AM/PM
+    - A relationship description is just one word repeating the type → add a minimal 2-sentence description
     
-    11. ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
+    **WHAT YOU MUST NEVER DO:**
+    - Rewrite bios to "improve" them
+    - Add new evidence to "fill gaps"
+    - Change secrets or motives because you think yours would be better
+    - Modify personality traits
+    - Alter the startTime unless it literally contradicts timeline events
+    - Add witness observations that didn't exist
+    - Change relationship dynamics or add new tensions
+    - "Improve" the narrative in any way
+    
+    **FORMAT RULES (apply these ONLY where formatting is currently wrong):**
+    ${PROMPT_RULES.TIMELINE_FORMAT}
+    ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
+    
+    **STRUCTURAL RULES (check but only fix if actually broken):**
+    ${PROMPT_RULES.DATA_COMPLETENESS}
+    ${PROMPT_RULES.RELATIONSHIP_QUALITY}
+    ${PROMPT_RULES.INITIAL_TIMELINE_SPOILER_PROTECTION}
+    ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
+    ${PROMPT_RULES.START_TIME_ALIGNMENT}
+    
+    ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
+    
+    **REPORT INSTRUCTIONS:**
+    - In 'issuesFound': List ONLY genuine contradictions you found. If none, say "No inconsistencies found."
+    - In 'changesMade': List ONLY changes you actually made. If you made no changes, return an EMPTY ARRAY [].
+    - In 'conclusion': Summarize. If the case was already consistent, say so clearly: "The case is internally consistent. No changes were necessary."
     
     CASE DATA:
     ${JSON.stringify(lightweightCase, null, 2)}`,
@@ -1310,6 +1341,23 @@ ${userChangeLog}
                 if (s.avatarSeed === undefined) s.avatarSeed = origSuspect.avatarSeed;
                 if (s.voice === undefined) s.voice = origSuspect.voice;
                 if (!s.portraits || Object.keys(s.portraits).length === 0) s.portraits = origSuspect.portraits;
+            }
+        });
+
+        // --- HARD SAFETY NET: Force-restore isGuilty and isDeceased flags ---
+        // The AI is instructed never to change these, but we enforce it programmatically
+        // so even a disobedient model cannot alter the story's core truth.
+        hydratedCase.suspects.forEach(s => {
+            const origSuspect = caseData.suspects.find(os => os.id === s.id);
+            if (origSuspect) {
+                if (s.isGuilty !== origSuspect.isGuilty) {
+                    console.warn(`[SAFETY NET] AI tried to change isGuilty for ${s.name} from ${origSuspect.isGuilty} to ${s.isGuilty}. Reverting.`);
+                    s.isGuilty = origSuspect.isGuilty;
+                }
+                if (s.isDeceased !== origSuspect.isDeceased) {
+                    console.warn(`[SAFETY NET] AI tried to change isDeceased for ${s.name} from ${origSuspect.isDeceased} to ${s.isDeceased}. Reverting.`);
+                    s.isDeceased = origSuspect.isDeceased;
+                }
             }
         });
 
