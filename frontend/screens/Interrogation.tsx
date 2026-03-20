@@ -1174,19 +1174,20 @@ const Interrogation: React.FC<InterrogationProps> = ({
     prevChatLengthRef.current = chatHistory.length;
     isFirstRenderRef.current = false;
 
-    // On initial mount OR suspect switch: check for unread notification
+    // On initial mount OR suspect switch: stop old audio and check for unread notification
     if (isFirstRender || suspectChanged) {
+      // Always stop any currently playing TTS when switching suspects
+      if (audioRef.current) {
+        audioRef.current.stop();
+        audioRef.current = null;
+      }
+
       const lastMsg = chatHistory[chatHistory.length - 1];
 
       // If this suspect has an unread notification, play their TTS
       if ((lastMsg?.sender === 'suspect' || lastMsg?.sender === 'partner') && lastMsg?.audioUrl && soundEnabled && unreadSuspectIds.has(suspect.id)) {
         console.log("TTS Playing unread notification message", { text: lastMsg.text, audioUrl: lastMsg.audioUrl });
         setLastPlayedAudioUrl(lastMsg.audioUrl);
-
-        if (audioRef.current) {
-          audioRef.current.stop();
-          audioRef.current = null;
-        }
 
         playAudioFromUrl(lastMsg.audioUrl, volumeRef.current)
           .then(playback => { audioRef.current = playback; })
