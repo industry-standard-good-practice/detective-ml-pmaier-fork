@@ -345,20 +345,36 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
     // 1. Convert User Photo -> Pixel Art Neutral
     // We use the 'create' mode but pass the user image as reference to guide the structure/content
     const conversionPrompt = `
-      [STRICT INSTRUCTION]: Convert the person in the provided reference image into a 16-bit pixel art character.
-      Maintain their exact facial features, hair style, glasses/accessories, gender, and likeness.
+      [STRICT OVERRIDE]: You MUST strictly use the 16-bit pixel art style. If a second reference image is provided, match its exact art style.
+      The provided FIRST image is the SUBJECT. Convert this subject into heavy, stylised, blocky pixel art.
+      - MAINTAIN their gender, facial features, and likeness so they remain recognizable.
+      - OVERWRITE THE STYLE. Destroy all photorealism. Ensure visible, jagged pixels, dithered shading, and a limited color palette. Do NOT output a smooth photograph or 3D render.
       Output Style: ${PIXEL_ART_BASE}
       Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges of the frame (full bleed) without any background gaps on the sides.
       Background: Solid ${colorDesc} background.
-      No text, no UI elements.
+      NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render.
     `;
+
+    let styleRefBase64: string | null = null;
+    try {
+        const fetched = await getStyleRefBase64();
+        if (fetched) styleRefBase64 = fetched;
+    } catch (e) {
+        console.warn("Failed to get style ref for upload", e);
+    }
 
     let neutralRaw: string | null = null;
     try {
-        const parts = [
-            { inlineData: { mimeType: 'image/png', data: userImageBase64.split(',')[1] } },
-            { text: conversionPrompt }
+        const parts: any[] = [
+            { inlineData: { mimeType: 'image/png', data: userImageBase64.split(',')[1] } }
         ];
+        
+        if (styleRefBase64) {
+            parts.push({ inlineData: { mimeType: 'image/png', data: styleRefBase64 } });
+        }
+        
+        parts.push({ text: conversionPrompt });
+        
         const res = await ai.models.generateContent({
             model: GEMINI_MODELS.IMAGE,
             contents: { parts },
