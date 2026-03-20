@@ -595,6 +595,8 @@ const LoadingText = styled.div`
   ${type.bodyLg}
   font-family: inherit;
   text-transform: uppercase;
+  text-align: center;
+  padding: 0 calc(var(--space) * 2);
 `;
 
 // --- CAMERA OVERLAY ---

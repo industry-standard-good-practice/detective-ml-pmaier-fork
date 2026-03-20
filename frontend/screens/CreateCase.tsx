@@ -18,6 +18,7 @@ const Title = styled.h2`
   color: var(--color-text-bright);
   margin: 0;
   text-shadow: 0 0 10px var(--color-text-bright);
+  text-align: center;
 `;
 
 const PromptInput = styled.textarea`
@@ -85,6 +86,7 @@ const LoadingText = styled.div`
   color: var(--color-accent-green);
   margin-top: calc(var(--space) * 3);
   text-align: center;
+  padding: 0 calc(var(--space) * 2);
   
   &::after {
     content: '_';
@@ -94,6 +96,7 @@ const LoadingText = styled.div`
 
 const ProgressBar = styled.div`
   width: 400px;
+  max-width: calc(100vw - calc(var(--space) * 4));
   height: 10px;
   background: var(--color-border-subtle);
   border: 1px solid var(--color-border-strong);
