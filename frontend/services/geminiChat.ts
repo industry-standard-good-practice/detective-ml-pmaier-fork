@@ -251,6 +251,7 @@ export const getSuspectResponse = async (
            - **STRICT NAME CONSTRAINT:** You must NEVER mention a proper name that is not in the "VALID NAMES ALLOWED" list above. 
              - If you need to refer to a third party not on the list, use a generic description like "the bartender", "some guy", "the landlord", or "a witness".
              - NEVER invent a name like "Steve" or "Sarah" if they are not in the list.
+             - **NATURAL NAME USAGE (CRITICAL):** It is ALLOWED AND EXPECTED to use partial names derived from the list. Do NOT rigidly say someone's full first and last name every single time like a robot. Speak naturally based on your RELATIONSHIP to them (e.g., if the valid name is "Thomas James", his wife would call him "Thomas" or "my husband", an employee might call him "Mr. James" or "the boss"). Make it sound natural!
         3. **RELATIONSHIPS:** If asked about another suspect (including the victim), check your 'RELATIONSHIPS' list. If no specific entry exists, assume a neutral acquaintance.
         
         4. CALCULATE 'aggravationDelta' (Change in anger, from -100 to +100):
