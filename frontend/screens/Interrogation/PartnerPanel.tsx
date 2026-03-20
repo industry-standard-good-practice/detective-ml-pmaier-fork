@@ -302,7 +302,7 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
             </div>
             <div className="info">
               <h3>{partnerName}</h3>
-              <span>CHARGES: {partnerCharges}/3</span>
+              <span>CHARGES: {partnerCharges}/{activeCase.partnerCharges ?? 3}</span>
             </div>
           </SidekickHeader>
 

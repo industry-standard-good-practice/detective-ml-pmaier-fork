@@ -109,6 +109,7 @@ export interface CaseData {
   startTime?: string; // ISO datetime string for investigation start (e.g. "2030-09-12T23:30")
   isUploaded?: boolean; // Tracks if this custom case has been published
   isFeatured?: boolean; // New: Tracks if this case is featured by admin
+  partnerCharges?: number; // Number of partner charges for the game (default: 3)
   heroImageUrl?: string; // New: Image for the case card
   version?: number; // New: Tracks the version of the case
   authorId?: string; // New: Tracks the UID of the user who created the case

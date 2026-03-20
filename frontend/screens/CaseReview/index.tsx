@@ -245,7 +245,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     if (newDifficulty !== draftCase.difficulty) {
       onUpdateDraft({ ...draftCase, difficulty: newDifficulty });
     }
-  }, [draftCase.suspects, draftCase.initialEvidence]);
+  }, [draftCase.suspects, draftCase.initialEvidence, draftCase.partnerCharges]);
 
   const activeSuspect = selectedSuspectId === 'officer' ? draftCase.officer :
     selectedSuspectId === 'partner' ? draftCase.partner :
@@ -738,6 +738,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         loadingVisible={loadingState.visible}
         isPreviewingVoice={isPreviewingVoice}
         onSuspectChange={handleSuspectChange}
+        onCaseChange={handleCaseChange}
         onAddSuspect={handleAddSuspect}
         onDeleteSuspect={handleDeleteSuspect}
         onRetryAI={handleRetryAI}

@@ -36,6 +36,12 @@ export const calculateDifficulty = (caseData: Partial<CaseData>): "Easy" | "Medi
         points += (avgAggravation / 100) * 6;
     }
 
+    // Fewer partner charges = fewer safety nets = harder case
+    // Default is 3 charges. Each charge below 3 adds +3 difficulty, above 3 subtracts 2.
+    const charges = caseData.partnerCharges ?? 3;
+    if (charges < 3) points += (3 - charges) * 3;
+    else if (charges > 3) points -= (charges - 3) * 2;
+
     if (points > 28) return "Hard";
     if (points >= 20) return "Medium";
     return "Easy";
@@ -1335,6 +1341,7 @@ ${userChangeLog}
         hydratedCase.isFeatured = caseData.isFeatured;
         hydratedCase.createdAt = caseData.createdAt;
         hydratedCase.difficulty = caseData.difficulty;
+        hydratedCase.partnerCharges = caseData.partnerCharges;
         // Prefer the AI's startTime if it returned one (it may have corrected alignment);
         // only fall back to original if AI returned nothing
         if (!hydratedCase.startTime && caseData.startTime) hydratedCase.startTime = caseData.startTime;
@@ -1578,6 +1585,7 @@ ${userChangeLog}
         hydratedCase.isFeatured = caseData.isFeatured;
         hydratedCase.createdAt = caseData.createdAt;
         hydratedCase.difficulty = caseData.difficulty;
+        hydratedCase.partnerCharges = caseData.partnerCharges;
         // Prefer the AI's startTime if it returned one (it may have corrected alignment);
         // only fall back to original if AI returned nothing
         if (!hydratedCase.startTime && caseData.startTime) hydratedCase.startTime = caseData.startTime;
@@ -1941,6 +1949,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     data.initialTimeline = data.initialTimeline || [];
     data.difficulty = calculateDifficulty(data);
     if (!data.startTime) data.startTime = '2030-09-12T23:30';
+    if (data.partnerCharges === undefined) data.partnerCharges = 3;
 
     // Auto-compute hasVictim: if AI returned it, use it; otherwise derive from isDeceased suspects
     if (data.hasVictim === undefined) {

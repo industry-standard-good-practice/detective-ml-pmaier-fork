@@ -610,6 +610,7 @@ interface SuspectEditorPanelProps {
   loadingVisible: boolean;
   isPreviewingVoice: boolean;
   onSuspectChange: (id: string, field: string, value: any) => void;
+  onCaseChange: (field: string, value: any) => void;
   onAddSuspect: () => void;
   onDeleteSuspect: () => void;
   onRetryAI: () => void;
@@ -636,6 +637,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
   loadingVisible,
   isPreviewingVoice,
   onSuspectChange,
+  onCaseChange,
   onAddSuspect,
   onDeleteSuspect,
   onRetryAI,
@@ -914,6 +916,19 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
               </InputGroup>
             </InputsCol>
           </SuspectEditorRow>
+
+          {selectedSuspectId === 'partner' && (
+            <InputGroup>
+              <label>Partner Charges (per game)</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={draftCase.partnerCharges ?? 3}
+                onChange={(e) => onCaseChange('partnerCharges', Math.max(1, Math.min(10, parseInt(e.target.value) || 3)))}
+              />
+            </InputGroup>
+          )}
 
           {!isSupportChar && (
             <>
