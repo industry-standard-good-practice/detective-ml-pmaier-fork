@@ -816,7 +816,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
             <PortraitCol>
               <SuspectPortrait
                 suspect={activeSuspect as any}
-                size={120}
+                style={{ width: '100%', height: 'auto', aspectRatio: '1' }}
               />
               <PortraitBtnGrid>
                 <RandomizeButton onClick={onRerollPortrait} disabled={loadingVisible}>

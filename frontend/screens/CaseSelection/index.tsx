@@ -288,7 +288,16 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
           updatedAt: latestUpdatedAt
         });
       } else {
-        merged.set(d.id, d);
+        // Draft has no matching published case — clear isFeatured since
+        // that flag is only meaningful when the server confirms it.
+        // Also check if the case still exists anywhere in communityCases
+        // (e.g. another author's case we have a local copy of).
+        const inCommunity = communityCases.find(c => c.id === d.id);
+        merged.set(d.id, {
+          ...d,
+          isFeatured: inCommunity?.isFeatured ?? false,
+          isUploaded: inCommunity ? (inCommunity.isUploaded ?? d.isUploaded) : false,
+        });
       }
     });
     publishedByMe.forEach(c => { if (!merged.has(c.id)) merged.set(c.id, c); });
