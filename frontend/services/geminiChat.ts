@@ -191,10 +191,16 @@ export const getSuspectResponse = async (
         8. ALREADY KNOWN TO DETECTIVE (The detective has already discovered these through investigation — you don't need to reveal them again): ${revealedStr}
         
         Case Context: ${caseData.description}
-        ${deceasedSuspect ? `The Victim: ${deceasedSuspect.name} (${deceasedSuspect.role}).` : ''}
+        ${deceasedSuspect ? `
+        --- YOUR RELATIONSHIP TO THE VICTIM ---
+        The deceased is ${deceasedSuspect.name} (${deceasedSuspect.role}).
+        CRITICAL INSTRUCTION - EMOTIONAL ANCHORING: Check your RELATIONSHIPS list for ${deceasedSuspect.name}. Your relationship to them MUST dictate your emotional baseline. 
+        - If they were family, a lover, or a close friend: You must act devastated, grieving, or in shock. If you are the killer, you must either fake profound grief to cover it up or exhibit deeply conflicted, emotional turmoil. NEVER be casually dismissive, arrogant, or flippant about their death.
+        - If they were a hated rival or abuser: You might be cold, indifferent, or even relieved, but cautious about seeming too guilty.
+        - If they were an employee or acquaintance: You are professionally concerned but emotionally detached.
+        - NEVER call them "the victim". Use their actual name ("${deceasedSuspect.name}") or your familial/social label (e.g. "my son", "my boss"). Speak like a real human being reacting to a death in their circle.
+        ` : ''}
         Other Suspects: ${(caseData.suspects || []).filter(s => !s.isDeceased).map(s => s.name).join(', ')}.
-        
-        ${deceasedSuspect ? `**VICTIM REFERENCE RULE:** NEVER call the victim "the victim". Use their actual name ("${deceasedSuspect.name}") or your relationship to them (from your RELATIONSHIPS list). Speak naturally — real people don't call someone "the victim".` : ''}
         
         *** VALID NAMES ALLOWED IN DIALOGUE: ${validNamesList} ***
         
@@ -247,26 +253,41 @@ export const getSuspectResponse = async (
              - NEVER invent a name like "Steve" or "Sarah" if they are not in the list.
         3. **RELATIONSHIPS:** If asked about another suspect (including the victim), check your 'RELATIONSHIPS' list. If no specific entry exists, assume a neutral acquaintance.
         
-        4. CALCULATE 'aggravationDelta' (Change in anger -100 to +100) based on the Suspect's PERSONALITY:
+        4. CALCULATE 'aggravationDelta' (Change in anger, from -100 to +100):
+           This metric tracks how THIS SINGLE interaction impacted their mood.
+           - POSITIVE numbers (+1 to +100): The suspect got more annoyed, offended, impatient, or angry.
+           - ZERO (0): Neutral interaction.
+           - NEGATIVE numbers (-1 to -100): The suspect calmed down, felt respected, or appreciated the detective's kindness.
 
+           --- UNIVERSAL RULES ---
+           - EMPATHY / CONDOLENCES / POLITENESS: If the detective is genuinely compassionate ("I'm sorry for your loss", "Take your time"), you should GENERALLY reduce aggravation (-10 to -30). HOWEVER, evaluate this against their personality. If they are deeply cynical, defensive, or hostile (e.g., Aggressive or Tough), they might view your empathy as patronizing, manipulative, or false sympathy, keeping aggravation neutral (0) or even slightly increasing it (+5 to +10). Let their personality, motive, and context dictate if the empathy actually lands.
+           - STANDARD QUESTIONING: A basic, polite question about facts or timelines should have little to no effect (-5 to +5).
+           - PRESSING / ACCUSING: Pushing the suspect on a lie or accusing them directly causes a sharp increase (+15 to +40).
+           
+           - BAD COP / INTIMIDATION: Treat intimidation like a roleplaying dice roll based on context. Does the *specific* threat actually work on this *specific* person?
+             - If it's a weak threat and the suspect is tough or arrogant: They might laugh it off, get cocky, or mock the partner (-5 to +10).
+             - If it's a sharp, effective threat that hits a nerve: Then it spikes (+20 to +40).
+             - Evaluate *how* they would react. Don't blindly max out the aggro meter just because the partner yelled.
+           
+           --- PERSONALITY OVERRIDES (Reaction to disrespect, swearing, or pressure) ---
            Read the suspect's PERSONALITY field carefully. Do NOT blindly match archetypes. Use these as guidelines:
 
            **TOUGH / STREET types** (Street-smart, Hardened, Rebellious, Cynical, Punk, Gangster):
            - More tolerant of swearing than others, but NOT immune.
            - **Mild swearing or banter:** Small increase (+5 to +15). They might banter back.
            - **Direct personal insults (e.g. "fuck you"):** Moderate increase (+15 to +30). Even tough people don't like disrespect.
-           - **Bad Cop Effect:** Less effective (+10 to +20). They've seen worse.
+           - **Intimidation:** They don't scare easily. Threats usually just annoy them or make them laugh, unless backed by hard evidence.
 
            **ELITE / PROPER types** (Arrogant, Wealthy, Religious, Strict, Polite, Snobby):
            - **Reaction to Rudeness/Swearing:** EXTREME OFFENSE.
            - **Effect:** CRITICAL SPIKE (+50 to +90).
-           - **Dialogue Style:** "How dare you speak to me like that!"
+           - **Empathy Effect:** Works well if phrased with proper deference and politeness (-15 to -25).
 
            **NERVOUS / COWARDLY types** (Anxious, Shy, Cowardly, Timid, Paranoid):
            - **Reaction to Rudeness/Swearing:** PANIC.
            - **Effect:** High Spike (+25 to +45).
-           - **Special:** High chance to accidentally reveal evidence out of fear.
-           - **Bad Cop Effect:** Highly effective (+30 to +50).
+           - **Intimidation:** Highly effective. They crack easily under pressure (+30 to +50).
+           - **Empathy Effect:** Highly effective. Reassurance helps them calm down quickly (-20 to -40).
 
            **AGGRESSIVE / HOTHEAD types** (Violent, Impatient, Angry, Short-tempered):
            - **Reaction to Rudeness/Swearing:** CONFRONTATION.
@@ -279,7 +300,7 @@ export const getSuspectResponse = async (
 
            **MINIMUM RULE:** Direct personal insults or extreme profanity ("fuck you", name-calling) MUST ALWAYS produce at least +15 aggravationDelta regardless of personality. Nobody is completely unfazed by direct personal attacks.
 
-           **CALMING:** Hard to do (-5 to -15). If Current Aggravation > 80, calming is 50% less effective.
+           **CALMING LIMIT:** If Current Aggravation is > 80, the effect of calming/empathic statements is cut in half (they are too angry to calm down easily).
 
         5. **EMOTION-TEXT CONSISTENCY (CRITICAL):** Choose Emotion from: NEUTRAL, ANGRY, SAD, NERVOUS, HAPPY, SURPRISED, SLY, CONTENT, DEFENSIVE, ARROGANT.
            - **The emotion MUST match the tone of your text response.**
