@@ -319,16 +319,22 @@ export const generateEmotionalVariantsFromBase = async (
     userId: string,
     onProgress?: (current: number, total: number) => void
 ): Promise<Record<string, string>> => {
-    const emotionPortraits = await generateEmotionalVariants(neutralBase64, suspect.avatarSeed, onProgress);
+    const isSuspect = (suspect as any).isGuilty !== undefined;
+    const isDeceased = isSuspect && (suspect as Suspect).isDeceased;
+
+    // Generate forensic variants for deceased suspects, emotional variants for everyone else
+    const variantPortraits = isDeceased
+        ? await generateForensicVariants(neutralBase64, suspect as Suspect, onProgress)
+        : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed, onProgress);
     
-    // Upload all emotional variants
+    // Upload all variants
     // Note: uploadImage handles cases where neutralBase64 is already a URL
-    const folder = (suspect as any).isGuilty !== undefined ? 'suspects' : 'support';
+    const folder = isSuspect ? 'suspects' : 'support';
     const uploadedPortraits: Record<string, string> = {
         [Emotion.NEUTRAL]: await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/neutral.png`)
     };
     
-    for (const [emo, b64] of Object.entries(emotionPortraits)) {
+    for (const [emo, b64] of Object.entries(variantPortraits)) {
         // Skip neutral as we just uploaded it above
         if (emo === Emotion.NEUTRAL) continue;
         uploadedPortraits[emo] = await uploadImage(b64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/${emo}.png`);

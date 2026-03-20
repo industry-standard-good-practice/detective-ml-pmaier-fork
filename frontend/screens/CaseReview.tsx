@@ -662,6 +662,7 @@ const SnapButton = styled.button`
 
 interface CaseReviewProps {
   draftCase: CaseData;
+  originalBaseline?: CaseData | null;
   onUpdateDraft: (updated: CaseData) => void;
   onStart: () => void;
   onCancel: () => void;
@@ -673,7 +674,7 @@ interface CaseReviewProps {
   onHasUnsavedChanges?: (hasChanges: boolean) => void;
 }
 
-const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, onUpdateDraft, onStart, onCancel, userId, userDisplayName, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
+const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
   const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(draftCase.suspects?.[0]?.id || 'officer');
   const [loadingState, setLoadingState] = useState<{ visible: boolean, message: string, step?: string, stepDetail?: string }>({ visible: false, message: '' });
   const [showCamera, setShowCamera] = useState(false);
@@ -687,14 +688,16 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, onUpdateDraft, onSta
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Use the parent-provided original baseline (last explicitly-saved version) if available,
+  // otherwise fall back to the mount-time snapshot. This ensures correct unsaved detection
+  // even after remounting from a play-test cycle.
   const initialDraftCase = useRef(draftCase);
-  const baselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(draftCase)));
+  const baselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-
-
   useEffect(() => {
-    const changed = JSON.stringify(draftCase) !== JSON.stringify(initialDraftCase.current);
+    const baseline = originalBaseline || initialDraftCase.current;
+    const changed = JSON.stringify(draftCase) !== JSON.stringify(baseline);
     setHasUnsavedChanges(changed);
     onHasUnsavedChanges?.(changed);
   }, [draftCase]);
@@ -872,7 +875,18 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, onUpdateDraft, onSta
       }
     };
     updateImage(undefined);
-    const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!);
+
+    // If the evidence belongs to a deceased suspect, pass their portrait as reference
+    // so the generated evidence image visually references the victim's appearance
+    let refImage: string | undefined;
+    if (suspectId) {
+      const ownerSuspect = draftCase.suspects?.find(s => s.id === suspectId);
+      if (ownerSuspect?.isDeceased && ownerSuspect.portraits?.[Emotion.NEUTRAL]) {
+        refImage = ownerSuspect.portraits[Emotion.NEUTRAL];
+      }
+    }
+
+    const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!, refImage);
     if (newUrl) {
       updateImage(newUrl);
     }
