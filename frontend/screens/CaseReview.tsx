@@ -688,16 +688,18 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Use the parent-provided original baseline (last explicitly-saved version) if available,
-  // otherwise fall back to the mount-time snapshot. This ensures correct unsaved detection
-  // even after remounting from a play-test cycle.
-  const initialDraftCase = useRef(draftCase);
+  // saveBaselineRef = the last explicitly-saved state. Used for "unsaved changes" detection.
+  // Initialized from the parent-provided originalBaseline (survives play-test remounts),
+  // and updated locally after each internal save.
+  const saveBaselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
+  // baselineRef = tracks changes for AI consistency checks (NOT reset on save)
   const baselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(() => {
+    return JSON.stringify(draftCase) !== JSON.stringify(saveBaselineRef.current);
+  });
 
   useEffect(() => {
-    const baseline = originalBaseline || initialDraftCase.current;
-    const changed = JSON.stringify(draftCase) !== JSON.stringify(baseline);
+    const changed = JSON.stringify(draftCase) !== JSON.stringify(saveBaselineRef.current);
     setHasUnsavedChanges(changed);
     onHasUnsavedChanges?.(changed);
   }, [draftCase]);
@@ -1167,12 +1169,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       // Update the draft in parent state with stamped data
       onUpdateDraft(stampedCase);
 
-      // Update refs so "unsaved changes" detection resets
-      // NOTE: We intentionally do NOT reset baselineRef here.
-      // baselineRef tracks changes since the last consistency check (or initial load),
-      // so the AI knows what the user changed even across saves.
-      initialDraftCase.current = stampedCase;
-      // Explicitly clear unsaved state (useEffect won't re-run since draftCase didn't change)
+      // Update the save baseline so "unsaved changes" detection resets.
+      // This MUST happen before the useEffect triggered by onUpdateDraft fires,
+      // so the comparison sees the new baseline. Refs update synchronously.
+      // NOTE: We intentionally do NOT reset baselineRef here —
+      // baselineRef tracks changes for the AI consistency checker.
+      saveBaselineRef.current = JSON.parse(JSON.stringify(stampedCase));
+      // Explicitly clear unsaved state
       setHasUnsavedChanges(false);
       onHasUnsavedChanges?.(false);
 
