@@ -35,7 +35,7 @@ export const getSuspectResponse = async (
   const alibiStr = suspect.alibi ? `"${suspect.alibi.statement}" (Loc: ${suspect.alibi.location}, Verified: ${suspect.alibi.isTrue})` : "None";
   const relsStr = (suspect.relationships || []).map(r => `${r.targetName} (${r.type}): ${r.description}`).join('; ');
   const factsStr = (suspect.knownFacts || []).join('; ');
-  const timelineStr = (suspect.timeline || []).map(t => `[${t.day || 'Today'}, ${t.time}] ${t.activity}`).join(' -> ');
+  const timelineStr = (suspect.timeline || []).map(t => `[Day: ${t.day || 'Today'} (Offset: ${t.dayOffset ?? 0}), ${t.time}] ${t.activity}`).join(' -> ');
 
   // Separation of Evidence: Revealed vs Unrevealed
   const discoveredTitles = new Set(discoveredEvidence.map(e => e.title.toLowerCase()));
