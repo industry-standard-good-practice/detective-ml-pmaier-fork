@@ -98,6 +98,16 @@ const SendButton = styled.button`
   &:disabled { opacity: 0.5; }
 `;
 
+const ThinkingMessage = styled.div`
+  color: #555;
+  font-style: italic;
+`;
+
+const DisconnectedMessage = styled.div`
+  color: #b00;
+  text-align: center;
+`;
+
 // --- Props ---
 
 interface OfficerChatModalProps {
@@ -146,8 +156,8 @@ const OfficerChatModal: React.FC<OfficerChatModalProps> = ({
               {msg.text}
             </OfficerBubble>
           ))}
-          {isThinking && <div style={{ color: '#555', fontStyle: 'italic' }}>Incoming transmission...</div>}
-          {officerHintsRemaining <= 0 && <div style={{ color: '#b00', textAlign: 'center' }}>[CONNECTION LOST - BATTERY DEPLETED]</div>}
+          {isThinking && <ThinkingMessage>Incoming transmission...</ThinkingMessage>}
+          {officerHintsRemaining <= 0 && <DisconnectedMessage>[CONNECTION LOST - BATTERY DEPLETED]</DisconnectedMessage>}
         </ChatLog>
         <InputZone>
           <ChatInputField

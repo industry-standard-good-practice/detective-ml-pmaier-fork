@@ -116,7 +116,7 @@ interface InterrogationProps {
   gameTime?: number;
   timelineStatementsDiscovered: TimelineStatement[];
   onSendMessage: (text: string, type: 'talk' | 'action', evidence?: string) => void;
-  onCollectEvidence: (msgIndex: number, evidenceName: string, suspectId: string) => void;
+  onCollectEvidence: (msgIndex: number, evidenceName: string, suspectId: string, evidenceIndex?: number) => void;
   onSwitchSuspect: (suspectId: string) => void;
   onForceEvidence: (suspectId: string, evidenceTitle: string) => void;
   onPartnerAction: (type: 'goodCop' | 'badCop' | 'examine' | 'hint') => void;

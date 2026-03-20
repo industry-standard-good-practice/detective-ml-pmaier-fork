@@ -405,6 +405,199 @@ const MobileOnly = styled.div`
   }
 `;
 
+const PanelHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const PanelTitle = styled.h2`
+  margin: 0;
+  color: #fff;
+`;
+
+const SupportSuspectRow = styled(SuspectRow)`
+  border-left: 3px solid #3b82f6;
+`;
+
+const SuspectInfo = styled.div`
+  flex: 1;
+`;
+
+const SuspectName = styled.div`
+  font-weight: bold;
+  font-size: var(--type-body);
+`;
+
+const SuspectRole = styled.div`
+  font-size: var(--type-small);
+  color: #888;
+`;
+
+const GuiltyTag = styled.span`
+  color: red;
+  font-weight: bold;
+`;
+
+const EditorSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+  margin-top: calc(var(--space) * 3);
+  border-top: 1px solid #333;
+  padding-top: calc(var(--space) * 3);
+  min-width: 0;
+  max-width: 100%;
+`;
+
+const EditorHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space);
+`;
+
+const EditorControls = styled.div`
+  display: flex;
+  gap: var(--space);
+  align-items: center;
+`;
+
+const EditorTitle = styled.h3`
+  margin: 0;
+  color: #aaa;
+  font-size: var(--type-h3);
+`;
+
+const FlexRow = styled.div`
+  display: flex;
+  gap: var(--space);
+  min-width: 0;
+  max-width: 100%;
+`;
+
+const FlexRowAligned = styled(FlexRow)`
+  align-items: center;
+`;
+
+const FlexInputGroup = styled(InputGroup)`
+  flex: 1;
+`;
+
+const NarrowInputGroup = styled(InputGroup)`
+  width: 80px;
+`;
+
+const VoiceSelect = styled.select`
+  background-color: #111;
+  color: #fff;
+  border: 1px solid #444;
+  padding: var(--space);
+  flex: 1;
+  min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px;
+  padding-right: calc(var(--space) * 4);
+  box-sizing: border-box;
+`;
+
+const PreviewButton = styled.button`
+  padding: 8px 12px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #444;
+  font-size: var(--type-xs);
+  white-space: nowrap;
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:not(:disabled) { cursor: pointer; }
+`;
+
+const EditPortraitButton = styled(RandomizeButton)`
+  background: #3b82f6;
+`;
+
+const AlibiRow = styled.div`
+  display: flex;
+  gap: var(--space);
+  margin-top: var(--space);
+  align-items: flex-end;
+`;
+
+const AlibiToggle = styled(ToggleButton)`
+  padding: calc(var(--space) + 3.4px) calc(var(--space) * 2);
+  font-size: var(--type-body);
+`;
+
+const RelTargetLabel = styled.div`
+  flex: 1;
+  color: #fff;
+  font-size: var(--type-body-lg);
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const RelTypeInput = styled(StyledInput)`
+  width: 120px;
+`;
+
+const TimelineModuleItem = styled(ModuleItem)`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const FactModuleItem = styled(ModuleItem)`
+  flex-direction: row;
+  align-items: flex-start;
+`;
+
+const TimelineFlexCol = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+`;
+
+const TimelineDayInput = styled(StyledInput)`
+  flex: 2;
+`;
+
+const TimelineOffsetInput = styled(StyledInput)`
+  flex: 0;
+  width: 70px;
+`;
+
+const SideDeleteButton = styled(DeleteButton)`
+  margin-left: var(--space);
+  align-self: stretch;
+`;
+
+const AddButton = styled(SmallButton)`
+  padding: var(--space);
+  background: #222;
+`;
+
+const MobileButtonRow = styled.div`
+  display: flex;
+  gap: var(--space);
+  width: 100%;
+`;
+
+const FlexSaveButton = styled(SaveButton)`
+  flex: 1;
+`;
+
+const CloseButton = styled(FlexSaveButton)`
+  background: #444;
+  color: #ccc;
+`;
+
 // --- Props ---
 
 interface SuspectEditorPanelProps {
@@ -545,10 +738,10 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
 
   return (
     <Panel $mobileHidden={mobileTab !== 'suspects'}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, color: '#fff' }}>Suspects</h2>
+      <PanelHeader>
+        <PanelTitle>Suspects</PanelTitle>
         <UtilityButton onClick={onAddSuspect}>+ ADD SUSPECT</UtilityButton>
-      </div>
+      </PanelHeader>
 
       <RetryButton onClick={onRetryAI} disabled={loadingVisible}>
         ⚡ RETRY AI GENERATION (Fix broken images)
@@ -556,29 +749,27 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
 
       <SuspectList>
         {/* Support Characters */}
-        <SuspectRow
+        <SupportSuspectRow
           $selected={selectedSuspectId === 'officer'}
           onClick={() => setSelectedSuspectId('officer')}
-          style={{ borderLeft: '3px solid #3b82f6' }}
         >
-          <SuspectPortrait suspect={draftCase.officer as any} size={50} style={{ border: '1px solid #555' }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 'bold', fontSize: 'var(--type-body)' }}>{draftCase.officer.name} (CHIEF)</div>
-            <div style={{ fontSize: 'var(--type-small)', color: '#888' }}>{draftCase.officer.role}</div>
-          </div>
-        </SuspectRow>
+          <SuspectPortrait suspect={draftCase.officer as any} size={50} />
+          <SuspectInfo>
+            <SuspectName>{draftCase.officer.name} (CHIEF)</SuspectName>
+            <SuspectRole>{draftCase.officer.role}</SuspectRole>
+          </SuspectInfo>
+        </SupportSuspectRow>
 
-        <SuspectRow
+        <SupportSuspectRow
           $selected={selectedSuspectId === 'partner'}
           onClick={() => setSelectedSuspectId('partner')}
-          style={{ borderLeft: '3px solid #3b82f6' }}
         >
-          <SuspectPortrait suspect={draftCase.partner as any} size={50} style={{ border: '1px solid #555' }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 'bold', fontSize: 'var(--type-body)' }}>{draftCase.partner.name} (PARTNER)</div>
-            <div style={{ fontSize: 'var(--type-small)', color: '#888' }}>{draftCase.partner.role}</div>
-          </div>
-        </SuspectRow>
+          <SuspectPortrait suspect={draftCase.partner as any} size={50} />
+          <SuspectInfo>
+            <SuspectName>{draftCase.partner.name} (PARTNER)</SuspectName>
+            <SuspectRole>{draftCase.partner.role}</SuspectRole>
+          </SuspectInfo>
+        </SupportSuspectRow>
 
         {(draftCase.suspects || []).map(s => (
           <SuspectRow
@@ -586,25 +777,25 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
             $selected={s.id === selectedSuspectId}
             onClick={() => setSelectedSuspectId(s.id)}
           >
-            <SuspectPortrait suspect={s} size={50} style={{ border: '1px solid #555' }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold', fontSize: 'var(--type-body)' }}>{s.name}</div>
-              <div style={{ fontSize: 'var(--type-small)', color: '#888' }}>{s.role}</div>
-            </div>
-            {s.isGuilty && <span style={{ color: 'red', fontWeight: 'bold' }}>[GUILTY]</span>}
+            <SuspectPortrait suspect={s} size={50} />
+            <SuspectInfo>
+              <SuspectName>{s.name}</SuspectName>
+              <SuspectRole>{s.role}</SuspectRole>
+            </SuspectInfo>
+            {s.isGuilty && <GuiltyTag>[GUILTY]</GuiltyTag>}
           </SuspectRow>
         ))}
       </SuspectList>
 
       {activeSuspect && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'calc(var(--space) * 2)', marginTop: 'calc(var(--space) * 3)', borderTop: '1px solid #333', paddingTop: 'calc(var(--space) * 3)', minWidth: 0, maxWidth: '100%' }}>
+        <EditorSection>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space)' }}>
-            <h3 style={{ margin: 0, color: '#aaa', fontSize: 'var(--type-h3)' }}>
+          <EditorHeader>
+            <EditorTitle>
               EDITING: {activeSuspect.name} {selectedSuspectId === 'officer' ? '(CHIEF)' : selectedSuspectId === 'partner' ? '(PARTNER)' : ''}
-            </h3>
+            </EditorTitle>
             {!isSupportChar && (
-              <div style={{ display: 'flex', gap: 'var(--space)', alignItems: 'center' }}>
+              <EditorControls>
                 <ToggleButton
                   $active={(activeSuspect as Suspect).isGuilty}
                   onClick={() => onSuspectChange(activeSuspect.id, 'isGuilty', !(activeSuspect as Suspect).isGuilty)}
@@ -615,35 +806,26 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 <DeleteButton onClick={onDeleteSuspect} title="Remove Suspect" data-cursor="pointer">
                   <XIcon /> REMOVE
                 </DeleteButton>
-              </div>
+              </EditorControls>
             )}
-          </div>
+          </EditorHeader>
 
           <SuspectEditorRow>
             <PortraitCol>
               <SuspectPortrait
                 suspect={activeSuspect as any}
                 size={120}
-                style={{
-                  border: '1px solid #555',
-                  flex: 1,
-                  width: '100%',
-                  height: 'auto',
-                  minHeight: '120px',
-                  aspectRatio: '1',
-                }}
               />
               <PortraitBtnGrid>
                 <RandomizeButton onClick={onRerollPortrait} disabled={loadingVisible}>
                   REROLL
                 </RandomizeButton>
-                <RandomizeButton
+                <EditPortraitButton
                   onClick={onShowSuspectEditor}
                   disabled={loadingVisible}
-                  style={{ background: '#3b82f6' }}
                 >
                   {activeSuspect.portraits?.[Emotion.NEUTRAL] ? 'EDIT' : 'CREATE'}
-                </RandomizeButton>
+                </EditPortraitButton>
                 <UploadButton onClick={onTriggerUpload} disabled={loadingVisible}>
                   UPLOAD REF
                 </UploadButton>
@@ -657,25 +839,25 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
             </PortraitCol>
 
             <InputsCol>
-              <div style={{ display: 'flex', gap: 'var(--space)', minWidth: 0, maxWidth: '100%' }}>
-                <InputGroup style={{ flex: 1 }}>
+              <FlexRow>
+                <FlexInputGroup>
                   <label>Name</label>
                   <input
                     value={activeSuspect.name}
                     onChange={(e) => onSuspectChange(selectedSuspectId!, 'name', e.target.value)}
                   />
-                </InputGroup>
+                </FlexInputGroup>
                 {!isSupportChar && (
-                  <InputGroup style={{ width: '80px' }}>
+                  <NarrowInputGroup>
                     <label>Age</label>
                     <input
                       type="number"
                       value={(activeSuspect as Suspect).age}
                       onChange={(e) => onSuspectChange(selectedSuspectId!, 'age', parseInt(e.target.value))}
                     />
-                  </InputGroup>
+                  </NarrowInputGroup>
                 )}
-              </div>
+              </FlexRow>
               <InputGroup>
                 <label>Role</label>
                 <input
@@ -709,35 +891,24 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
               </InputGroup>
               <InputGroup>
                 <label>TTS Voice</label>
-                <div style={{ display: 'flex', gap: 'var(--space)', minWidth: 0 }}>
-                  <select
+                <FlexRow>
+                  <VoiceSelect
                     value={activeSuspect.voice || ''}
                     onChange={(e) => onSuspectChange(selectedSuspectId!, 'voice', e.target.value)}
-                    style={{ backgroundColor: '#111', color: '#fff', border: '1px solid #444', padding: 'var(--space)', flex: 1, minWidth: 0, WebkitAppearance: 'none', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '10px', paddingRight: 'calc(var(--space) * 4)', boxSizing: 'border-box' }}
                   >
                     {TTS_VOICES.map(v => (
                       <option key={v.name} value={v.name}>
                         {v.name === 'None' ? 'No Voice (Silent)' : `${v.name} (${v.gender})`}
                       </option>
                     ))}
-                  </select>
-                  <button
+                  </VoiceSelect>
+                  <PreviewButton
                     onClick={onPreviewVoice}
                     disabled={!activeSuspect.voice || activeSuspect.voice === 'None' || isPreviewingVoice}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#333',
-                      color: '#fff',
-                      border: '1px solid #444',
-                      cursor: (activeSuspect.voice && activeSuspect.voice !== 'None' && !isPreviewingVoice) ? 'pointer' : 'not-allowed',
-                      opacity: (activeSuspect.voice && activeSuspect.voice !== 'None' && !isPreviewingVoice) ? 1 : 0.5,
-                      fontSize: 'var(--type-xs)',
-                      whiteSpace: 'nowrap'
-                    }}
                   >
                     {isPreviewingVoice ? '...' : 'Preview'}
-                  </button>
-                </div>
+                  </PreviewButton>
+                </FlexRow>
               </InputGroup>
             </InputsCol>
           </SuspectEditorRow>
@@ -785,23 +956,22 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                     onChange={(e) => onSuspectChange(activeSuspect.id, 'alibi', { ...(activeSuspect as Suspect).alibi, statement: e.target.value })}
                   />
                 </InputGroup>
-                <div style={{ display: 'flex', gap: 'var(--space)', marginTop: 'var(--space)', alignItems: 'flex-end' }}>
-                  <InputGroup style={{ flex: 1 }}>
+                <AlibiRow>
+                  <FlexInputGroup>
                     <label>Location</label>
                     <input
                       value={(activeSuspect as Suspect).alibi?.location || ''}
                       onChange={(e) => onSuspectChange(activeSuspect.id, 'alibi', { ...(activeSuspect as Suspect).alibi, location: e.target.value })}
                     />
-                  </InputGroup>
-                  <ToggleButton
+                  </FlexInputGroup>
+                  <AlibiToggle
                     $active={(activeSuspect as Suspect).alibi?.isTrue || false}
                     onClick={() => onSuspectChange(activeSuspect.id, 'alibi', { ...(activeSuspect as Suspect).alibi, isTrue: !(activeSuspect as Suspect).alibi?.isTrue })}
                     data-cursor="pointer"
-                    style={{ padding: 'calc(var(--space) + 3.4px) calc(var(--space) * 2)', fontSize: 'var(--type-body)' }}
                   >
                     {(activeSuspect as Suspect).alibi?.isTrue ? '✓' : <XIcon />} VERIFIED
-                  </ToggleButton>
-                </div>
+                  </AlibiToggle>
+                </AlibiRow>
               </Fieldset>
 
               {/* RELATIONSHIPS */}
@@ -812,19 +982,18 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                     const rel = (activeSuspect as Suspect).relationships?.find(r => r.targetName === targetName) || { type: '', description: '' };
                     return (
                       <ModuleItem key={`${activeSuspect.id}-${targetName}`}>
-                        <div style={{ display: 'flex', gap: 'var(--space)', alignItems: 'center' }}>
-                          <div style={{ flex: 1, color: '#fff', fontSize: 'var(--type-body-lg)', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <FlexRowAligned>
+                          <RelTargetLabel>
                             {targetName === "The Victim" && deceasedSuspect
                               ? `The Victim (${deceasedSuspect.name})`
                               : targetName}
-                          </div>
-                          <StyledInput
+                          </RelTargetLabel>
+                          <RelTypeInput
                             placeholder="Type (e.g. Rival)"
                             value={rel.type}
                             onChange={e => handleRelationshipChange(targetName, 'type', e.target.value)}
-                            style={{ width: '120px' }}
                           />
-                        </div>
+                        </FlexRowAligned>
                         <StyledTextArea
                           placeholder={`How does ${activeSuspect.name} feel about ${targetName}?`}
                           value={rel.description}
@@ -841,16 +1010,15 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 <legend>Timeline ({(activeSuspect as Suspect)?.timeline?.length || 0})</legend>
                 <ModuleContainer>
                   {(activeSuspect as Suspect)?.timeline?.map((t, i) => (
-                    <ModuleItem key={`${activeSuspect.id}-timeline-${i}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space)' }}>
-                        <div style={{ display: 'flex', gap: 'var(--space)' }}>
-                          <StyledInput
+                    <TimelineModuleItem key={`${activeSuspect.id}-timeline-${i}`}>
+                      <TimelineFlexCol>
+                        <FlexRow>
+                          <TimelineDayInput
                             placeholder="Day (e.g. Today, Yesterday)"
                             value={t.day || ''}
                             onChange={(e) => updateTimeline(i, 'day' as any, e.target.value)}
-                            style={{ flex: 2 }}
                           />
-                          <StyledInput
+                          <TimelineOffsetInput
                             placeholder="Offset"
                             type="number"
                             value={t.dayOffset ?? 0}
@@ -861,9 +1029,8 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                               newTime[i] = { ...newTime[i], dayOffset: parseInt(e.target.value) || 0 };
                               onSuspectChange(activeSuspect.id, 'timeline', newTime);
                             }}
-                            style={{ flex: 0, width: '70px' }}
                           />
-                        </div>
+                        </FlexRow>
                         <StyledInput
                           placeholder="Time (e.g. 8:00 PM)"
                           value={t.time}
@@ -874,17 +1041,16 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                           value={t.activity}
                           onChange={(e) => updateTimeline(i, 'activity', e.target.value)}
                         />
-                      </div>
-                      <DeleteButton
+                      </TimelineFlexCol>
+                      <SideDeleteButton
                         onClick={() => removeTimelineEvent(i)}
-                        style={{ marginLeft: 'var(--space)', alignSelf: 'stretch' }}
                         title="Delete timeline event"
                       >
                         <XIcon />
-                      </DeleteButton>
-                    </ModuleItem>
+                      </SideDeleteButton>
+                    </TimelineModuleItem>
                   ))}
-                  <SmallButton onClick={addTimelineEvent} style={{ padding: 'var(--space)', background: '#222' }}>+ ADD TIMELINE EVENT</SmallButton>
+                  <AddButton onClick={addTimelineEvent}>+ ADD TIMELINE EVENT</AddButton>
                 </ModuleContainer>
               </Fieldset>
 
@@ -893,21 +1059,20 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 <legend>Known Facts ({(activeSuspect as Suspect)?.knownFacts?.length || 0})</legend>
                 <ModuleContainer>
                   {(activeSuspect as Suspect)?.knownFacts?.map((f, i) => (
-                    <ModuleItem key={`${activeSuspect.id}-fact-${i}`} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <FactModuleItem key={`${activeSuspect.id}-fact-${i}`}>
                       <StyledTextArea
                         value={f}
                         onChange={(e) => updateFact(i, e.target.value)}
                       />
-                      <DeleteButton
+                      <SideDeleteButton
                         onClick={() => removeFact(i)}
-                        style={{ marginLeft: 'var(--space)', alignSelf: 'stretch' }}
                         title="Delete fact"
                       >
                         <XIcon />
-                      </DeleteButton>
-                    </ModuleItem>
+                      </SideDeleteButton>
+                    </FactModuleItem>
                   ))}
-                  <SmallButton onClick={addFact} style={{ padding: 'var(--space)', background: '#222' }}>+ ADD FACT</SmallButton>
+                  <AddButton onClick={addFact}>+ ADD FACT</AddButton>
                 </ModuleContainer>
               </Fieldset>
 
@@ -943,15 +1108,15 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
           )}
 
           <MobileOnly>
-            <div style={{ display: 'flex', gap: 'var(--space)', width: '100%' }}>
-              <SaveButton onClick={onSave} disabled={loadingVisible} style={{ flex: 1 }}>SAVE</SaveButton>
-              <SaveButton onClick={onCheckConsistency} disabled={loadingVisible} style={{ flex: 1 }}>CHECK CONSISTENCY</SaveButton>
-              <SaveButton onClick={onCancel} disabled={loadingVisible} style={{ flex: 1, background: '#444', color: '#ccc' }}>CLOSE</SaveButton>
-            </div>
+            <MobileButtonRow>
+              <FlexSaveButton onClick={onSave} disabled={loadingVisible}>SAVE</FlexSaveButton>
+              <FlexSaveButton onClick={onCheckConsistency} disabled={loadingVisible}>CHECK CONSISTENCY</FlexSaveButton>
+              <CloseButton onClick={onCancel} disabled={loadingVisible}>CLOSE</CloseButton>
+            </MobileButtonRow>
             <StartButton onClick={onStart}>CASE HUB</StartButton>
           </MobileOnly>
 
-        </div>
+        </EditorSection>
       )}
     </Panel>
   );

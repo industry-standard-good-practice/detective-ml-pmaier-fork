@@ -148,7 +148,7 @@ interface ChatLogProps {
   isThinking: boolean;
   soundEnabled: boolean;
   volume: number;
-  onCollectEvidence: (msgIndex: number, evidenceName: string, suspectId: string) => void;
+  onCollectEvidence: (msgIndex: number, evidenceName: string, suspectId: string, evidenceIndex?: number) => void;
   // Evidence tooltip
   evidenceTooltipSeen: boolean;
   dismissEvidenceTooltip: () => void;
@@ -168,15 +168,30 @@ const ChatLog: React.FC<ChatLogProps> = ({
   dismissEvidenceTooltip,
   scrollRef,
 }) => {
-  const [celebratingItem, setCelebratingItem] = React.useState<{ index: number, name: string, suspectId: string } | null>(null);
+  const [celebratingItem, setCelebratingItem] = React.useState<{ index: number, name: string, suspectId: string, evidenceIndex: number } | null>(null);
   const [showEvidenceTooltip, setShowEvidenceTooltip] = React.useState(false);
   const [evidenceChipRect, setEvidenceChipRect] = React.useState<DOMRect | null>(null);
   const evidenceChipRef = useRef<HTMLDivElement>(null);
   const evidenceTooltipBubbleRef = useRef<HTMLDivElement>(null);
 
-  // Detect first uncollected evidence for tooltip
-  const firstUncollectedEvidenceIdx = chatHistory.findIndex(msg => msg.evidence && !msg.isEvidenceCollected);
-  const shouldShowEvidenceTooltip = !evidenceTooltipSeen && firstUncollectedEvidenceIdx !== -1;
+  // Detect first uncollected evidence for tooltip (scans message index + evidence sub-index)
+  let firstUncollectedMsgIdx = -1;
+  let firstUncollectedEvIdx = -1;
+  for (let mi = 0; mi < chatHistory.length; mi++) {
+    const msg = chatHistory[mi];
+    if (msg.evidence && msg.evidence.length > 0) {
+      const collected = msg.isEvidenceCollected || [];
+      for (let ei = 0; ei < msg.evidence.length; ei++) {
+        if (!collected[ei]) {
+          firstUncollectedMsgIdx = mi;
+          firstUncollectedEvIdx = ei;
+          break;
+        }
+      }
+      if (firstUncollectedMsgIdx !== -1) break;
+    }
+  }
+  const shouldShowEvidenceTooltip = !evidenceTooltipSeen && firstUncollectedMsgIdx !== -1;
 
   // Auto-scroll to evidence chip and track its position
   useEffect(() => {
@@ -270,18 +285,18 @@ const ChatLog: React.FC<ChatLogProps> = ({
     }
   };
 
-  const handleEvidenceClick = (index: number, name: string, suspectId: string) => {
+  const handleEvidenceClick = (index: number, name: string, suspectId: string, evidenceIndex: number) => {
     if (showEvidenceTooltip) {
       dismissEvidenceTooltip();
       setShowEvidenceTooltip(false);
     }
     playEvidenceSfx();
-    setCelebratingItem({ index, name, suspectId });
+    setCelebratingItem({ index, name, suspectId, evidenceIndex });
   };
 
   const handleCelebrationComplete = () => {
     if (celebratingItem) {
-      onCollectEvidence(celebratingItem.index, celebratingItem.name, celebratingItem.suspectId);
+      onCollectEvidence(celebratingItem.index, celebratingItem.name, celebratingItem.suspectId, celebratingItem.evidenceIndex);
       setCelebratingItem(null);
     }
   };
@@ -301,10 +316,10 @@ const ChatLog: React.FC<ChatLogProps> = ({
             }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             onClick={() => {
-              if (firstUncollectedEvidenceIdx !== -1) {
-                const msg = chatHistory[firstUncollectedEvidenceIdx];
-                if (msg?.evidence && !msg.isEvidenceCollected) {
-                  handleEvidenceClick(firstUncollectedEvidenceIdx, msg.evidence, suspect.id);
+              if (firstUncollectedMsgIdx !== -1 && firstUncollectedEvIdx !== -1) {
+                const msg = chatHistory[firstUncollectedMsgIdx];
+                if (msg?.evidence && msg.evidence[firstUncollectedEvIdx]) {
+                  handleEvidenceClick(firstUncollectedMsgIdx, msg.evidence[firstUncollectedEvIdx], suspect.id, firstUncollectedEvIdx);
                 }
               }
             }}
@@ -355,17 +370,22 @@ const ChatLog: React.FC<ChatLogProps> = ({
             {msg.attachment && (
               <div className="attachment">📎 Evidence Shown: {msg.attachment.split(' | ').map(a => getShortEvidenceTitle(a)).join(', ')}</div>
             )}
-            {msg.evidence && (
-              <EvidenceChip
-                ref={idx === firstUncollectedEvidenceIdx && !msg.isEvidenceCollected ? evidenceChipRef : undefined}
-                $collected={!!msg.isEvidenceCollected}
-                onClick={() => !msg.isEvidenceCollected && handleEvidenceClick(idx, msg.evidence!, suspect.id)}
-                data-cursor={msg.isEvidenceCollected ? undefined : 'pointer'}
-                style={showEvidenceTooltip && idx === firstUncollectedEvidenceIdx && !msg.isEvidenceCollected ? { position: 'relative', zIndex: 10001 } : undefined}
-              >
-                {getShortEvidenceTitle(msg.evidence)}
-              </EvidenceChip>
-            )}
+            {msg.evidence && msg.evidence.length > 0 && msg.evidence.map((ev, evIdx) => {
+              const isCollected = !!(msg.isEvidenceCollected && msg.isEvidenceCollected[evIdx]);
+              const isFirstUncollected = idx === firstUncollectedMsgIdx && evIdx === firstUncollectedEvIdx && !isCollected;
+              return (
+                <EvidenceChip
+                  key={`${idx}-ev-${evIdx}`}
+                  ref={isFirstUncollected ? evidenceChipRef : undefined}
+                  $collected={isCollected}
+                  onClick={() => !isCollected && handleEvidenceClick(idx, ev, suspect.id, evIdx)}
+                  data-cursor={isCollected ? undefined : 'pointer'}
+                  style={showEvidenceTooltip && isFirstUncollected ? { position: 'relative', zIndex: 10001 } : undefined}
+                >
+                  {getShortEvidenceTitle(ev)}
+                </EvidenceChip>
+              );
+            })}
           </MessageBubble>
         ))}
         {isThinking && (

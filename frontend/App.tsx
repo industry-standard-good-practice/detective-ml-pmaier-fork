@@ -433,8 +433,8 @@ const App: React.FC = () => {
                 sender: 'suspect',
                 text: examResponse.text,
                 timestamp: formatTime(newGameTime),
-                evidence: examResponse.revealedEvidence,
-                isEvidenceCollected: false,
+                evidence: examResponse.revealedEvidence.length > 0 ? examResponse.revealedEvidence : null,
+                isEvidenceCollected: examResponse.revealedEvidence.map(() => false),
                 audioUrl: examAudioUrl
             };
             
@@ -484,8 +484,8 @@ const App: React.FC = () => {
             sender: 'suspect',
             text: finalAgg >= 100 ? "That's it! I want my lawyer!" : response.text,
             timestamp: formatTime(newGameTime),
-            evidence: response.revealedEvidence,
-            isEvidenceCollected: false,
+            evidence: response.revealedEvidence.length > 0 ? response.revealedEvidence : null,
+            isEvidenceCollected: response.revealedEvidence.map(() => false),
             audioUrl: audioUrl
         };
 
@@ -498,8 +498,8 @@ const App: React.FC = () => {
                     discoveredEv.title.toLowerCase().includes(cleanHiddenTitle)
                 );
                 
-                const isJustRevealed = response.revealedEvidence 
-                    ? response.revealedEvidence.toLowerCase().includes(cleanHiddenTitle)
+                const isJustRevealed = response.revealedEvidence.length > 0
+                    ? response.revealedEvidence.some(re => re.toLowerCase().includes(cleanHiddenTitle))
                     : false;
 
                 return !isDiscovered && !isJustRevealed;
@@ -674,8 +674,8 @@ const App: React.FC = () => {
           sender: 'suspect', 
           text: finalMsgText, 
           timestamp: formatTime(newGameTime),
-          evidence: newAgg >= 100 ? null : response.revealedEvidence, 
-          isEvidenceCollected: false,
+          evidence: newAgg >= 100 || response.revealedEvidence.length === 0 ? null : response.revealedEvidence, 
+          isEvidenceCollected: response.revealedEvidence.map(() => false),
           audioUrl: audioUrl
       };
 
@@ -1001,11 +1001,13 @@ const App: React.FC = () => {
     setIsPublishing(false);
   };
 
-  const collectEvidence = (msgIndex: number, rawEvidenceString: string, suspectId: string) => {
+  const collectEvidence = (msgIndex: number, rawEvidenceString: string, suspectId: string, evidenceIndex: number = 0) => {
     setGameState(prev => {
       const history = [...(prev.chatHistory[suspectId] || [])];
       if (history[msgIndex]) {
-        history[msgIndex] = { ...history[msgIndex], isEvidenceCollected: true };
+        const collected = [...(history[msgIndex].isEvidenceCollected || [])];
+        collected[evidenceIndex] = true;
+        history[msgIndex] = { ...history[msgIndex], isEvidenceCollected: collected };
       }
       
       const currentCase = findCaseById(prev.selectedCaseId);
@@ -1070,8 +1072,8 @@ const App: React.FC = () => {
       sender: 'suspect',
       text: "[DEBUG FORCE] Okay, fine! I'll tell you about this.",
       timestamp: formatTime(gameState.gameTime),
-      evidence: evidenceTitle,
-      isEvidenceCollected: false
+      evidence: [evidenceTitle],
+      isEvidenceCollected: [false]
     };
     
     setGameState(prev => ({

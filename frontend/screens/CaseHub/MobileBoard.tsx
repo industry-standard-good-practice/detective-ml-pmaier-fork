@@ -130,6 +130,7 @@ const InlineSuspectCarousel = styled.div`
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   padding: 25px 50vw 25px 50vw;
+  cursor: grab;
   &::-webkit-scrollbar { height: 4px; }
   &::-webkit-scrollbar-thumb { background: var(--color-border); }
 `;
@@ -166,6 +167,29 @@ const EvidenceGrid = styled.div`
   align-content: flex-start;
 `;
 
+/** Pulsing dot for notification badges */
+const NotifDot = styled.span<{ $color: string; $size?: number }>`
+  width: ${props => props.$size || 8}px;
+  height: ${props => props.$size || 8}px;
+  border-radius: 50%;
+  background: ${props => props.$color};
+  box-shadow: 0 0 6px ${props => props.$color}, 0 0 12px ${props => props.$color}40;
+  animation: notif-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+`;
+
+/** Absolutely positioned notification dot (top-right corner) */
+const CornerNotifDot = styled(NotifDot)`
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 10;
+`;
+
+const InlineNotifDot = styled(NotifDot)`
+  margin-left: 6px;
+`;
+
 const EvidenceItemBase = styled(motion.div)`
   background: var(--color-polaroid-bg);
   color: var(--color-text-inverse);
@@ -179,8 +203,10 @@ const EvidenceItemBase = styled(motion.div)`
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  position: relative;
   @media (max-width: 768px) { width: 100%; }
 `;
+
 
 const PolaroidImage = styled.div<{ $src?: string }>`
   width: 100%;
@@ -341,7 +367,7 @@ const MobileBoard: React.FC<MobileBoardProps> = ({
           </svg>
           EVIDENCE ({evidenceDiscovered.length})
           {newEvidenceTitles.size > 0 && (
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fa0', boxShadow: '0 0 6px #fa0, 0 0 12px rgba(255,170,0,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite', marginLeft: 6, flexShrink: 0 }} />
+            <InlineNotifDot $color="#fa0" />
           )}
           <AccordionChevron animate={{ rotate: openAccordion === 'evidence' ? 180 : 0 }} transition={{ duration: 0.3 }}>▾</AccordionChevron>
         </AccordionButton>
@@ -355,9 +381,9 @@ const MobileBoard: React.FC<MobileBoardProps> = ({
                     const bNew = newEvidenceTitles.has(b.title) ? 0 : 1;
                     return aNew - bNew;
                   }).map((ev, i) => (
-                    <EvidenceItemBase key={ev.id || i} style={{ position: 'relative' }}>
+                    <EvidenceItemBase key={ev.id || i}>
                       {newEvidenceTitles.has(ev.title) && (
-                        <span style={{ position: 'absolute', top: -4, right: -4, zIndex: 10, width: 10, height: 10, borderRadius: '50%', background: '#fa0', boxShadow: '0 0 6px #fa0, 0 0 12px rgba(255,170,0,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite' }} />
+                        <CornerNotifDot $color="#fa0" $size={10} />
                       )}
                       <PolaroidImage $src={ev.imageUrl}>{!ev.imageUrl && 'No IMG'}</PolaroidImage>
                       <PolaroidText><strong>{ev.title}</strong><span>{ev.description}</span></PolaroidText>
@@ -388,7 +414,7 @@ const MobileBoard: React.FC<MobileBoardProps> = ({
           </svg>
           TIMELINE ({timelineStatements.length})
           {newTimelineIds.size > 0 && (
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4af', boxShadow: '0 0 6px #4af, 0 0 12px rgba(68,170,255,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite', marginLeft: 6, flexShrink: 0 }} />
+            <InlineNotifDot $color="#4af" />
           )}
           <AccordionChevron animate={{ rotate: openAccordion === 'timeline' ? 180 : 0 }} transition={{ duration: 0.3 }}>▾</AccordionChevron>
         </AccordionButton>
@@ -429,7 +455,6 @@ const MobileBoard: React.FC<MobileBoardProps> = ({
               <InlineSuspectCarousel
                 id="suspect-cards-container-mobile"
                 ref={inlineCarouselRef}
-                style={{ cursor: 'grab' }}
               >
                 {caseData.suspects.map(s => (
                   <CarouselCardItem key={s.id} data-suspect-id={s.id}>

@@ -66,6 +66,21 @@ const EvidenceBoard = styled.div`
   flex-direction: column;
 `;
 
+const EvidenceBoardTitle = styled.h2`
+  margin-top: 0;
+  margin-bottom: calc(var(--space) * 3);
+  font-size: var(--type-h3);
+  color: #aaa;
+  border-bottom: 1px dashed #444;
+  padding-bottom: var(--space);
+  font-weight: normal;
+`;
+
+const EvidenceBoardTitleHighlight = styled.span`
+  color: var(--color-text-bright);
+  font-weight: bold;
+`;
+
 const EvidenceGrid = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -89,6 +104,7 @@ const EvidenceItemBase = styled(motion.div)`
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  position: relative;
   @media (min-width: 769px) {
     &:hover { z-index: 50; box-shadow: 8px 8px 20px rgba(0,0,0,0.7); }
   }
@@ -133,6 +149,29 @@ const NoteItem = styled(EvidenceItemBase)`
   }
 `;
 
+/** Pulsing dot for notification badges */
+const NotifDot = styled.span<{ $color: string; $size?: number }>`
+  width: ${props => props.$size || 8}px;
+  height: ${props => props.$size || 8}px;
+  border-radius: 50%;
+  background: ${props => props.$color};
+  box-shadow: 0 0 6px ${props => props.$color}, 0 0 12px ${props => props.$color}40;
+  animation: notif-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+`;
+
+/** Absolutely positioned notification dot (top-right corner) */
+const CornerNotifDot = styled(NotifDot)`
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 10;
+`;
+
+const InlineNotifDot = styled(NotifDot)`
+  margin-left: 6px;
+`;
+
 const SidePanel = styled.div`
   display: flex;
   flex-direction: column;
@@ -142,14 +181,43 @@ const SidePanel = styled.div`
   z-index: 20;
 `;
 
-const ChiefWidget = styled.div`
+const ChiefWidgetRow = styled.div`
   background: #0d1b2a;
   border: 2px solid #415a77;
   padding: var(--space);
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+`;
+
+const OfficerPortrait = styled.img`
+  border: 2px solid var(--color-officer-border);
+  image-rendering: pixelated;
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  flex-shrink: 0;
+`;
+
+const OfficerInfo = styled.div`
+  display: flex;
   flex-direction: column;
   gap: var(--space);
+  flex: 1;
+  min-width: 0;
+`;
+
+const OfficerName = styled.span`
+  font-weight: bold;
+  font-size: var(--type-body);
+  color: var(--color-officer-text);
+`;
+
+const BatteryStatus = styled.span<{ $low: boolean }>`
+  font-size: var(--type-small);
+  color: ${props => props.$low ? '#b00' : 'var(--color-officer-text)'};
 `;
 
 const SecureLineButton = styled.button`
@@ -215,6 +283,7 @@ const TimelineButton = styled.button`
   gap: var(--space);
   text-transform: uppercase;
   letter-spacing: 1px;
+  position: relative;
   &:hover { background: #253855; border-color: var(--color-accent-blue); }
   svg { width: 20px; height: 20px; }
   @container (min-width: 1300px) { display: none; }
@@ -295,7 +364,7 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
               </svg>
               TIMELINE ({timelineStatements.length})
               {newTimelineIds.size > 0 && (
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4af', boxShadow: '0 0 6px #4af, 0 0 12px rgba(68,170,255,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite', marginLeft: 6, flexShrink: 0 }} />
+                <InlineNotifDot $color="#4af" />
               )}
             </DesktopTimelinePanelHeader>
             <TimelineModal
@@ -309,13 +378,9 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
           </DesktopTimelinePanel>
 
           <EvidenceBoard id="evidence-board">
-            <h2 style={{
-              marginTop: 0, marginBottom: 'calc(var(--space) * 3)',
-              fontSize: 'var(--type-h3)', color: '#aaa',
-              borderBottom: '1px dashed #444', paddingBottom: 'var(--space)', fontWeight: 'normal'
-            }}>
-              EVIDENCE BOARD: <span style={{ color: 'var(--color-text-bright)', fontWeight: 'bold' }}>{caseData.title.toUpperCase()}</span>
-            </h2>
+            <EvidenceBoardTitle>
+              EVIDENCE BOARD: <EvidenceBoardTitleHighlight>{caseData.title.toUpperCase()}</EvidenceBoardTitleHighlight>
+            </EvidenceBoardTitle>
 
             <EvidenceGrid>
               {evidenceDiscovered.map((ev, i) => {
@@ -332,11 +397,10 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
                       rotate: isSelected ? 0 : Math.random() * 6 - 3,
                       visibility: isSelected ? 'hidden' : 'visible',
                       pointerEvents: isSelected ? 'none' : 'auto',
-                      position: 'relative',
                     }}
                   >
                     {newEvidenceTitles.has(ev.title) && (
-                      <span style={{ position: 'absolute', top: -4, right: -4, zIndex: 10, width: 10, height: 10, borderRadius: '50%', background: '#fa0', boxShadow: '0 0 6px #fa0, 0 0 12px rgba(255,170,0,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite' }} />
+                      <CornerNotifDot $color="#fa0" $size={10} />
                     )}
                     <PolaroidImage $src={ev.imageUrl}>{!ev.imageUrl && 'No IMG'}</PolaroidImage>
                     <PolaroidText><strong>{ev.title}</strong><span>{ev.description}</span></PolaroidText>
@@ -356,7 +420,7 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
 
           <SidePanel>
             <BriefingWidget>
-              <div id="mission-briefing" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space)' }}>
+              <div id="mission-briefing">
                 <h3>Mission Briefing</h3>
                 <div className="tags">
                   <Tag>{caseData.type}</Tag>
@@ -366,36 +430,26 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
               </div>
             </BriefingWidget>
 
-            <ChiefWidget style={{ flexDirection: 'row', alignItems: 'center', gap: 'calc(var(--space) * 2)' }}>
-              <img
-                src={officerPortrait}
-                alt={officerName}
-                style={{
-                  border: '2px solid var(--color-officer-border)',
-                  imageRendering: 'pixelated' as const,
-                  width: 120, height: 120,
-                  objectFit: 'cover' as const,
-                  flexShrink: 0,
-                }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space)', flex: 1, minWidth: 0 }}>
-                <span style={{ fontWeight: 'bold', fontSize: 'var(--type-body)', color: 'var(--color-officer-text)' }}>{officerName.toUpperCase()}</span>
-                <span style={{ fontSize: 'var(--type-small)', color: officerHintsRemaining > 3 ? 'var(--color-officer-text)' : '#b00' }}>
+            <ChiefWidgetRow>
+              <OfficerPortrait src={officerPortrait} alt={officerName} />
+              <OfficerInfo>
+                <OfficerName>{officerName.toUpperCase()}</OfficerName>
+                <BatteryStatus $low={officerHintsRemaining <= 3}>
                   BATT: {officerHintsRemaining * 10}%
-                </span>
+                </BatteryStatus>
                 <SecureLineButton id="secure-line" onClick={onOpenChat}>
                   [SECURE LINE]
                 </SecureLineButton>
-              </div>
-            </ChiefWidget>
+              </OfficerInfo>
+            </ChiefWidgetRow>
 
-            <TimelineButton id="timeline-button" onClick={onOpenTimeline} style={{ position: 'relative' }}>
+            <TimelineButton id="timeline-button" onClick={onOpenTimeline}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
               </svg>
               TIMELINE
               {newTimelineIds.size > 0 && (
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4af', boxShadow: '0 0 6px #4af, 0 0 12px rgba(68,170,255,0.4)', animation: 'notif-pulse 1.5s ease-in-out infinite', marginLeft: 6, flexShrink: 0 }} />
+                <InlineNotifDot $color="#4af" />
               )}
             </TimelineButton>
 

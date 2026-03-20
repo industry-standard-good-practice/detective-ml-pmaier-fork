@@ -106,7 +106,7 @@ const BadgeRow = styled.div`
   margin-bottom: var(--space);
 `;
 
-const Badge = styled.span<{ $bg: string; $color: string }>`
+export const Badge = styled.span<{ $bg: string; $color: string }>`
   background: ${props => props.$bg};
   color: ${props => props.$color};
   padding: 0 var(--space);

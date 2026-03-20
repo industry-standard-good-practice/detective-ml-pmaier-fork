@@ -19,7 +19,7 @@ export const getSuspectResponse = async (
   text: string;
   emotion: Emotion;
   aggravationDelta: number;
-  revealedEvidence: string | null;
+  revealedEvidence: string[];
   revealedTimelineStatements: { time: string; statement: string; day: string; dayOffset: number }[];
   hints: string[]
 }> => {
@@ -106,7 +106,7 @@ export const getSuspectResponse = async (
          GOOD example: "You unfold the crumpled paper. It's a toxicology report — columns of numbers, a lab stamp in the corner, coffee rings on the margins. A name is circled twice in red ink."
 
       3. If the user's action logically uncovers one of the UNREVEALED clues (e.g. "Check pockets" reveals "Pocket Lint"), YOU MUST REVEAL IT. 
-         - Set 'revealedEvidence' to the EXACT title.
+         - Add each item's EXACT title to the 'revealedEvidence' array. You may reveal MULTIPLE items in one response.
          - Describe finding it in second person ("You pull it free from the lining...").
          - Describe the physical properties of the item. Do NOT explain its significance.
       4. **VISUAL UPDATE (STRICT MAPPING):**
@@ -381,14 +381,15 @@ export const getSuspectResponse = async (
         - NEVER use the exact title or description of any unrevealed evidence in your dialogue.
         - ONLY reference the PLACE, PERSON, TIME, or TOPIC that the evidence is connected to.
         - The player should think "wait, why did they mention the kitchen/study/fireplace?" — NOT "oh, they just told me what the evidence is."
-        - IMPORTANT: DO NOT set the 'revealedEvidence' JSON field. Keep it null.
+        - IMPORTANT: DO NOT add anything to the 'revealedEvidence' array. Keep it as an empty array [].
         - CRITICAL: Do NOT immediately demand a lawyer or shut down the conversation unless your aggravation is already above 85. Bad cop pressure should make you uncomfortable and sloppy, not instantly end the interrogation. You can be angry, flustered, or defensive — but you keep talking (and slipping up).
         ` : `
         REVEALING EVIDENCE RULES:
-        1. If the user explicitly asks about a specific piece of UNREVEALED SECRETS you possess (e.g., "What about the ledger?"), YOU MUST REVEAL IT. Set 'revealedEvidence' to the EXACT title.
+        1. If the user explicitly asks about a specific piece of UNREVEALED SECRETS you possess (e.g., "What about the ledger?"), YOU MUST REVEAL IT. Add the EXACT title to the 'revealedEvidence' array.
         2. If the user asks about a topic related to your UNREVEALED SECRETS, YOU MUST REVEAL IT. Do not hide it behind an aggravation check. Reveal it regardless of your anger level.
         3. If the user presents evidence that contradicts your story, you REVEAL the related UNREVEALED SECRET (the evidence itself is now on the table) — but you do NOT confess guilt. You may explain it away, claim ignorance, or say it was planted. Revealing evidence ≠ admitting to the crime.
-        4. DO NOT set 'revealedEvidence' for items in REVEALED SECRETS. The detective already knows them. You can discuss them freely.
+        4. DO NOT add items from REVEALED SECRETS to 'revealedEvidence'. The detective already knows them. You can discuss them freely.
+        5. You may reveal MULTIPLE pieces of evidence in a single response if the conversation naturally warrants it. Each title should be a separate entry in the 'revealedEvidence' array.
         `}
       `;
   }
@@ -404,7 +405,7 @@ export const getSuspectResponse = async (
           text: { type: Type.STRING },
           emotion: { type: Type.STRING },
           aggravationDelta: { type: Type.NUMBER },
-          revealedEvidence: { type: Type.STRING, nullable: true },
+          revealedEvidence: { type: Type.ARRAY, items: { type: Type.STRING } },
           revealedTimelineStatements: {
             type: Type.ARRAY,
             items: {
@@ -426,11 +427,20 @@ export const getSuspectResponse = async (
   const data = JSON.parse(response.text!);
   console.log(`[DEBUG] getSuspectResponse: AI Output`, data);
 
+  // Normalize revealedEvidence: accept array, single string, or null from AI
+  let parsedEvidence: string[] = [];
+  if (Array.isArray(data.revealedEvidence)) {
+    parsedEvidence = data.revealedEvidence.filter((e: any) => typeof e === 'string' && e.trim().length > 0);
+  } else if (typeof data.revealedEvidence === 'string' && data.revealedEvidence.trim().length > 0) {
+    // Backwards compat: AI may still return a single string
+    parsedEvidence = [data.revealedEvidence];
+  }
+
   return {
     text: data.text,
     emotion: (data.emotion as Emotion) || Emotion.NEUTRAL,
     aggravationDelta: data.aggravationDelta || 0,
-    revealedEvidence: data.revealedEvidence || null,
+    revealedEvidence: parsedEvidence,
     revealedTimelineStatements: Array.isArray(data.revealedTimelineStatements)
       ? data.revealedTimelineStatements
       : data.revealedTimelineStatement

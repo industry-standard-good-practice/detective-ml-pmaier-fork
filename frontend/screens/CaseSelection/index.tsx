@@ -5,7 +5,7 @@ import styled from 'styled-components';
 import { CaseData, CaseStats } from '../../types';
 
 // Sub-components
-import CaseCardRenderer, { THEME_COLORS, AdminControls, AdminButton, CaseCardContainer, CardTheme } from './CaseCardRenderer';
+import CaseCardRenderer, { THEME_COLORS, AdminControls, AdminButton, CaseCardContainer, CardTheme, Badge } from './CaseCardRenderer';
 
 // --- Styled Components ---
 
@@ -434,10 +434,10 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
                 extraBadges={
                   <>
                     {isPublished
-                      ? <span style={{ background: colors.bright, color: '#000', padding: '0 var(--space)', fontSize: 'var(--type-small)', fontWeight: 'bold', textTransform: 'uppercase' }}>LIVE</span>
-                      : <span style={{ background: colors.border, color: '#000', padding: '0 var(--space)', fontSize: 'var(--type-small)', fontWeight: 'bold', textTransform: 'uppercase' }}>DRAFT</span>
+                      ? <Badge $bg={colors.bright} $color="#000">LIVE</Badge>
+                      : <Badge $bg={colors.border} $color="#000">DRAFT</Badge>
                     }
-                    {c.isFeatured && <span style={{ background: colors.border, color: '#000', padding: '0 var(--space)', fontSize: 'var(--type-small)', fontWeight: 'bold', textTransform: 'uppercase' }}>FEATURED</span>}
+                    {c.isFeatured && <Badge $bg={colors.border} $color="#000">FEATURED</Badge>}
                   </>
                 }
                 adminControls={renderMyCaseAdminControls(c, isPublished)}

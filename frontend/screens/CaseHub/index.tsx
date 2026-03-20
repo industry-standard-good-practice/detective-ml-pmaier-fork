@@ -174,11 +174,41 @@ const AccuseButton = styled.button`
   font-weight: bold;
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  flex-shrink: 0;
   &:hover { background: #900; transform: scale(1.02); }
   @media (max-width: 768px) {
     ${type.h3}
     padding: calc(var(--space) * 3);
   }
+`;
+
+const MobileHQContent = styled.div`
+  padding: calc(var(--space) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+`;
+
+const MobileChiefWidget = styled(ChiefWidget)`
+  flex-shrink: 1;
+  min-height: 0;
+`;
+
+const OfficerNameLabel = styled.span`
+  font-weight: bold;
+`;
+
+const BatteryLabel = styled.span<{ $low: boolean }>`
+  color: ${props => props.$low ? '#b00' : 'var(--color-officer-text)'};
+`;
+
+const MobileBriefingWidget = styled(BriefingWidget)`
+  flex: 1;
+  min-height: 30vh;
+  overflow-y: auto;
 `;
 
 // --- Props ---
@@ -319,23 +349,23 @@ const CaseHub: React.FC<CaseHubProps> = ({
         {/* MOBILE: HQ tab */}
         {activeMobileTab === 'HQ' && (
           <MobileContentArea>
-            <div style={{ padding: 'calc(var(--space) * 2)', display: 'flex', flexDirection: 'column', gap: 'calc(var(--space) * 2)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChiefWidget style={{ flexShrink: 1, minHeight: 0 }}>
+            <MobileHQContent>
+              <MobileChiefWidget>
                 <ChiefStatus>
                   <img src={officerPortrait} alt={officerName} />
                   <div>
-                    <span style={{ fontWeight: 'bold' }}>{officerName.toUpperCase()}</span>
-                    <span style={{ color: officerHintsRemaining > 3 ? 'var(--color-officer-text)' : '#b00' }}>
+                    <OfficerNameLabel>{officerName.toUpperCase()}</OfficerNameLabel>
+                    <BatteryLabel $low={officerHintsRemaining <= 3}>
                       BATT: {officerHintsRemaining * 10}%
-                    </span>
+                    </BatteryLabel>
                   </div>
                 </ChiefStatus>
                 <SecureLineButton id="secure-line-mobile" onClick={() => setIsChatOpen(true)}>
                   [SECURE LINE]
                 </SecureLineButton>
-              </ChiefWidget>
-              <BriefingWidget id="mission-briefing-mobile" style={{ flex: 1, minHeight: '30vh', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space)' }}>
+              </MobileChiefWidget>
+              <MobileBriefingWidget id="mission-briefing-mobile">
+                <div>
                   <h3>Mission Briefing</h3>
                   <div className="tags">
                     <Tag>{caseData.type}</Tag>
@@ -343,11 +373,11 @@ const CaseHub: React.FC<CaseHubProps> = ({
                   </div>
                   <p>{caseData.description}</p>
                 </div>
-              </BriefingWidget>
-              <AccuseButton style={{ flexShrink: 0 }} onClick={() => onNavigate(ScreenState.ACCUSATION)}>
+              </MobileBriefingWidget>
+              <AccuseButton onClick={() => onNavigate(ScreenState.ACCUSATION)}>
                 MAKE ACCUSATION
               </AccuseButton>
-            </div>
+            </MobileHQContent>
           </MobileContentArea>
         )}
 

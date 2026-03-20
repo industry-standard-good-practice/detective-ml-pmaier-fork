@@ -140,8 +140,8 @@ export interface ChatMessage {
   timestamp: string;
   type?: 'talk' | 'action'; // New field: is this dialogue or a physical action?
   attachment?: string | null; // Title of evidence shown
-  evidence?: string | null; // Title of evidence revealed BY THE SUSPECT
-  isEvidenceCollected?: boolean; // Has the player clicked it?
+  evidence?: string[] | null; // Titles of evidence revealed BY THE SUSPECT (supports multiple per turn)
+  isEvidenceCollected?: boolean[]; // Has the player clicked each piece? (parallel array)
   audioUrl?: string | null;
 }
 

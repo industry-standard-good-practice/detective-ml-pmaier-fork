@@ -307,6 +307,185 @@ const HeroImageControls = styled.div`
   }
 `;
 
+const PanelHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const PanelTitle = styled.h2`
+  margin: 0;
+  color: #fff;
+`;
+
+const VersionBadge = styled.span`
+  color: #555;
+  font-size: var(--type-small);
+  border: 1px solid #333;
+  padding: 2px 8px;
+`;
+
+const FlexRow = styled.div`
+  display: flex;
+  gap: var(--space);
+`;
+
+const FlexRowAligned = styled(FlexRow)`
+  align-items: center;
+`;
+
+const FlexInput = styled.input`
+  flex: 1;
+`;
+
+const HiddenDatePicker = styled.input`
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+`;
+
+const DatePickerButton = styled.button`
+  background: #222;
+  border: 1px solid #444;
+  color: #888;
+  padding: 0;
+  cursor: pointer;
+  font-size: var(--type-body);
+  line-height: 1;
+  flex-shrink: 0;
+  aspect-ratio: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const HintText = styled.p`
+  font-size: var(--type-small);
+  color: #555;
+  margin: 4px 0 0;
+`;
+
+const HeroModeButton = styled(SmallButton)`
+  flex: 1;
+`;
+
+const StyledSelect = styled.select`
+  background-color: #111;
+  color: #fff;
+  border: 1px solid #444;
+  padding: var(--space);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px;
+  padding-right: calc(var(--space) * 4);
+`;
+
+const FlexSmallButton = styled(SmallButton)`
+  flex: 1;
+`;
+
+const HeroUrlInput = styled.input`
+  font-size: var(--type-xs);
+  padding: var(--space);
+  background: #111;
+  border: 1px solid #333;
+  color: #888;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+`;
+
+const EditCaseBox = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  background: rgba(0,255,0,0.03);
+  padding: calc(var(--space) * 2);
+  border: 1px solid rgba(0,255,0,0.1);
+`;
+
+const EditPromptTextArea = styled.textarea`
+  min-height: 100px;
+`;
+
+const ApplyEditsButton = styled(StartButton)`
+  font-size: var(--type-body);
+  padding: var(--space);
+`;
+
+const EditHintText = styled.p`
+  font-size: var(--type-xs);
+  color: #555;
+  margin: 0;
+`;
+
+const DifficultyLabel = styled.div<{ $difficulty: string }>`
+  color: ${props => props.$difficulty === 'Hard' ? '#f55' : props.$difficulty === 'Medium' ? '#fa0' : '#0f0'};
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: var(--type-h3);
+  padding: 5px 0;
+`;
+
+const DifficultyHint = styled.p`
+  font-size: var(--type-small);
+  color: #555;
+  margin: 0;
+`;
+
+const TimelineModuleItem = styled(ModuleItem)`
+  flex-direction: row;
+  align-items: center;
+`;
+
+const TimelineFlexCol = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+`;
+
+const TimelineDayInput = styled(StyledInput)`
+  flex: 2;
+`;
+
+const TimelineOffsetInput = styled(StyledInput)`
+  flex: 0;
+  width: 70px;
+`;
+
+const SideDeleteButton = styled(DeleteButton)`
+  margin-left: var(--space);
+  align-self: stretch;
+`;
+
+const AddButton = styled(SmallButton)`
+  padding: var(--space);
+  background: #222;
+`;
+
+const MobileButtonRow = styled.div`
+  display: flex;
+  gap: var(--space);
+  width: 100%;
+`;
+
+const FlexSaveButton = styled(SaveButton)`
+  flex: 1;
+`;
+
+const MobileCloseButton = styled(FlexSaveButton)`
+  background: #444;
+  color: #fff;
+  border: none;
+`;
+
 // --- Props ---
 
 interface CaseDetailsPanelProps {
@@ -350,14 +529,14 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
 }) => {
   return (
     <Panel $mobileHidden={mobileTab !== 'case'}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, color: '#fff' }}>Case Details</h2>
+      <PanelHeader>
+        <PanelTitle>Case Details</PanelTitle>
         {draftCase.version && (
-          <span style={{ color: '#555', fontSize: 'var(--type-small)', border: '1px solid #333', padding: '2px 8px' }}>
+          <VersionBadge>
             VERSION {draftCase.version}
-          </span>
+          </VersionBadge>
         )}
-      </div>
+      </PanelHeader>
 
       <InputGroup>
         <label>Case Title</label>
@@ -385,17 +564,15 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
 
       <InputGroup>
         <label>Investigation Start Time</label>
-        <div style={{ display: 'flex', gap: 'var(--space)', alignItems: 'center' }}>
-          <input
+        <FlexRowAligned>
+          <FlexInput
             type="text"
             placeholder="e.g. 'September 12, 1924 at 11:30 PM' or '5 ABY, late evening'"
             value={draftCase.startTime || ''}
             onChange={(e) => onCaseChange('startTime', e.target.value)}
-            style={{ flex: 1 }}
           />
-          <input
+          <HiddenDatePicker
             type="datetime-local"
-            style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
             id="startTimePicker"
             onChange={(e) => {
               if (!e.target.value) return;
@@ -407,7 +584,7 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
               onCaseChange('startTime', formatted);
             }}
           />
-          <button
+          <DatePickerButton
             type="button"
             onClick={() => {
               const picker = document.getElementById('startTimePicker') as HTMLInputElement;
@@ -483,20 +660,14 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                 picker.showPicker?.();
               }
             }}
-            style={{
-              background: '#222', border: '1px solid #444', color: '#888',
-              padding: 0, cursor: 'pointer', fontSize: 'var(--type-body)',
-              lineHeight: 1, flexShrink: 0, aspectRatio: '1',
-              alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}
             title="Open date picker"
           >
             📅
-          </button>
-        </div>
-        <p style={{ fontSize: 'var(--type-small)', color: '#555', margin: '4px 0 0' }}>
+          </DatePickerButton>
+        </FlexRowAligned>
+        <HintText>
           Any format works — real dates, fictional calendars (ABY, Stardates), or freeform text. Use 📅 for a date picker.
-        </p>
+        </HintText>
       </InputGroup>
 
       <InputGroup>
@@ -507,33 +678,29 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
               {!draftCase.heroImageUrl && "NO IMAGE"}
             </HeroImagePreview>
             <HeroImageControls>
-              <div style={{ display: 'flex', gap: 'var(--space)' }}>
-                <SmallButton
+              <FlexRow>
+                <HeroModeButton
                   $active={heroMode === 'suspect'}
                   onClick={() => setHeroMode('suspect')}
-                  style={{ flex: 1, background: heroMode === 'suspect' ? '#3b82f6' : '#222' }}
                 >
                   USE SUSPECT
-                </SmallButton>
-                <SmallButton
+                </HeroModeButton>
+                <HeroModeButton
                   $active={heroMode === 'evidence'}
                   onClick={() => setHeroMode('evidence')}
-                  style={{ flex: 1, background: heroMode === 'evidence' ? '#3b82f6' : '#222' }}
                 >
                   USE EVIDENCE
-                </SmallButton>
-                <SmallButton
+                </HeroModeButton>
+                <HeroModeButton
                   $active={heroMode === 'custom'}
                   onClick={() => setHeroMode('custom')}
-                  style={{ flex: 1, background: heroMode === 'custom' ? '#3b82f6' : '#222' }}
                 >
                   USE CUSTOM
-                </SmallButton>
-              </div>
+                </HeroModeButton>
+              </FlexRow>
 
               {heroMode === 'suspect' && (
-                <select
-                  style={{ backgroundColor: '#111', color: '#fff', border: '1px solid #444', padding: 'var(--space)', WebkitAppearance: 'none', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '10px', paddingRight: 'calc(var(--space) * 4)' }}
+                <StyledSelect
                   onChange={(e) => {
                     const s = draftCase.suspects?.find(x => x.id === e.target.value);
                     if (s?.portraits?.[Emotion.NEUTRAL]) onCaseChange('heroImageUrl', s.portraits[Emotion.NEUTRAL]);
@@ -544,12 +711,11 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                   {(draftCase.suspects || []).map(s => (
                     <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
                   ))}
-                </select>
+                </StyledSelect>
               )}
 
               {heroMode === 'evidence' && (
-                <select
-                  style={{ backgroundColor: '#111', color: '#fff', border: '1px solid #444', padding: 'var(--space)', WebkitAppearance: 'none', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '10px', paddingRight: 'calc(var(--space) * 4)' }}
+                <StyledSelect
                   onChange={(e) => {
                     const ev = [...draftCase.initialEvidence, ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])].find(x => x.id === e.target.value);
                     if (ev?.imageUrl) onCaseChange('heroImageUrl', ev.imageUrl);
@@ -560,15 +726,15 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                   {[...(draftCase.initialEvidence || []), ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])].map(ev => (
                     <option key={ev.id} value={ev.id}>{ev.title}</option>
                   ))}
-                </select>
+                </StyledSelect>
               )}
 
               {heroMode === 'custom' && (
-                <div style={{ display: 'flex', gap: 'var(--space)' }}>
-                  <SmallButton onClick={() => onShowHeroEditor()} style={{ flex: 1 }}>
+                <FlexRow>
+                  <FlexSmallButton onClick={() => onShowHeroEditor()}>
                     GENERATE CUSTOM
-                  </SmallButton>
-                  <SmallButton onClick={() => {
+                  </FlexSmallButton>
+                  <FlexSmallButton onClick={() => {
                     const input = document.createElement('input');
                     input.type = 'file';
                     input.accept = 'image/*';
@@ -580,20 +746,19 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                       reader.readAsDataURL(file);
                     };
                     input.click();
-                  }} style={{ flex: 1 }}>
+                  }}>
                     UPLOAD IMAGE
-                  </SmallButton>
-                  <SmallButton onClick={() => onPasteFromClipboard((base64) => onCaseChange('heroImageUrl', base64))} style={{ flex: 1 }}>
+                  </FlexSmallButton>
+                  <FlexSmallButton onClick={() => onPasteFromClipboard((base64) => onCaseChange('heroImageUrl', base64))}>
                     PASTE
-                  </SmallButton>
-                </div>
+                  </FlexSmallButton>
+                </FlexRow>
               )}
 
-              <input
+              <HeroUrlInput
                 placeholder="Or paste image URL here..."
                 value={draftCase.heroImageUrl || ''}
                 onChange={(e) => onCaseChange('heroImageUrl', e.target.value)}
-                style={{ fontSize: 'var(--type-xs)', padding: 'var(--space)', background: '#111', border: '1px solid #333', color: '#888', width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               />
             </HeroImageControls>
           </HeroImageModuleInner>
@@ -602,40 +767,32 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
 
       <InputGroup>
         <label>Edit case</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space)', background: 'rgba(0,255,0,0.03)', padding: 'calc(var(--space) * 2)', border: '1px solid rgba(0,255,0,0.1)' }}>
-          <textarea
+        <EditCaseBox>
+          <EditPromptTextArea
             placeholder="e.g. 'Change the setting to a futuristic space station' or 'Add a secret accomplice for the killer' or 'Make the victim a famous opera singer'..."
             value={editPrompt}
             onChange={(e) => setEditPrompt(e.target.value)}
-            style={{ minHeight: '100px' }}
           />
-          <StartButton
+          <ApplyEditsButton
             onClick={onEditCase}
             disabled={loadingVisible || !editPrompt.trim()}
-            style={{ fontSize: 'var(--type-body)', padding: 'var(--space)' }}
           >
             APPLY EDITS
-          </StartButton>
-          <p style={{ fontSize: 'var(--type-xs)', color: '#555', margin: 0 }}>
+          </ApplyEditsButton>
+          <EditHintText>
             This will transform suspects, evidence, and narrative to match your request.
-          </p>
-        </div>
+          </EditHintText>
+        </EditCaseBox>
       </InputGroup>
 
       <InputGroup>
         <label>Difficulty (Calculated)</label>
-        <div style={{
-          color: draftCase.difficulty === 'Hard' ? '#f55' : draftCase.difficulty === 'Medium' ? '#fa0' : '#0f0',
-          fontWeight: 'bold',
-          textTransform: 'uppercase',
-          fontSize: 'var(--type-h3)',
-          padding: '5px 0'
-        }}>
+        <DifficultyLabel $difficulty={draftCase.difficulty}>
           {draftCase.difficulty}
-        </div>
-        <p style={{ fontSize: 'var(--type-small)', color: '#555', margin: 0 }}>
+        </DifficultyLabel>
+        <DifficultyHint>
           Based on {draftCase.suspects?.filter(s => !s.isDeceased).length || 0} suspects, {draftCase.suspects?.filter(s => s.isDeceased).length || 0} victim(s), {draftCase.suspects?.filter(s => s.isGuilty).length || 0} guilty suspect(s), {(draftCase.initialEvidence?.length || 0) + (draftCase.suspects?.reduce((a, s) => a + (s.hiddenEvidence?.length || 0), 0) || 0)} total evidence items, and {draftCase.initialTimeline?.length || 0} initial timeline events.
-        </p>
+        </DifficultyHint>
       </InputGroup>
 
       <EvidenceEditor
@@ -652,10 +809,10 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
         <legend>Initial Timeline (Known Facts)</legend>
         <ModuleContainer>
           {(draftCase.initialTimeline || []).map((event, idx) => (
-            <ModuleItem key={`initial-timeline-${idx}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space)' }}>
-                <div style={{ display: 'flex', gap: 'var(--space)' }}>
-                  <StyledInput
+            <TimelineModuleItem key={`initial-timeline-${idx}`}>
+              <TimelineFlexCol>
+                <FlexRow>
+                  <TimelineDayInput
                     placeholder="Day (e.g. Today, Yesterday)"
                     value={event.day || ''}
                     onChange={(e) => {
@@ -663,9 +820,8 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                       newList[idx] = { ...newList[idx], day: e.target.value };
                       onCaseChange('initialTimeline', newList);
                     }}
-                    style={{ flex: 2 }}
                   />
-                  <StyledInput
+                  <TimelineOffsetInput
                     placeholder="Offset"
                     type="number"
                     value={event.dayOffset ?? 0}
@@ -674,9 +830,8 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                       newList[idx] = { ...newList[idx], dayOffset: parseInt(e.target.value) || 0 };
                       onCaseChange('initialTimeline', newList);
                     }}
-                    style={{ flex: 0, width: '70px' }}
                   />
-                </div>
+                </FlexRow>
                 <StyledInput
                   placeholder="Time (e.g. 10:00 PM)"
                   value={event.time}
@@ -695,32 +850,31 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
                     onCaseChange('initialTimeline', newList);
                   }}
                 />
-              </div>
-              <DeleteButton
+              </TimelineFlexCol>
+              <SideDeleteButton
                 onClick={() => {
                   const newList = (draftCase.initialTimeline || []).filter((_, i) => i !== idx);
                   onCaseChange('initialTimeline', newList);
                 }}
-                style={{ marginLeft: 'var(--space)', alignSelf: 'stretch' }}
                 title="Delete timeline event"
               >
                 <XIcon />
-              </DeleteButton>
-            </ModuleItem>
+              </SideDeleteButton>
+            </TimelineModuleItem>
           ))}
-          <SmallButton onClick={() => {
+          <AddButton onClick={() => {
             const newList = [...(draftCase.initialTimeline || []), { time: '', activity: '', day: 'Today', dayOffset: 0 }];
             onCaseChange('initialTimeline', newList);
-          }} style={{ padding: 'var(--space)', background: '#222' }}>+ ADD TIMELINE EVENT</SmallButton>
+          }}>+ ADD TIMELINE EVENT</AddButton>
         </ModuleContainer>
       </Fieldset>
 
       <MobileOnly>
-        <div style={{ display: 'flex', gap: 'var(--space)', width: '100%' }}>
-          <SaveButton onClick={onCancel} disabled={loadingVisible} style={{ flex: 1, background: '#444', color: '#fff', border: 'none' }}>CLOSE</SaveButton>
-          <SaveButton onClick={onCheckConsistency} disabled={loadingVisible} style={{ flex: 1 }}>CHECK CONSISTENCY</SaveButton>
-          <SaveButton onClick={onSave} disabled={loadingVisible} style={{ flex: 1 }}>SAVE</SaveButton>
-        </div>
+        <MobileButtonRow>
+          <MobileCloseButton onClick={onCancel} disabled={loadingVisible}>CLOSE</MobileCloseButton>
+          <FlexSaveButton onClick={onCheckConsistency} disabled={loadingVisible}>CHECK CONSISTENCY</FlexSaveButton>
+          <FlexSaveButton onClick={onSave} disabled={loadingVisible}>SAVE</FlexSaveButton>
+        </MobileButtonRow>
         <StartButton onClick={onStart}>CASE HUB</StartButton>
       </MobileOnly>
     </Panel>

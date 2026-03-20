@@ -144,6 +144,10 @@ const DesktopOnly = styled.div`
   @media (max-width: 768px) { display: none; }
 `;
 
+const ColoredValue = styled.span<{ $color: string }>`
+  color: ${props => props.$color};
+`;
+
 // --- Props ---
 
 interface CaseReportProps {
@@ -197,7 +201,7 @@ const CaseReport: React.FC<CaseReportProps> = ({
         <CompactStats>
           <CompactStatItem>
             <label>Accused Suspect(s)</label>
-            <span style={{ color: resultColor }}>{accusedNames || "None"}</span>
+            <ColoredValue $color={resultColor}>{accusedNames || "None"}</ColoredValue>
           </CompactStatItem>
           <CompactStatItem>
             <label>True Perpetrator(s)</label>
