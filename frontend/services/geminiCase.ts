@@ -72,7 +72,7 @@ export const computeUserDiff = (baseline: CaseData, current: CaseData): Record<s
     // Suspects — field-level diff for each suspect by ID
     const suspectDiffs: Record<string, Record<string, any>> = {};
     const suspectFields = [
-        'name', 'gender', 'age', 'role', 'bio', 'personality', 'secret', 'motive',
+        'name', 'gender', 'age', 'role', 'status', 'bio', 'personality', 'secret', 'motive',
         'physicalDescription', 'professionalBackground', 'witnessObservations',
         'isGuilty', 'isDeceased', 'baseAggravation'
     ];
@@ -630,7 +630,7 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
 
         // --- REQUIRED STRING FIELDS: carry forward from original if AI dropped ---
         const stringFields = [
-            'name', 'gender', 'bio', 'role', 'personality', 'secret', 'motive',
+            'name', 'gender', 'bio', 'role', 'status', 'personality', 'secret', 'motive',
             'professionalBackground', 'witnessObservations', 'physicalDescription'
         ];
         stringFields.forEach(f => {
@@ -855,6 +855,18 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
     /** Suspect profile requirements — used in generation and consistency */
     SUSPECT_PROFILES: `**SUSPECT PROFILE REQUIREMENTS:**
 - GENDER: Explicitly state Male, Female, or Non-binary.
+- STATUS: A short label describing the suspect's INITIAL DEMEANOR when they sit down for questioning. This is the flavor text shown on a suspect's card at the START of the investigation, before the player has spoken to them. During gameplay, the status updates dynamically based on how the interrogation goes — you only need to set the starting attitude.
+  **SPOILER PROTECTION — CRITICAL:**
+  * The status MUST NOT reveal ANY information about the suspect. It must ONLY describe their outward attitude/demeanor.
+  * FORBIDDEN: Anything that tells the player what the suspect knows, did, or is hiding. Examples of BANNED statuses: "Withholding Information", "Background Flagged", "Prior Record", "Suspicious Activity Reported", "Flight Risk", "Under Surveillance", "Evasive Under Questioning". These all give the player free information.
+  * The status must be IDENTICAL in tone between guilty and innocent suspects. A player must NOT be able to guess guilt from the status.
+  **STATUS REFLECTS PERSONALITY + BASE AGGRAVATION (demeanor only):**
+  * Low aggravation (0-25): Calm, approachable demeanor — "Cooperative", "Composed", "Willing to Talk", "At Ease", "Forthcoming"
+  * Medium aggravation (26-50): Neutral, slightly tense — "Guarded", "Reserved", "Cautious", "Measured", "Formal"
+  * High aggravation (51-75): Visibly agitated — "Tense", "Irritable", "Impatient", "Short-Tempered", "Defensive"
+  * Very high aggravation (76-100): Openly hostile — "Hostile", "Combative", "Belligerent", "Furious", "Volatile"
+  * For the victim (isDeceased=true): "Deceased" or a thematic variant like "Victim — Pending Autopsy"
+  **CRITICAL:** Vary statuses between suspects. Do NOT give them all the same one. Match the suspect's personality.
 - BIO: **PUBLIC PROFILE ONLY — SPOILER-FREE** (see BIO SPOILER PROTECTION rules below).
 - SECRET: The hidden truth they are trying to hide.
 - ALIBI: Where they were, who with, and is it true?
@@ -1015,6 +1027,7 @@ const CASE_SCHEMA = {
                     gender: { type: Type.STRING },
                     age: { type: Type.NUMBER },
                     role: { type: Type.STRING },
+                    status: { type: Type.STRING },
                     bio: { type: Type.STRING },
                     personality: { type: Type.STRING },
                     secret: { type: Type.STRING },
@@ -1067,7 +1080,7 @@ const CASE_SCHEMA = {
                     }
                 },
                 required: [
-                    "id", "name", "gender", "age", "role", "bio", "personality",
+                    "id", "name", "gender", "age", "role", "status", "bio", "personality",
                     "secret", "physicalDescription", "isGuilty", "isDeceased",
                     "baseAggravation", "motive", "alibi", "relationships",
                     "timeline", "knownFacts", "professionalBackground",
@@ -1842,6 +1855,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                                 gender: { type: Type.STRING },
                                 age: { type: Type.NUMBER },
                                 role: { type: Type.STRING },
+                                status: { type: Type.STRING },
                                 bio: { type: Type.STRING },
                                 personality: { type: Type.STRING },
                                 secret: { type: Type.STRING },
@@ -1890,7 +1904,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                                         }, required: ["title", "description"]
                                     }
                                 }
-                            }, required: ["name", "gender", "role", "bio", "personality", "secret", "isGuilty", "baseAggravation", "motive", "alibi", "relationships", "knownFacts", "hiddenEvidence", "timeline", "professionalBackground", "witnessObservations"]
+                            }, required: ["name", "gender", "role", "status", "bio", "personality", "secret", "isGuilty", "baseAggravation", "motive", "alibi", "relationships", "knownFacts", "hiddenEvidence", "timeline", "professionalBackground", "witnessObservations"]
                         }
                     }
                 },
@@ -1949,6 +1963,17 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
         if (!s.motive) s.motive = "Unknown";
         if (!s.professionalBackground) s.professionalBackground = "Unknown";
         if (!s.witnessObservations) s.witnessObservations = "None";
+        if (!s.status) {
+            if (s.isDeceased) {
+                s.status = "Deceased";
+            } else {
+                const agg = s.baseAggravation || 0;
+                if (agg <= 25) s.status = "Cooperative";
+                else if (agg <= 50) s.status = "Guarded";
+                else if (agg <= 75) s.status = "Tense";
+                else s.status = "Hostile";
+            }
+        }
     });
 
     // Run logic to enforce relationships existence (Suspects only, as victim is a suspect)

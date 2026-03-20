@@ -1099,6 +1099,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       gender: "Unknown",
       age: 30,
       role: "Witness",
+      status: "Person of Interest",
       bio: "A mysterious figure.",
       personality: "Nervous",
       avatarSeed: Math.floor(Math.random() * 999999),
@@ -1934,6 +1935,16 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
                     onChange={(e) => handleSuspectChange(selectedSuspectId!, 'role', e.target.value)}
                   />
                 </InputGroup>
+                {!isSupportChar && (
+                  <InputGroup>
+                    <label>Status</label>
+                    <input
+                      value={(activeSuspect as Suspect).status || ''}
+                      onChange={(e) => handleSuspectChange(selectedSuspectId!, 'status', e.target.value)}
+                      placeholder="e.g. Cooperative, Guarded, Tense, Hostile"
+                    />
+                  </InputGroup>
+                )}
                 <InputGroup>
                   <label>Gender</label>
                   <input

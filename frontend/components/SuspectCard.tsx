@@ -4,7 +4,7 @@ import { type } from '../theme';
 import styled, { css, keyframes } from 'styled-components';
 import Atropos from 'atropos/react';
 import { Suspect, Emotion } from '../types';
-import { getPixelArtUrl, getSuspectColor, getSuspectBackingColor } from '../services/gameHelpers';
+import { getPixelArtUrl, getSuspectColor, getSuspectBackingColor, getDisplayStatus } from '../services/gameHelpers';
 import SuspectPortrait from './SuspectPortrait';
 
 interface CardWrapperProps {
@@ -657,7 +657,7 @@ const SuspectCard: React.FC<SuspectCardProps> = ({
                   </InfoItem>
                   <InfoItem>
                     <strong>Status</strong>
-                    <span>Person of Interest</span>
+                    <span>{getDisplayStatus(suspect.status, aggravation, suspect.isDeceased)}</span>
                   </InfoItem>
                 </InfoList>
               </BackContent>

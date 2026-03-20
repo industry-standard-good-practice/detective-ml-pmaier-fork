@@ -1537,6 +1537,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
     id: 'partner',
     name: activeCase.partner?.name || "Partner",
     role: activeCase.partner?.role || "Junior Detective",
+    status: "Allied",
     avatarSeed: activeCase.partner?.avatarSeed || 999,
     portraits: activeCase.partner?.portraits || {},
     // Dummy required fields

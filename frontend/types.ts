@@ -61,6 +61,7 @@ export interface Suspect {
   age: number;
   bio: string;
   role: string; // e.g., "The Victim's Brother"
+  status: string; // e.g., "Prime Suspect", "Key Witness", "Under Surveillance"
   personality: string; // Defines how they react to manners/aggression
   avatarSeed: number; // For picsum/dicebear
   baseAggravation: number;
