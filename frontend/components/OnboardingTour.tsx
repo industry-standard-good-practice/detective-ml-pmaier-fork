@@ -131,6 +131,7 @@ interface StepConfig {
   description: string;
   completedDescription?: string;
   targetId: string;
+  altTargetId?: string; // Alternate element ID (e.g. for different layout variants)
   position: 'top' | 'bottom' | 'left' | 'right';
   mobilePosition?: 'top' | 'bottom' | 'left' | 'right';
   requiresAction?: boolean;
@@ -170,6 +171,7 @@ const STEPS: Record<number, StepConfig> = {
     title: "The Timeline",
     description: "Keep track of everyone's movements. The timeline shows confirmed events and contradictions. Use it to spot lies and build your case.",
     targetId: "timeline-button",
+    altTargetId: "timeline-panel",
     position: "bottom",
     mobileTab: "BOARD",
     mobileAccordion: "timeline"
@@ -364,7 +366,8 @@ export const OnboardingTour: React.FC = () => {
       }
 
       const targetId = (step.completedTargetId && isActionCompleted) ? step.completedTargetId : step.targetId;
-      const elements = document.querySelectorAll(`[id="${targetId}"], [id="${targetId}-mobile"]`);
+      const altSelector = step.altTargetId ? `, [id="${step.altTargetId}"]` : '';
+      const elements = document.querySelectorAll(`[id="${targetId}"], [id="${targetId}-mobile"]${altSelector}`);
       const el = Array.from(elements).find(e => {
         const style = window.getComputedStyle(e);
         return style.display !== 'none' && style.visibility !== 'hidden' && (e as HTMLElement).offsetParent !== null;
@@ -458,9 +461,10 @@ export const OnboardingTour: React.FC = () => {
             break;
         }
 
-        // Strict clamping within the overlay boundaries
-        tLeft = Math.max(10, Math.min(vWidth - tooltipWidth - 10, tLeft));
-        tTop = Math.max(10, Math.min(vHeight - estimatedHeight - 10, tTop));
+        // Strict clamping within the overlay boundaries (generous margin to avoid CRT border clipping)
+        const clampMargin = 40;
+        tLeft = Math.max(clampMargin, Math.min(vWidth - tooltipWidth - clampMargin, tLeft));
+        tTop = Math.max(clampMargin, Math.min(vHeight - estimatedHeight - clampMargin, tTop));
 
         setTooltipPos({ top: tTop, left: tLeft });
       } else {
