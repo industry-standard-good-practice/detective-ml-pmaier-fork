@@ -1567,7 +1567,7 @@ ${userChangeLog}
                 // NEW SUSPECT: Needs default values
                 s.id = s.id || `s-new-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                 s.avatarSeed = Math.floor(Math.random() * 1000000);
-                s.voice = s.gender === 'Female' ? 'Kore' : 'Zephyr';
+                s.voice = getRandomVoice(s.gender || 'Unknown');
                 s.portraits = {};
                 s.hiddenEvidence = s.hiddenEvidence || [];
                 s.hiddenEvidence.forEach((ev: any, i: number) => {
@@ -1873,11 +1873,13 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     data.officer.id = 'officer';
     data.officer.avatarSeed = Math.floor(Math.random() * 100000);
     data.officer.portraits = {};
+    if (!data.officer.voice) data.officer.voice = getRandomVoice(data.officer.gender);
 
     if (!data.partner) data.partner = { id: 'partner', name: "Al", gender: "Male", role: "Junior Detective", personality: "Eager" };
     data.partner.id = 'partner';
     data.partner.avatarSeed = Math.floor(Math.random() * 100000);
     data.partner.portraits = {};
+    if (!data.partner.voice) data.partner.voice = getRandomVoice(data.partner.gender);
 
     data.suspects = data.suspects || [];
     data.suspects.forEach((s: any, i: number) => {
@@ -1887,9 +1889,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
         s.hiddenEvidence.forEach((e: any, j: number) => e.id = `he-${s.id}-${j}`);
 
         // Assign voice
-        if (s.isDeceased) {
-            s.voice = "None";
-        } else if (!s.voice || s.voice === "None") {
+        if (!s.voice || s.voice === "None") {
             s.voice = getRandomVoice(s.gender);
         }
 

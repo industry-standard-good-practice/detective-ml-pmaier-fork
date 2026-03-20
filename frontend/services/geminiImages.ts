@@ -348,7 +348,7 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
       [STRICT INSTRUCTION]: Convert the person in the provided reference image into a 16-bit pixel art character.
       Maintain their exact facial features, hair style, glasses/accessories, gender, and likeness.
       Output Style: ${PIXEL_ART_BASE}
-      Composition: Front-facing mugshot, head and shoulders.
+      Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges of the frame (full bleed) without any background gaps on the sides.
       Background: Solid ${colorDesc} background.
       No text, no UI elements.
     `;
@@ -425,7 +425,7 @@ export const regenerateSingleSuspect = async (
           Visual cues: ${(suspect as any).physicalDescription || suspect.personality || "Detective style"}. 
           Expression: Neutral.
           Background: Solid ${colorDesc} background (Hex Code style flat color).
-          Composition: Front-facing mugshot, head and shoulders.
+          Composition: Front-facing mugshot, head and shoulders. The character MUST be full-bleed, extending to the left and right edges.
           NEGATIVE PROMPT: Text, words, letters, UI, interface, HUD, border, frame, speech bubble, signature, watermark, multiple people, two faces, photo-realistic, blur, smooth shading.
         `;
     }
@@ -519,7 +519,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
                   Visual cues: ${s.physicalDescription || "Noir style"}. 
                   Expression: Neutral.
                   Background: Solid ${colorDesc} background.
-                  Composition: Front-facing mugshot.
+                  Composition: Front-facing mugshot, full-bleed to the left and right edges.
                   NEGATIVE PROMPT: Text, UI, border, letters, words, writing, signature, speech bubble, multiple characters, photo-realistic.
                 `;
             }
@@ -539,7 +539,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
     if (caseData.partner) {
         characterTasks.push((async () => {
             const p = caseData.partner;
-            const prompt = `Subject: Portrait of a ${p.gender} ${p.role} named ${p.name}. Theme: ${caseData.type}. Expression: Eager, helpful. Background: City street or tech lab. Composition: Front-facing mugshot. Pixel Art.`;
+            const prompt = `Subject: Portrait of a ${p.gender} ${p.role} named ${p.name}. Theme: ${caseData.type}. Expression: Eager, helpful. Background: City street or tech lab. Composition: Front-facing mugshot, full-bleed to the left and right edges. Pixel Art.`;
             const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create');
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/partner/neutral.png`);
@@ -555,7 +555,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
     if (caseData.officer) {
         characterTasks.push((async () => {
             const o = caseData.officer;
-            const prompt = `Subject: Portrait of a ${o.gender} ${o.role} named ${o.name}. Theme: ${caseData.type}. Expression: Stern, commanding. Background: Office or Command Center. Composition: Front-facing mugshot. Pixel Art.`;
+            const prompt = `Subject: Portrait of a ${o.gender} ${o.role} named ${o.name}. Theme: ${caseData.type}. Expression: Stern, commanding. Background: Office or Command Center. Composition: Front-facing mugshot, full-bleed to the left and right edges. Pixel Art.`;
             const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create');
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/officer.png`);
