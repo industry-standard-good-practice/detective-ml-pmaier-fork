@@ -6,6 +6,31 @@ import { STYLE_REF_URL, PIXEL_ART_BASE, INSTRUCTION_NEW_CHAR, INSTRUCTION_PRESER
 import { uploadImage } from "./firebase";
 import { GEMINI_MODELS } from "./geminiModels";
 
+// --- VICTIM PROMPT BUILDER ---
+// Builds a context-aware prompt for deceased suspects using their actual case data
+// instead of hardcoding a generic crime scene description.
+
+const buildVictimPrompt = (s: Suspect, theme?: string): string => {
+    // Gather all available context from the suspect's data
+    const details: string[] = [];
+    if (s.gender) details.push(s.gender);
+    if (s.role && s.role !== 'The Victim') details.push(`Role: ${s.role}`);
+    if (s.bio) details.push(`Bio: ${s.bio}`);
+    if (s.witnessObservations) details.push(`Scene details: ${s.witnessObservations}`);
+    
+    const physicalDesc = s.physicalDescription || '';
+    const contextBlock = details.length > 0 ? details.join('. ') + '.' : '';
+
+    return `
+      Subject: Crime scene depiction of a deceased victim. ${contextBlock}
+      ${theme ? `Theme: ${theme}.` : ''}
+      Visual cues: ${physicalDesc || 'Use the character details above to determine appearance.'}.
+      Condition: The victim is deceased — depict them accordingly based on the bio and scene details.
+      Composition: Scene should reflect the narrative context. Show the victim as described in their bio and observations.
+      NEGATIVE PROMPT: Smiling, lively, open eyes, looking at camera, text, UI, split screen.
+    `;
+};
+
 // --- IMAGE GENERATION HELPER ---
 
 const generateImageRaw = async (
@@ -345,24 +370,42 @@ export const generateEmotionalVariantsFromBase = async (
 
 export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase64: string, caseId: string, userId: string): Promise<Suspect> => {
     if (!userId) throw new Error('[CRITICAL] generateSuspectFromUpload: userId is required');
-    console.log(`[DEBUG] generateSuspectFromUpload: Starting for ${suspect.name}`);
+    console.log(`[DEBUG] generateSuspectFromUpload: Starting for ${suspect.name} (isDeceased: ${suspect.isDeceased})`);
     const colorDesc = getSuspectColorDescription(suspect.avatarSeed);
 
     // 1. Convert User Photo -> Pixel Art Neutral
-    // We use the 'create' mode but pass the user image as reference to guide the structure/content
-    const conversionPrompt = `
-      [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
-      The FIRST image provided is the exact ART STYLE you must use.
-      The SECOND image provided is the SUBJECT. 
-      Draw the SUBJECT from the second image using the EXACT pixel art style of the first image.
-      - DO NOT use the style of the subject photograph. DESTROY all photorealism.
-      - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
-      - MAINTAIN the subject's core facial features, hairstyle, and gender so they are recognizable, but translated perfectly into true 16-bit pixel art rather than a photo filter.
-      Output Style: ${PIXEL_ART_BASE}
-      Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
-      Background: Solid ${colorDesc} background.
-      NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter, pixelated photo.
-    `;
+    // Use a different prompt for deceased suspects (victim crime scene) vs living suspects (mugshot)
+    let conversionPrompt: string;
+
+    if (suspect.isDeceased) {
+        const victimScene = buildVictimPrompt(suspect);
+        conversionPrompt = `
+          [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
+          The FIRST image provided is the exact ART STYLE you must use.
+          The SECOND image provided is the SUBJECT — use their face, body type, and clothing as reference.
+          Draw the SUBJECT as a DECEASED VICTIM in a crime scene using the EXACT pixel art style of the first image.
+          - DO NOT use the style of the subject photograph. DESTROY all photorealism.
+          - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
+          - MAINTAIN the subject's core facial features, hairstyle, clothing, and gender so they are recognizable, but translated into true 16-bit pixel art.
+          Output Style: ${PIXEL_ART_BASE}
+          ${victimScene}
+          NEGATIVE PROMPT: portrait, mugshot, headshot, photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter.
+        `;
+    } else {
+        conversionPrompt = `
+          [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
+          The FIRST image provided is the exact ART STYLE you must use.
+          The SECOND image provided is the SUBJECT. 
+          Draw the SUBJECT from the second image using the EXACT pixel art style of the first image.
+          - DO NOT use the style of the subject photograph. DESTROY all photorealism.
+          - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
+          - MAINTAIN the subject's core facial features, hairstyle, and gender so they are recognizable, but translated perfectly into true 16-bit pixel art rather than a photo filter.
+          Output Style: ${PIXEL_ART_BASE}
+          Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
+          Background: Solid ${colorDesc} background.
+          NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter, pixelated photo.
+        `;
+    }
 
     let styleRefBase64: string | null = null;
     try {
@@ -401,17 +444,34 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
     const neutralBase64 = `data:image/png;base64,${neutralRaw}`;
     const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/neutral.png`);
     
-    // 2. Generate Emotions based on the new Pixel Art Neutral
-    // Note: Deceased handling for upload is not prioritized here yet, assuming upload = living suspect for now.
-    const emotionPortraits = await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
+    // 2. Generate variants based on the new Pixel Art Neutral
+    // Deceased -> forensic close-up views (head, torso, hands, legs)
+    // Living -> emotional expression variants (happy, angry, etc.)
+    const variantPortraits = suspect.isDeceased
+        ? await generateForensicVariants(neutralBase64, suspect)
+        : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
     
-    // Upload all emotional variants
+    // Upload all variants
     const uploadedPortraits: Record<string, string> = {
         [Emotion.NEUTRAL]: neutralUrl
     };
-    for (const [emo, b64] of Object.entries(emotionPortraits)) {
+    for (const [emo, b64] of Object.entries(variantPortraits)) {
         if (emo === Emotion.NEUTRAL) continue;
         uploadedPortraits[emo] = await uploadImage(b64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/${emo}.png`);
+    }
+
+    // 3. If deceased, also regenerate hidden evidence to reference the new victim portrait
+    if (suspect.isDeceased && suspect.hiddenEvidence) {
+        for (let i = 0; i < suspect.hiddenEvidence.length; i++) {
+            const ev = suspect.hiddenEvidence[i];
+            try {
+                const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64);
+                if (evUrl) ev.imageUrl = evUrl;
+            } catch (e) {
+                console.error(`Failed to regenerate hidden evidence ${ev.id} for victim:`, e);
+                // Don't throw — we still want to return the updated portraits even if evidence fails
+            }
+        }
     }
 
     return { ...suspect, portraits: uploadedPortraits };
@@ -433,16 +493,7 @@ export const regenerateSingleSuspect = async (
     // Differentiate prompt for Deceased vs Living
     let basePrompt = "";
     if (isSuspect && (suspect as Suspect).isDeceased) {
-        const s = suspect as Suspect;
-        basePrompt = `
-          Subject: Crime scene photo of a deceased body. ${s.gender}. Role: The Victim.
-          Theme: ${theme}.
-          Visual cues: ${s.physicalDescription || "Lying on ground, lifeless"}.
-          Condition: Deceased, pale, eyes closed tightly.
-          Background: Crime scene floor/ground.
-          Composition: Wide shot, full body or upper body.
-          NEGATIVE PROMPT: Smiling, standing up, lively, open eyes, looking at camera, text, UI, split screen.
-        `;
+        basePrompt = buildVictimPrompt(suspect as Suspect, theme);
     } else {
         basePrompt = `
           Subject: Portrait of a single ${suspect.gender} character. Role: ${suspect.role}.
@@ -530,14 +581,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
             let prompt = "";
             
             if (s.isDeceased) {
-                prompt = `
-                  Subject: Crime scene photo of a deceased body. ${s.gender}. Role: The Victim.
-                  Visual cues: ${s.physicalDescription || "Lying on ground, lifeless"}.
-                  Condition: Deceased, pale, eyes closed tightly.
-                  Background: Crime scene floor/ground.
-                  Composition: Wide shot, full body or upper body.
-                  NEGATIVE PROMPT: Smiling, standing up, lively, open eyes, looking at camera, text, UI, split screen.
-                `;
+                prompt = buildVictimPrompt(s, caseData.type);
             } else {
                 prompt = `
                   Subject: Portrait of a single ${s.gender} character. Role: ${s.role}. 
