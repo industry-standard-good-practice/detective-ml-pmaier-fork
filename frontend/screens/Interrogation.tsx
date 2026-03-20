@@ -774,13 +774,13 @@ const SidekickHeader = styled.div`
     
     h3 {
       margin: 0;
-      ${type.body}
+      ${type.h3}
       color: #9f9; 
       text-transform: uppercase;
     }
     
     span {
-      ${type.small}
+      ${type.body}
       color: #686;
     }
   }
@@ -2071,10 +2071,9 @@ const Interrogation: React.FC<InterrogationProps> = ({
           <SidekickContainer id="partner-support">
             <h3>Partner Support</h3>
             <SidekickHeader>
-              <div style={{ width: '60px', height: '60px', border: '2px solid #555', background: '#222' }}>
+              <div style={{ width: '120px', height: '120px', border: '2px solid #555', background: '#222' }}>
                 <SuspectPortrait
                   suspect={partnerAsSuspect}
-                  size={60}
                   emotion={partnerEmotion}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />

@@ -368,12 +368,13 @@ export const generateEmotionalVariantsFromBase = async (
     return uploadedPortraits;
 };
 
-export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase64: string, caseId: string, userId: string): Promise<Suspect> => {
+export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase64: string, caseId: string, userId: string, onProgress?: (message: string) => void): Promise<Suspect> => {
     if (!userId) throw new Error('[CRITICAL] generateSuspectFromUpload: userId is required');
     console.log(`[DEBUG] generateSuspectFromUpload: Starting for ${suspect.name} (isDeceased: ${suspect.isDeceased})`);
     const colorDesc = getSuspectColorDescription(suspect.avatarSeed);
 
     // 1. Convert User Photo -> Pixel Art Neutral
+    onProgress?.("Converting photo to pixel art...");
     // Use a different prompt for deceased suspects (victim crime scene) vs living suspects (mugshot)
     let conversionPrompt: string;
 
@@ -405,10 +406,18 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
           - The subject's body PROPORTIONS are SACRED: if they have a thick neck, broad shoulders, stocky build, round face, or heavy frame, the pixel art MUST show that SAME build. Do NOT slim them down or elongate them.
           - The pixel art character should look like the SAME PERSON, just drawn in a different art style.
           - The character's shoulders and body MUST fill the frame edge-to-edge (full bleed), without any background gaps on the sides.
+
+          POSE OVERRIDE (CRITICAL — IGNORE THE SOURCE POSE):
+          - Do NOT copy the pose, action, or gesture from the source photo.
+          - If the person is holding a phone, leaning, looking sideways, pointing, or doing ANYTHING with their hands — IGNORE IT.
+          - Redraw them in a STANDARD MUGSHOT POSE: facing DIRECTLY at the camera, looking STRAIGHT AHEAD, both arms relaxed at their sides.
+          - The expression should be NEUTRAL — no smiling, no scowling.
+          - This is a police booking photo. The subject should be standing still, facing forward, calm and centered.
+
           Output Style: ${PIXEL_ART_BASE}
-          Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
+          Composition: STRICT front-facing mugshot. Head and shoulders only. Eyes looking directly at the viewer. Arms/hands NOT visible or at rest below frame. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
           Background: Solid ${colorDesc} background.
-          NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter, pixelated photo.
+          NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter, pixelated photo, holding phone, talking on phone, hand near face, raised arm, looking away, looking sideways, looking down, profile view, three-quarter view.
         `;
     }
 
@@ -448,29 +457,45 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
 
     if (!neutralRaw) throw new Error("Failed to convert uploaded image to pixel art.");
 
+    onProgress?.("Uploading base portrait...");
     const neutralBase64 = `data:image/png;base64,${neutralRaw}`;
     const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/neutral.png`);
 
     // 2. Generate variants based on the new Pixel Art Neutral
     // Deceased -> forensic close-up views (head, torso, hands, legs)
     // Living -> emotional expression variants (happy, angry, etc.)
+    if (suspect.isDeceased) {
+        onProgress?.("Generating forensic views...");
+    } else {
+        onProgress?.("Generating emotional variants...");
+    }
     const variantPortraits = suspect.isDeceased
-        ? await generateForensicVariants(neutralBase64, suspect)
-        : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
+        ? await generateForensicVariants(neutralBase64, suspect, (current, total) => {
+            onProgress?.(`Generating forensic views... (${current}/${total})`);
+        })
+        : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed, (current, total) => {
+            onProgress?.(`Generating emotional variants... (${current}/${total})`);
+        });
 
     // Upload all variants
+    onProgress?.("Uploading variants...");
     const uploadedPortraits: Record<string, string> = {
         [Emotion.NEUTRAL]: neutralUrl
     };
-    for (const [emo, b64] of Object.entries(variantPortraits)) {
+    const entries = Object.entries(variantPortraits);
+    let uploaded = 0;
+    for (const [emo, b64] of entries) {
         if (emo === Emotion.NEUTRAL) continue;
         uploadedPortraits[emo] = await uploadImage(b64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/${emo}.png`);
+        uploaded++;
+        onProgress?.(`Uploading variants... (${uploaded}/${entries.length - 1})`);
     }
 
     // 3. If deceased, also regenerate hidden evidence to reference the new victim portrait
     if (suspect.isDeceased && suspect.hiddenEvidence) {
         for (let i = 0; i < suspect.hiddenEvidence.length; i++) {
             const ev = suspect.hiddenEvidence[i];
+            onProgress?.(`Regenerating hidden evidence... (${i + 1}/${suspect.hiddenEvidence.length})`);
             try {
                 const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64);
                 if (evUrl) ev.imageUrl = evUrl;
@@ -481,6 +506,7 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
         }
     }
 
+    onProgress?.("Complete!");
     return { ...suspect, portraits: uploadedPortraits };
 };
 

@@ -1317,19 +1317,28 @@ const CaseHub: React.FC<CaseHubProps> = ({
                 </div>
               </BriefingWidget>
 
-              <ChiefWidget>
-                <ChiefStatus>
-                  <img src={officerPortrait} alt={officerName} />
-                  <div>
-                    <span style={{ fontWeight: 'bold', fontSize: 'var(--type-body)' }}>{officerName.toUpperCase()}</span>
-                    <span style={{ fontSize: 'var(--type-small)', color: officerHintsRemaining > 3 ? 'var(--color-officer-text)' : '#b00' }}>
-                      BATT: {officerHintsRemaining * 10}%
-                    </span>
-                  </div>
-                </ChiefStatus>
-                <SecureLineButton id="secure-line" onClick={() => setIsChatOpen(true)}>
-                  [SECURE LINE]
-                </SecureLineButton>
+              <ChiefWidget style={{ flexDirection: 'row', alignItems: 'center', gap: 'calc(var(--space) * 2)' }}>
+                <img
+                  src={officerPortrait}
+                  alt={officerName}
+                  style={{
+                    border: '2px solid var(--color-officer-border)',
+                    imageRendering: 'pixelated' as const,
+                    width: 120,
+                    height: 120,
+                    objectFit: 'cover' as const,
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space)', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 'bold', fontSize: 'var(--type-body)', color: 'var(--color-officer-text)' }}>{officerName.toUpperCase()}</span>
+                  <span style={{ fontSize: 'var(--type-small)', color: officerHintsRemaining > 3 ? 'var(--color-officer-text)' : '#b00' }}>
+                    BATT: {officerHintsRemaining * 10}%
+                  </span>
+                  <SecureLineButton id="secure-line" onClick={() => setIsChatOpen(true)}>
+                    [SECURE LINE]
+                  </SecureLineButton>
+                </div>
               </ChiefWidget>
 
               <TimelineButton id="timeline-button" onClick={() => {

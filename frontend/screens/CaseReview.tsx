@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { type } from '../theme';
-import styled, { keyframes } from 'styled-components';
+import styled from 'styled-components';
 import toast from 'react-hot-toast';
 import Markdown from 'react-markdown';
 import { CaseData, Suspect, Emotion, Evidence, Relationship, TimelineEvent } from '../types';
@@ -13,6 +13,7 @@ import EvidenceEditor from '@/components/EvidenceEditor';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
 import ImageEditorModal from '@/components/ImageEditorModal';
+import Spinner from '@/components/Spinner';
 import { PIXEL_ART_BASE } from '@/services/geminiStyles';
 
 const Container = styled.div`
@@ -616,19 +617,7 @@ const Overlay = styled.div`
   gap: calc(var(--space) * 3);
 `;
 
-const rotate = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
-
-const Spinner = styled.div`
-  width: 50px;
-  height: 50px;
-  border: 4px solid var(--color-border);
-  border-top-color: var(--color-accent-green);
-  border-radius: 50%;
-  animation: ${rotate} 1s linear infinite;
-`;
+/* Spinner is imported from '@/components/Spinner' */
 
 const LoadingText = styled.div`
   color: var(--color-accent-green);
@@ -1035,9 +1024,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const processSuspectImage = async (base64: string) => {
     if (!activeSuspect) return;
     try {
-      setLoadingState({ visible: true, message: "Converting to pixel art & generating emotions..." });
+      setLoadingState({ visible: true, message: "Converting photo to pixel art..." });
       const { generateSuspectFromUpload } = await import('../services/geminiImages');
-      const updatedChar = await generateSuspectFromUpload(activeSuspect as any, base64, draftCase.id, userId!);
+      const updatedChar = await generateSuspectFromUpload(
+        activeSuspect as any,
+        base64,
+        draftCase.id,
+        userId!,
+        (progressMsg) => setLoadingState({ visible: true, message: progressMsg })
+      );
 
       if (selectedSuspectId === 'officer') {
         onUpdateDraft({ ...draftCase, officer: updatedChar as any });

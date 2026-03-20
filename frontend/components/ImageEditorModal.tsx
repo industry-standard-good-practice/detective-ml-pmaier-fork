@@ -3,9 +3,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { type } from '../theme';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wand2, Save, Undo, Loader2, AlertCircle, ImagePlus, ClipboardPaste } from 'lucide-react';
+import { X, Wand2, Save, Undo, AlertCircle, ImagePlus, ClipboardPaste } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiImages';
+import Spinner from './Spinner';
 
 const Overlay = styled(motion.div)`
   position: absolute;
@@ -434,13 +435,13 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               )}
               {isGenerating && (
                 <LoadingOverlay>
-                  <Loader2 className="animate-spin" size={32} />
+                  <Spinner $size={32} $color="#3b82f6" />
                   <span>Nano Banana is working...</span>
                 </LoadingOverlay>
               )}
               {isSaving && (
                 <LoadingOverlay>
-                  <Loader2 className="animate-spin" size={32} />
+                  <Spinner $size={32} $color="#3b82f6" />
                   <span>Generating Emotion Alternates...</span>
                   {savingProgress.total > 0 && (
                     <>
