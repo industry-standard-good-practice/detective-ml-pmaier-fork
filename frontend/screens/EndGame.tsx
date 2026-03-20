@@ -14,7 +14,7 @@ const fadeIn = keyframes`
 const Container = styled.div`
   display: flex;
   height: 100%;
-  padding: calc(var(--space) * 5);
+  padding: calc(var(--space) * 8) calc(var(--space) * 10);
   gap: calc(var(--space) * 5);
   background: var(--color-surface-inset);
   
@@ -253,14 +253,14 @@ const VoteRow = styled.div`
 `;
 
 const VoteButton = styled.button<{ $active: boolean; $type: 'up' | 'down' }>`
-  background: ${props => props.$active 
-    ? (props.$type === 'up' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)') 
+  background: ${props => props.$active
+    ? (props.$type === 'up' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)')
     : 'transparent'};
-  border: 2px solid ${props => props.$active 
-    ? (props.$type === 'up' ? 'var(--color-accent-green)' : 'var(--color-accent-red)') 
+  border: 2px solid ${props => props.$active
+    ? (props.$type === 'up' ? 'var(--color-accent-green)' : 'var(--color-accent-red)')
     : 'var(--color-border)'};
-  color: ${props => props.$active 
-    ? (props.$type === 'up' ? 'var(--color-accent-green)' : 'var(--color-accent-red)') 
+  color: ${props => props.$active
+    ? (props.$type === 'up' ? 'var(--color-accent-green)' : 'var(--color-accent-red)')
     : 'var(--color-text-subtle)'};
   padding: var(--space) calc(var(--space) * 3);
   font-family: inherit;
@@ -436,16 +436,16 @@ interface EndGameProps {
   timelineFound: number;
 }
 
-const EndGame: React.FC<EndGameProps> = ({ 
+const EndGame: React.FC<EndGameProps> = ({
   gameResult, caseData, accusedIds, evidenceDiscovered, onReset,
   caseStats, userVote, onVote, suspectsSpoken, timelineFound
 }) => {
   const [summary, setSummary] = useState("Generating case report...");
-  
+
   useEffect(() => {
     const accusedNames = caseData.suspects.filter(s => accusedIds.includes(s.id)).map(s => s.name).join(', ');
     generateCaseSummary(caseData, accusedIds[0], gameResult || 'FAILURE', evidenceDiscovered)
-        .then(setSummary);
+      .then(setSummary);
   }, [caseData, accusedIds, gameResult, evidenceDiscovered]);
 
   const accusedSuspects = caseData.suspects.filter(s => accusedIds.includes(s.id));
@@ -458,11 +458,11 @@ const EndGame: React.FC<EndGameProps> = ({
   const foundHiddenCount = evidenceDiscovered.filter(e => allHiddenTitles.has(e.title)).length;
   const totalSuspects = caseData.suspects.filter(s => !s.isDeceased).length;
   const totalTimeline = caseData.suspects.reduce((acc, s) => acc + (s.timeline?.length || 0), 0);
-  
+
   const getResultColor = () => {
-      if (gameResult === 'SUCCESS') return 'var(--color-accent-green)';
-      if (gameResult === 'PARTIAL') return 'var(--color-accent-orange)';
-      return 'var(--color-accent-red)';
+    if (gameResult === 'SUCCESS') return 'var(--color-accent-green)';
+    if (gameResult === 'PARTIAL') return 'var(--color-accent-orange)';
+    return 'var(--color-accent-red)';
   };
 
   const resultColor = getResultColor();
@@ -474,29 +474,29 @@ const EndGame: React.FC<EndGameProps> = ({
   const avgEvidence = plays > 0 ? ((caseStats!.totalEvidenceFound || 0) / plays) : 0;
   const avgSuspects = plays > 0 ? ((caseStats!.totalSuspectsSpoken || 0) / plays) : 0;
   const avgTimeline = plays > 0 ? ((caseStats!.totalTimelineFound || 0) / plays) : 0;
-  
+
   const formatReport = (text: string) => {
     if (!text) return null;
     return text.split('\n').map((line, i) => {
-        const parts = line.split(/(\{\{FOUND:.*?\}\}|\{\{MISSED:.*?\}\}|\*\*.*?\*\*)/g);
-        return (
-            <ReportLine key={i}>
-                {parts.map((part, j) => {
-                    if (part.startsWith('{{FOUND:')) {
-                        const content = part.slice(8, -2);
-                        return <FoundTag key={j}>{content}</FoundTag>;
-                    }
-                    if (part.startsWith('{{MISSED:')) {
-                        const content = part.slice(9, -2);
-                        return <MissedTag key={j}>{content}</MissedTag>;
-                    }
-                    if (part.startsWith('**') && part.endsWith('**')) {
-                        return <BoldTag key={j}>{part.slice(2, -2)}</BoldTag>;
-                    }
-                    return <span key={j}>{part}</span>;
-                })}
-            </ReportLine>
-        );
+      const parts = line.split(/(\{\{FOUND:.*?\}\}|\{\{MISSED:.*?\}\}|\*\*.*?\*\*)/g);
+      return (
+        <ReportLine key={i}>
+          {parts.map((part, j) => {
+            if (part.startsWith('{{FOUND:')) {
+              const content = part.slice(8, -2);
+              return <FoundTag key={j}>{content}</FoundTag>;
+            }
+            if (part.startsWith('{{MISSED:')) {
+              const content = part.slice(9, -2);
+              return <MissedTag key={j}>{content}</MissedTag>;
+            }
+            if (part.startsWith('**') && part.endsWith('**')) {
+              return <BoldTag key={j}>{part.slice(2, -2)}</BoldTag>;
+            }
+            return <span key={j}>{part}</span>;
+          })}
+        </ReportLine>
+      );
     });
   };
 
@@ -504,56 +504,56 @@ const EndGame: React.FC<EndGameProps> = ({
     <Container>
       <LeftPanel>
         <TopRow>
-            <Header $gameResult={gameResult}>
-                {gameResult === 'SUCCESS' ? "CASE CLOSED" : gameResult === 'PARTIAL' ? "PARTIAL SUCCESS" : "CASE FAILED"}
-            </Header>
-            <CompactStats>
-                <CompactStatItem>
-                    <label>Accused Suspect(s)</label>
-                    <span style={{ color: resultColor }}>{accusedSuspects.map(s => s.name).join(', ') || "None"}</span>
-                </CompactStatItem>
-                <CompactStatItem>
-                    <label>True Perpetrator(s)</label>
-                    <span>{guiltyNames}</span>
-                </CompactStatItem>
-            </CompactStats>
+          <Header $gameResult={gameResult}>
+            {gameResult === 'SUCCESS' ? "CASE CLOSED" : gameResult === 'PARTIAL' ? "PARTIAL SUCCESS" : "CASE FAILED"}
+          </Header>
+          <CompactStats>
+            <CompactStatItem>
+              <label>Accused Suspect(s)</label>
+              <span style={{ color: resultColor }}>{accusedSuspects.map(s => s.name).join(', ') || "None"}</span>
+            </CompactStatItem>
+            <CompactStatItem>
+              <label>True Perpetrator(s)</label>
+              <span>{guiltyNames}</span>
+            </CompactStatItem>
+          </CompactStats>
         </TopRow>
 
         <ReportWrapper>
-            <SummaryBox>
-                {formatReport(summary)}
-            </SummaryBox>
+          <SummaryBox>
+            {formatReport(summary)}
+          </SummaryBox>
         </ReportWrapper>
 
         <DesktopOnly>
-            <ResetButton onClick={onReset}>RETURN TO HQ</ResetButton>
+          <ResetButton onClick={onReset}>RETURN TO HQ</ResetButton>
         </DesktopOnly>
       </LeftPanel>
 
       <RightPanel>
         <Stamp $gameResult={gameResult}>
-            {gameResult === 'SUCCESS' ? "SUCCESS" : gameResult === 'PARTIAL' ? "PARTIAL" : "FAILURE"}
+          {gameResult === 'SUCCESS' ? "SUCCESS" : gameResult === 'PARTIAL' ? "PARTIAL" : "FAILURE"}
         </Stamp>
         <AccusedPortraitGrid>
-            {accusedSuspects.length > 0 ? (
-                <PortraitRow>
-                    {accusedSuspects.map(s => (
-                        <SuspectPortrait 
-                            key={s.id}
-                            suspect={s} 
-                            size={120} 
-                        />
-                    ))}
-                </PortraitRow>
-            ) : (
-                <SuspectPortrait 
-                    suspect={caseData.suspects[0]} 
-                    size={200} 
+          {accusedSuspects.length > 0 ? (
+            <PortraitRow>
+              {accusedSuspects.map(s => (
+                <SuspectPortrait
+                  key={s.id}
+                  suspect={s}
+                  size={120}
                 />
-            )}
-            <SubjectHeading>
-                {accusedSuspects.length > 0 ? `SUBJECTS: ${accusedSuspects.map(s => s.name).join(', ')}` : "SUBJECT: None"}
-            </SubjectHeading>
+              ))}
+            </PortraitRow>
+          ) : (
+            <SuspectPortrait
+              suspect={caseData.suspects[0]}
+              size={200}
+            />
+          )}
+          <SubjectHeading>
+            {accusedSuspects.length > 0 ? `SUBJECTS: ${accusedSuspects.map(s => s.name).join(', ')}` : "SUBJECT: None"}
+          </SubjectHeading>
         </AccusedPortraitGrid>
 
         {/* VOTING */}
@@ -587,7 +587,7 @@ const EndGame: React.FC<EndGameProps> = ({
         {/* YOUR PERFORMANCE vs GLOBAL */}
         <IntelSection>
           <IntelTitle>▸ YOUR PERFORMANCE vs GLOBAL</IntelTitle>
-          
+
           <CompareRow>
             <CompareValues>
               <span className="you">Result: {gameResult}</span>
@@ -634,28 +634,28 @@ const EndGame: React.FC<EndGameProps> = ({
         </IntelSection>
 
         <StatItem>
-            <h3>Evidence Recovery Rate</h3>
-            <span>{foundHiddenCount} / {totalHiddenEvidence} SECRETS FOUND</span>
+          <h3>Evidence Recovery Rate</h3>
+          <span>{foundHiddenCount} / {totalHiddenEvidence} SECRETS FOUND</span>
         </StatItem>
 
         <EvidenceLogTitle>EVIDENCE LOG</EvidenceLogTitle>
         <EvidenceList>
-            {caseData.suspects.flatMap(s => s.hiddenEvidence || []).map((ev, i) => {
-                const isFound = evidenceDiscovered.some(e => e.title === ev.title);
-                return (
-                    <EvidenceRow key={i} $found={isFound}>
-                        <span className="icon">{isFound ? '✓' : '✗'}</span>
-                        <EvidenceInfo>
-                            <EvidenceTitle>{ev.title}</EvidenceTitle>
-                            {!isFound && <EvidenceMissedHint>Held by: {caseData.suspects.find(s => (s.hiddenEvidence || []).includes(ev))?.name}</EvidenceMissedHint>}
-                        </EvidenceInfo>
-                    </EvidenceRow>
-                );
-            })}
+          {caseData.suspects.flatMap(s => s.hiddenEvidence || []).map((ev, i) => {
+            const isFound = evidenceDiscovered.some(e => e.title === ev.title);
+            return (
+              <EvidenceRow key={i} $found={isFound}>
+                <span className="icon">{isFound ? '✓' : '✗'}</span>
+                <EvidenceInfo>
+                  <EvidenceTitle>{ev.title}</EvidenceTitle>
+                  {!isFound && <EvidenceMissedHint>Held by: {caseData.suspects.find(s => (s.hiddenEvidence || []).includes(ev))?.name}</EvidenceMissedHint>}
+                </EvidenceInfo>
+              </EvidenceRow>
+            );
+          })}
         </EvidenceList>
 
         <MobileOnly>
-            <ResetButton onClick={onReset}>RETURN TO HQ</ResetButton>
+          <ResetButton onClick={onReset}>RETURN TO HQ</ResetButton>
         </MobileOnly>
       </RightPanel>
     </Container>
