@@ -19,8 +19,12 @@ export const GEMINI_MODELS = {
   CHAT: "gemini-3.1-flash-lite-preview",
 
   /** Used for all image generation (portraits, evidence, emotions).
-   *  Must support image output. */
+   *  Must support image output. "Nano Banana 1" */
   IMAGE: "gemini-2.5-flash-image",
+
+  /** Used for high-fidelity base portrait generation from uploads.
+   *  Better at preserving proportions and likeness. "Nano Banana 2" */
+  IMAGE_HD: "gemini-3.1-flash-image-preview",
 
   /** Used for text-to-speech voice generation.
    *  Must support audio output. */

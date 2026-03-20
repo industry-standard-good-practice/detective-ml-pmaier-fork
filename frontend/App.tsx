@@ -655,6 +655,7 @@ const App: React.FC = () => {
 
     } catch (e: any) {
         console.error("Partner Action Error:", e);
+        toast.error(`Partner action failed: ${e?.message || 'Connection interrupted. Please try again.'}`);
         setGameState(prev => ({
           ...prev,
           sidekickComment: "I... lost my train of thought. Let's try that again.",
@@ -825,6 +826,7 @@ const App: React.FC = () => {
       setCurrentSuggestions(response.hints);
     } catch (e: any) {
       console.error("AI Generation Error:", e);
+      toast.error(`Response failed: ${e?.message || 'Connection interrupted. Please try again.'}`);
       setGameState(prev => ({
         ...prev,
         chatHistory: {
@@ -877,6 +879,7 @@ const App: React.FC = () => {
       }));
     } catch (e: any) {
       console.error("Officer Chat Error:", e);
+      toast.error(`Officer response failed: ${e?.message || 'Secure line disconnected. Try again.'}`);
       setGameState(prev => ({
         ...prev,
         officerHistory: [...prev.officerHistory, { sender: 'system', text: "[SECURE LINE DISCONNECTED]", timestamp: formatTime(newGameTime) }]

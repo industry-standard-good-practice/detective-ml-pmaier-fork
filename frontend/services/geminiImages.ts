@@ -17,7 +17,7 @@ const buildVictimPrompt = (s: Suspect, theme?: string): string => {
     if (s.role && s.role !== 'The Victim') details.push(`Role: ${s.role}`);
     if (s.bio) details.push(`Bio: ${s.bio}`);
     if (s.witnessObservations) details.push(`Scene details: ${s.witnessObservations}`);
-    
+
     const physicalDesc = s.physicalDescription || '';
     const contextBlock = details.length > 0 ? details.join('. ') + '.' : '';
 
@@ -34,22 +34,22 @@ const buildVictimPrompt = (s: Suspect, theme?: string): string => {
 // --- IMAGE GENERATION HELPER ---
 
 const generateImageRaw = async (
-    prompt: string, 
-    aspectRatio: string = '1:1', 
+    prompt: string,
+    aspectRatio: string = '1:1',
     refImages: string[] = [],
     mode: 'create' | 'edit' | 'evidence' = 'create'
 ): Promise<string | null> => {
     try {
         const parts: any[] = [];
-        
+
         // Add style references first
         for (const ref of refImages) {
             let base64Data = "";
-            
+
             // Check if it matches our specific style ref URL (whether local or remote)
             if (ref === STYLE_REF_URL) {
-                 const fetched = await getStyleRefBase64();
-                 if (fetched) base64Data = fetched;
+                const fetched = await getStyleRefBase64();
+                if (fetched) base64Data = fetched;
             } else if (ref.startsWith('data:')) {
                 base64Data = ref.split(',')[1];
             } else if (ref.startsWith('http')) {
@@ -66,25 +66,25 @@ const generateImageRaw = async (
                     throw new Error(`Failed to fetch reference image: ${ref}`);
                 }
             } else {
-                 // Assume raw base64 or other string we can't easily handle, just treat as raw
-                 base64Data = ref;
+                // Assume raw base64 or other string we can't easily handle, just treat as raw
+                base64Data = ref;
             }
-            
+
             if (base64Data) {
-                 parts.push({ inlineData: { mimeType: 'image/png', data: base64Data } });
+                parts.push({ inlineData: { mimeType: 'image/png', data: base64Data } });
             } else {
                 // If we have a ref but no data, we should fail
                 throw new Error(`Reference image data missing for: ${ref}`);
             }
         }
-        
+
         // Choose the correct instruction based on mode
         let instruction = INSTRUCTION_NEW_CHAR;
         if (mode === 'edit') instruction = INSTRUCTION_PRESERVE_CHAR;
         else if (mode === 'evidence') instruction = INSTRUCTION_RELATED_EVIDENCE;
 
         const fullPrompt = `${PIXEL_ART_BASE} ${instruction} ${prompt}`;
-        
+
         parts.push({ text: fullPrompt });
 
         const res = await ai.models.generateContent({
@@ -118,7 +118,7 @@ const generateImageRaw = async (
 
         const part = candidate?.content?.parts?.find(p => p.inlineData);
         if (part) {
-             return part.inlineData.data;
+            return part.inlineData.data;
         }
 
         // No image returned but no explicit error — may be a silent safety block
@@ -160,14 +160,14 @@ const generateEmotionalVariants = async (
 ): Promise<Record<string, string>> => {
     const newPortraits: Record<string, string> = { [Emotion.NEUTRAL]: neutralUrl };
     const colorDesc = getSuspectColorDescription(avatarSeed);
-    
+
     // Only standard emotions, ignore forensic ones for living suspects
     const emotionsToGen = [
-        Emotion.HAPPY, Emotion.ANGRY, Emotion.SAD, 
-        Emotion.NERVOUS, Emotion.SURPRISED, Emotion.SLY, 
+        Emotion.HAPPY, Emotion.ANGRY, Emotion.SAD,
+        Emotion.NERVOUS, Emotion.SURPRISED, Emotion.SLY,
         Emotion.CONTENT, Emotion.DEFENSIVE, Emotion.ARROGANT
     ];
-    
+
     let completed = 0;
     const total = emotionsToGen.length;
 
@@ -201,31 +201,31 @@ const generateForensicVariants = async (
     onProgress?: (current: number, total: number) => void
 ): Promise<Record<string, string>> => {
     const newPortraits: Record<string, string> = { [Emotion.NEUTRAL]: fullBodyUrl };
-    
+
     // Forensic views
     const views = [Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS];
     let completed = 0;
     const total = views.length;
-    
+
     const generateView = async (view: Emotion) => {
         let partPrompt = "";
         const commonNegative = "NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.";
-        
+
         switch (view) {
-            case Emotion.HEAD: 
-                partPrompt = "Extreme close up of the victim's head and face. Eyes are CLOSED. Eyelids shut. Lifeless expression. Pale skin. Forensic style."; 
+            case Emotion.HEAD:
+                partPrompt = "Extreme close up of the victim's head and face. Eyes are CLOSED. Eyelids shut. Lifeless expression. Pale skin. Forensic style.";
                 break;
-            case Emotion.TORSO: 
-                partPrompt = "Close up of the victim's chest, shirt, and pockets. No face visible. Clothing details. Forensic style."; 
+            case Emotion.TORSO:
+                partPrompt = "Close up of the victim's chest, shirt, and pockets. No face visible. Clothing details. Forensic style.";
                 break;
-            case Emotion.HANDS: 
-                partPrompt = "Close up of the victim's hands and fingers. Pale skin. No face visible. Forensic style."; 
+            case Emotion.HANDS:
+                partPrompt = "Close up of the victim's hands and fingers. Pale skin. No face visible. Forensic style.";
                 break;
-            case Emotion.LEGS: 
-                partPrompt = "Close up of the victim's legs, pants, and shoes. No face visible. Forensic style."; 
+            case Emotion.LEGS:
+                partPrompt = "Close up of the victim's legs, pants, and shoes. No face visible. Forensic style.";
                 break;
         }
-        
+
         const prompt = `ZOOM IN: ${partPrompt} Maintain consistent clothing colors and skin tone from reference. Pixel art. ${commonNegative}`;
         // Mode 'edit' to ensure it looks like the same body, just zoomed/cropped/redrawn
         const raw = await generateImageRaw(prompt, '3:4', [fullBodyUrl], 'edit');
@@ -249,28 +249,28 @@ const generateForensicVariants = async (
 // --- PUBLIC IMAGE METHODS ---
 
 export const generateEvidenceImage = async (
-    evidence: Evidence, 
-    caseId: string, 
+    evidence: Evidence,
+    caseId: string,
     userId: string,
     refImage?: string
 ): Promise<string> => {
-  if (!userId) throw new Error('[CRITICAL] generateEvidenceImage: userId is required');
-  const refs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
-  if (refImage) refs.push(refImage);
+    if (!userId) throw new Error('[CRITICAL] generateEvidenceImage: userId is required');
+    const refs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
+    if (refImage) refs.push(refImage);
 
-  // Use 'evidence' mode if we have a reference image (e.g. victim)
-  const mode = refImage ? 'evidence' : 'create';
+    // Use 'evidence' mode if we have a reference image (e.g. victim)
+    const mode = refImage ? 'evidence' : 'create';
 
-  const b64 = await generateImageRaw(
-      `Subject: ${evidence.title}, ${evidence.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`, 
-      '1:1',
-      refs,
-      mode
-  );
-  if (!b64) return "";
-  
-  const url = await uploadImage(b64, `images/${userId}/cases/${caseId}/evidence/${evidence.id}.png`);
-  return url;
+    const b64 = await generateImageRaw(
+        `Subject: ${evidence.title}, ${evidence.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`,
+        '1:1',
+        refs,
+        mode
+    );
+    if (!b64) return "";
+
+    const url = await uploadImage(b64, `images/${userId}/cases/${caseId}/evidence/${evidence.id}.png`);
+    return url;
 };
 
 export const getSuspectPortrait = async (suspect: Suspect, emotion: Emotion, aggravation: number, turnId?: string): Promise<string> => {
@@ -281,16 +281,16 @@ export const getSuspectPortrait = async (suspect: Suspect, emotion: Emotion, agg
 
     // 2. Emotion Mapping for AI Generated Cases (Fallback if generation was partial)
     const isAiGenerated = suspect.portraits && suspect.portraits[Emotion.NEUTRAL] && !suspect.portraits[Emotion.NEUTRAL].includes('dicebear');
-    
+
     if (isAiGenerated) {
         let mapped: Emotion | null = null;
-        
+
         // Negative / Hostile -> ANGRY
         if (emotion === Emotion.DEFENSIVE || emotion === Emotion.ARROGANT) mapped = Emotion.ANGRY;
-        
+
         // Positive / Smug -> HAPPY
         if (emotion === Emotion.SLY || emotion === Emotion.CONTENT) mapped = Emotion.HAPPY;
-        
+
         // Low Energy / Distress -> NERVOUS
         if (emotion === Emotion.SAD) mapped = Emotion.NERVOUS;
 
@@ -298,23 +298,23 @@ export const getSuspectPortrait = async (suspect: Suspect, emotion: Emotion, agg
         if (suspect.isDeceased) mapped = Emotion.NEUTRAL;
 
         if (mapped && suspect.portraits && suspect.portraits[mapped]) {
-             return suspect.portraits[mapped];
+            return suspect.portraits[mapped];
         }
     }
 
     // 3. Fallback to Neutral (if exact or mapped missing)
     if (suspect.portraits && suspect.portraits[Emotion.NEUTRAL] && suspect.portraits[Emotion.NEUTRAL] !== "PLACEHOLDER") {
-         return suspect.portraits[Emotion.NEUTRAL];
+        return suspect.portraits[Emotion.NEUTRAL];
     }
 
     // 4. Dicebear Procedural Fallback (for non-AI cases or total failure)
     let seed = suspect.avatarSeed;
-    
+
     // Map dicebear seeds roughly to emotions
     if (emotion === Emotion.ANGRY || emotion === Emotion.DEFENSIVE || emotion === Emotion.ARROGANT || aggravation > 50) seed += 1;
     if (emotion === Emotion.HAPPY || emotion === Emotion.CONTENT || emotion === Emotion.SLY) seed += 2;
     if (emotion === Emotion.NERVOUS || emotion === Emotion.SAD || emotion === Emotion.SURPRISED) seed += 3;
-    
+
     return getPixelArtUrl(seed, 300);
 };
 
@@ -328,8 +328,8 @@ export const createImageFromPrompt = async (
 };
 
 export const editImageWithPrompt = async (
-    baseImageBase64: string, 
-    userPrompt: string, 
+    baseImageBase64: string,
+    userPrompt: string,
     aspectRatio: string = '3:4'
 ): Promise<string | null> => {
     const prompt = `[STRICT INSTRUCTION]: Edit the image provided. ${userPrompt}. Maintain the pixel art style and composition. No text, no words.`;
@@ -351,14 +351,14 @@ export const generateEmotionalVariantsFromBase = async (
     const variantPortraits = isDeceased
         ? await generateForensicVariants(neutralBase64, suspect as Suspect, onProgress)
         : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed, onProgress);
-    
+
     // Upload all variants
     // Note: uploadImage handles cases where neutralBase64 is already a URL
     const folder = isSuspect ? 'suspects' : 'support';
     const uploadedPortraits: Record<string, string> = {
         [Emotion.NEUTRAL]: await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/neutral.png`)
     };
-    
+
     for (const [emo, b64] of Object.entries(variantPortraits)) {
         // Skip neutral as we just uploaded it above
         if (emo === Emotion.NEUTRAL) continue;
@@ -380,26 +380,31 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
     if (suspect.isDeceased) {
         const victimScene = buildVictimPrompt(suspect);
         conversionPrompt = `
-          [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
-          The FIRST image provided is the exact ART STYLE you must use.
-          The SECOND image provided is the SUBJECT — use their face, body type, and clothing as reference.
-          Draw the SUBJECT as a DECEASED VICTIM in a crime scene using the EXACT pixel art style of the first image.
-          - DO NOT use the style of the subject photograph. DESTROY all photorealism.
-          - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
-          - MAINTAIN the subject's core facial features, hairstyle, clothing, and gender so they are recognizable, but translated into true 16-bit pixel art.
+          [TRANSFORM IMAGE]: Redraw the SECOND image as a 16-bit pixel art game asset.
+          The FIRST image shows the target ART STYLE — copy its pixel art technique, NOT its subject or proportions.
+          The SECOND image is the SUBJECT to transform — preserve their EXACT face, body type, build, proportions, and clothing.
+
+          TRANSFORMATION RULES:
+          - DESTROY all photorealism. Replace with chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
+          - The subject's body PROPORTIONS are SACRED: if they have a thick neck, broad shoulders, stocky build, round face, or heavy frame, the pixel art MUST show that SAME build. Do NOT slim them down or elongate them.
+          - The pixel art character should look like the SAME PERSON, just drawn in a different art style.
+          - The character's shoulders and body MUST fill the frame edge-to-edge (full bleed).
           Output Style: ${PIXEL_ART_BASE}
+          Context: Redraw as a DECEASED VICTIM in a crime scene.
           ${victimScene}
           NEGATIVE PROMPT: portrait, mugshot, headshot, photorealistic, photography, high resolution, smooth shading, digital painting, realistic, vector, 3d render, photo filter.
         `;
     } else {
         conversionPrompt = `
-          [CRITICAL STYLE OVERRIDE]: You are generating a 16-bit pixel art game asset.
-          The FIRST image provided is the exact ART STYLE you must use.
-          The SECOND image provided is the SUBJECT. 
-          Draw the SUBJECT from the second image using the EXACT pixel art style of the first image.
-          - DO NOT use the style of the subject photograph. DESTROY all photorealism.
-          - Ensure chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
-          - MAINTAIN the subject's core facial features, hairstyle, and gender so they are recognizable, but translated perfectly into true 16-bit pixel art rather than a photo filter.
+          [TRANSFORM IMAGE]: Redraw the SECOND image as a 16-bit pixel art game asset.
+          The FIRST image shows the target ART STYLE — copy its pixel art technique, NOT its subject or proportions.
+          The SECOND image is the SUBJECT to transform — preserve their EXACT face, body type, build, proportions, and clothing.
+
+          TRANSFORMATION RULES:
+          - DESTROY all photorealism. Replace with chunky, visible, blocky pixels, dithered shading, and a limited retro color palette.
+          - The subject's body PROPORTIONS are SACRED: if they have a thick neck, broad shoulders, stocky build, round face, or heavy frame, the pixel art MUST show that SAME build. Do NOT slim them down or elongate them.
+          - The pixel art character should look like the SAME PERSON, just drawn in a different art style.
+          - The character's shoulders and body MUST fill the frame edge-to-edge (full bleed), without any background gaps on the sides.
           Output Style: ${PIXEL_ART_BASE}
           Composition: Front-facing mugshot, head and shoulders. The character's shoulders and body MUST extend all the way to the left and right edges (full bleed) without any background gaps on the sides.
           Background: Solid ${colorDesc} background.
@@ -418,39 +423,41 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
     let neutralRaw: string | null = null;
     try {
         const parts: any[] = [];
-        
+
+        // Style ref FIRST — for art style guidance
         if (styleRefBase64) {
             parts.push({ inlineData: { mimeType: 'image/png', data: styleRefBase64 } });
         }
-        
+
+        // User image SECOND — the subject whose proportions must be preserved
         parts.push({ inlineData: { mimeType: 'image/png', data: userImageBase64.split(',')[1] } });
-        
+
         parts.push({ text: conversionPrompt });
-        
+
         const res = await ai.models.generateContent({
-            model: GEMINI_MODELS.IMAGE,
+            model: GEMINI_MODELS.IMAGE_HD,
             contents: { parts },
             config: { imageConfig: { aspectRatio: '3:4' } }
         });
         const part = res.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (part) neutralRaw = part.inlineData.data;
-    } catch(e) {
+    } catch (e: any) {
         console.error("Upload conversion failed", e);
-        return suspect;
+        throw new Error(`Failed to convert uploaded image to pixel art: ${e?.message || 'Unknown error'}`);
     }
 
     if (!neutralRaw) throw new Error("Failed to convert uploaded image to pixel art.");
 
     const neutralBase64 = `data:image/png;base64,${neutralRaw}`;
     const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/neutral.png`);
-    
+
     // 2. Generate variants based on the new Pixel Art Neutral
     // Deceased -> forensic close-up views (head, torso, hands, legs)
     // Living -> emotional expression variants (happy, angry, etc.)
     const variantPortraits = suspect.isDeceased
         ? await generateForensicVariants(neutralBase64, suspect)
         : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
-    
+
     // Upload all variants
     const uploadedPortraits: Record<string, string> = {
         [Emotion.NEUTRAL]: neutralUrl
@@ -478,9 +485,9 @@ export const generateSuspectFromUpload = async (suspect: Suspect, userImageBase6
 };
 
 export const regenerateSingleSuspect = async (
-    suspect: Suspect | SupportCharacter, 
-    caseId: string, 
-    userId: string, 
+    suspect: Suspect | SupportCharacter,
+    caseId: string,
+    userId: string,
     theme: string = "Noir",
     onProgress?: (message: string) => void
 ): Promise<Suspect | SupportCharacter> => {
@@ -489,7 +496,7 @@ export const regenerateSingleSuspect = async (
     const colorDesc = getSuspectColorDescription(suspect.avatarSeed);
     const isSuspect = (suspect as any).isGuilty !== undefined;
     const folder = isSuspect ? 'suspects' : 'support';
-    
+
     // Differentiate prompt for Deceased vs Living
     let basePrompt = "";
     if (isSuspect && (suspect as Suspect).isDeceased) {
@@ -505,7 +512,7 @@ export const regenerateSingleSuspect = async (
           NEGATIVE PROMPT: Text, words, letters, UI, interface, HUD, border, frame, speech bubble, signature, watermark, multiple people, two faces, photo-realistic, blur, smooth shading.
         `;
     }
-    
+
     onProgress?.("Generating base portrait...");
     const refs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
     // Mode 'create' because we are making a NEW base character
@@ -515,7 +522,7 @@ export const regenerateSingleSuspect = async (
     onProgress?.("Uploading base portrait...");
     const neutralBase64 = `data:image/png;base64,${neutralRaw}`;
     const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/neutral.png`);
-    
+
     let emotionPortraits: Record<string, string> = {};
     if (isSuspect && (suspect as Suspect).isDeceased) {
         onProgress?.("Generating forensic views...");
@@ -566,7 +573,7 @@ export const regenerateSingleSuspect = async (
 export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: string) => void, userId: string) => {
     if (!userId) throw new Error('[CRITICAL] pregenerateCaseImages: userId is required');
     const styleRefs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
-    
+
     // Phase 1: Neutrals for All Suspects & Partner & Officer
     onStatus("Phase 1/4: Generating Character Profiles...");
     const neutralMap: Record<string, string> = {}; // id -> URL (Firebase)
@@ -579,7 +586,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
         characterTasks.push((async () => {
             const colorDesc = getSuspectColorDescription(s.avatarSeed);
             let prompt = "";
-            
+
             if (s.isDeceased) {
                 prompt = buildVictimPrompt(s, caseData.type);
             } else {
@@ -638,15 +645,15 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
 
     // Phase 2: Evidence (Initial + Hidden)
     onStatus("Phase 2/4: Generating Evidence Files...");
-    
+
     const evidenceTasks: Promise<void>[] = [];
 
     // 2a. Initial Evidence
     (caseData.initialEvidence || []).forEach(ev => {
         evidenceTasks.push((async () => {
             const b64 = await generateImageRaw(
-                `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`, 
-                '1:1', 
+                `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`,
+                '1:1',
                 styleRefs,
                 'create'
             );
@@ -666,8 +673,8 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
                 const refs = suspectRef ? [...styleRefs, suspectRef] : styleRefs;
 
                 const b64 = await generateImageRaw(
-                    `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`, 
-                    '1:1', 
+                    `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`,
+                    '1:1',
                     refs,
                     mode
                 );
@@ -682,23 +689,23 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
     await Promise.all(evidenceTasks);
 
     // Phase 3: Emotional OR Forensic Variants (Batched)
-    
+
     interface VariantTask {
         targetId: string; // suspect.id or 'partner'
         emotion: Emotion;
         neutralUrl: string;
         type: 'suspect' | 'partner';
     }
-    
+
     const variantTasks: VariantTask[] = [];
-    
+
     // Living emotions
     const livingEmotions = [
-        Emotion.HAPPY, Emotion.ANGRY, Emotion.SAD, 
-        Emotion.NERVOUS, Emotion.SURPRISED, Emotion.SLY, 
+        Emotion.HAPPY, Emotion.ANGRY, Emotion.SAD,
+        Emotion.NERVOUS, Emotion.SURPRISED, Emotion.SLY,
         Emotion.CONTENT, Emotion.DEFENSIVE, Emotion.ARROGANT
     ];
-    
+
     // Deceased forensic views
     const forensicViews = [
         Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS
@@ -708,10 +715,10 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
     (caseData.suspects || []).forEach(s => {
         const b64 = base64Map[s.id];
         if (b64) {
-             const targetEmotions = s.isDeceased ? forensicViews : livingEmotions;
-             targetEmotions.forEach(emo => {
-                 variantTasks.push({ targetId: s.id, emotion: emo, neutralUrl: b64, type: 'suspect' });
-             });
+            const targetEmotions = s.isDeceased ? forensicViews : livingEmotions;
+            targetEmotions.forEach(emo => {
+                variantTasks.push({ targetId: s.id, emotion: emo, neutralUrl: b64, type: 'suspect' });
+            });
         }
     });
 
@@ -728,11 +735,11 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
         const batch = variantTasks.slice(i, i + BATCH_SIZE);
         const progress = Math.round((i / variantTasks.length) * 100);
         onStatus(`Phase 3/4: Generating Variants (${progress}%)...`);
-        
+
         await Promise.all(batch.map(async (task) => {
             let prompt = "";
             let colorDesc = "dark grey";
-            
+
             const s = caseData.suspects.find(x => x.id === task.targetId);
             const isDeceased = s?.isDeceased;
 
@@ -741,23 +748,23 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
             } else {
                 colorDesc = "city street or tech lab";
             }
-            
+
             if (isDeceased) {
                 // Forensic Prompt logic
                 let partPrompt = "";
                 const commonNegative = "NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.";
                 switch (task.emotion) {
-                    case Emotion.HEAD: 
-                        partPrompt = "Extreme close up of the victim's head and face. Eyes are CLOSED. Eyelids shut. Lifeless. Forensic style."; 
+                    case Emotion.HEAD:
+                        partPrompt = "Extreme close up of the victim's head and face. Eyes are CLOSED. Eyelids shut. Lifeless. Forensic style.";
                         break;
-                    case Emotion.TORSO: 
-                        partPrompt = "Close up of the victim's torso, chest and clothing. No face. Forensic style."; 
+                    case Emotion.TORSO:
+                        partPrompt = "Close up of the victim's torso, chest and clothing. No face. Forensic style.";
                         break;
-                    case Emotion.HANDS: 
-                        partPrompt = "Close up of the victim's hands. No face. Forensic style."; 
+                    case Emotion.HANDS:
+                        partPrompt = "Close up of the victim's hands. No face. Forensic style.";
                         break;
-                    case Emotion.LEGS: 
-                        partPrompt = "Close up of the victim's legs and shoes. No face. Forensic style."; 
+                    case Emotion.LEGS:
+                        partPrompt = "Close up of the victim's legs and shoes. No face. Forensic style.";
                         break;
                 }
                 prompt = `ZOOM IN: ${partPrompt} Maintain consistent clothing colors and skin tone from reference. Pixel art. ${commonNegative}`;
@@ -765,15 +772,15 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
                 // Living Prompt logic
                 prompt = `Keep the character exactly the same, but change expression to ${task.emotion}. Keep solid/consistent ${colorDesc} background. No text, no words.`;
             }
-            
+
             // Variants use 'edit' mode to PRESERVE IDENTITY of the neutral image
             const b64 = await generateImageRaw(
-                prompt, 
-                '3:4', 
-                [task.neutralUrl], 
+                prompt,
+                '3:4',
+                [task.neutralUrl],
                 'edit'
             );
-            
+
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/${task.type === 'suspect' ? 'suspects' : 'partner'}/${task.targetId}/${task.emotion}.png`);
                 if (task.type === 'suspect') {
@@ -798,6 +805,6 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
     } else if (caseData.initialEvidence?.[0]?.imageUrl) {
         caseData.heroImageUrl = caseData.initialEvidence[0].imageUrl;
     }
-    
+
     onStatus("Generation Complete.");
 };

@@ -907,9 +907,14 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       }
     }
 
-    const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!, refImage);
-    if (newUrl) {
-      updateImage(newUrl);
+    try {
+      const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!, refImage);
+      if (newUrl) {
+        updateImage(newUrl);
+      }
+    } catch (e: any) {
+      console.error("Evidence reroll failed", e);
+      toast.error(`Evidence image reroll failed: ${e?.message || 'Unknown error'}`);
     }
     setLoadingState({ visible: false, message: '' });
   };
@@ -957,8 +962,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     try {
       await pregenerateCaseImages(clone, (msg) => setLoadingState({ visible: true, message: msg }), userId!);
       onUpdateDraft(clone);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Retry failed", e);
+      toast.error(`Image regeneration failed: ${e?.message || 'Unknown error. Try again.'}`);
     } finally {
       setLoadingState({ visible: false, message: '' });
     }
@@ -1334,9 +1340,11 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         // Audio is already playing after await resolves
       } else {
         console.error("TTS generation returned no URL");
+        toast.error('Voice preview failed: No audio was returned.');
       }
     } catch (err) {
       console.error("Voice preview error:", err);
+      toast.error(`Voice preview failed: ${(err as any)?.message || 'Could not generate audio preview.'}`);
     } finally {
       setIsPreviewingVoice(false);
     }

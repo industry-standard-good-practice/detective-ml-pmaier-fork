@@ -42,8 +42,9 @@ export const fetchCommunityCases = async (): Promise<CaseData[]> => {
   try {
     const cases = await apiCall<CaseData[]>('GET', '/api/cases');
     return cases;
-  } catch (error) {
+  } catch (error: any) {
     console.warn("[DEBUG] fetchCommunityCases: Failed:", error);
+    toast.error(`Failed to load community cases: ${error?.message || 'Network error'}`);
     return [];
   }
 };
@@ -61,8 +62,9 @@ export const fetchUserCases = async (userId: string): Promise<CaseData[]> => {
     const cases = await apiCall<CaseData[]>('GET', `/api/cases?authorId=${encodeURIComponent(userId)}`);
     console.log(`[DEBUG] fetchUserCases: Found ${cases.length} cases for user ${userId}`);
     return cases;
-  } catch (error) {
+  } catch (error: any) {
     console.warn("[DEBUG] fetchUserCases: Failed:", error);
+    toast.error(`Failed to load your cases: ${error?.message || 'Network error'}`);
     return [];
   }
 };
@@ -104,8 +106,9 @@ export const deleteCase = async (caseId: string): Promise<boolean> => {
   try {
     await apiCall('DELETE', `/api/cases/${caseId}`);
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[DEBUG] deleteCase: Error", error);
+    toast.error(`Failed to delete case: ${error?.message || 'Network error'}`);
     return false;
   }
 };
@@ -120,8 +123,9 @@ export const updateCase = async (caseId: string, updates: Partial<CaseData>): Pr
   try {
     await apiCall('PUT', `/api/cases/${caseId}`, updates);
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[DEBUG] updateCase: Error", error);
+    toast.error(`Failed to save case: ${error?.message || 'Network error'}`);
     return false;
   }
 };
@@ -142,8 +146,9 @@ export const recordGameResult = async (
   console.log(`[DEBUG] recordGameResult: ${caseId} -> ${result}`, detail);
   try {
     await apiCall('POST', `/api/stats/${caseId}/results`, { result, detail });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[DEBUG] recordGameResult: Error", error);
+    toast.error(`Failed to record game result: ${error?.message || 'Network error'}`);
   }
 };
 
@@ -175,8 +180,9 @@ export const fetchAllCaseStats = async (): Promise<Record<string, CaseStats>> =>
 export const submitVote = async (caseId: string, userId: string, vote: 'up' | 'down'): Promise<void> => {
   try {
     await apiCall('POST', `/api/stats/${caseId}/vote`, { vote });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[DEBUG] submitVote: Error", error);
+    toast.error(`Failed to submit vote: ${error?.message || 'Network error'}`);
   }
 };
 
