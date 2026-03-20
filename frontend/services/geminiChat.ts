@@ -58,7 +58,16 @@ export const getSuspectResponse = async (
     ...supportNames
   ]);
 
-  const validNamesList = Array.from(validNamesSet).filter(Boolean).join(', ');
+  const validNamesList = Array.from(validNamesSet)
+    .filter(Boolean)
+    .map(name => {
+      const parts = name.split(' ');
+      if (parts.length > 1) {
+        return `${name} (or just "${parts[0]}")`;
+      }
+      return name;
+    })
+    .join(', ');
 
   let systemPrompt = "";
 
@@ -201,8 +210,8 @@ export const getSuspectResponse = async (
         - NEVER call them "the victim". Use their actual name ("${deceasedSuspect.name}") or your familial/social label (e.g. "my son", "my boss"). Speak like a real human being reacting to a death in their circle.
         ` : ''}
         Other Suspects: ${(caseData.suspects || []).filter(s => !s.isDeceased).map(s => s.name).join(', ')}.
-        
         *** VALID NAMES ALLOWED IN DIALOGUE: ${validNamesList} ***
+        (CRITICAL RULE: While those are the full names, NEVER use a full first and last name in casual dialogue. Always use just their FIRST NAME from the list above if you are their friend/spouse, or use titles like "my husband" / "Mr. [Last Name]". Only a robot uses someone's full first and last name in casual speech!)
         
         Current Aggravation: ${currentAggravation}/100.
         ${currentAggravation > 80 ? "You are furious and near breaking point." : "You are composed but guarded."}
