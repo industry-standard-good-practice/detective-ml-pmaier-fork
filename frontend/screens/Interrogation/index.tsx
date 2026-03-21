@@ -477,6 +477,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
           sidekickComment={sidekickComment}
           partnerCharges={partnerCharges}
           isLocked={isLocked}
+          isThinking={isThinking}
           initialExamDone={initialExamDone}
           mobileIntelOpen={mobileIntelOpen}
           onCloseMobileIntel={onCloseMobileIntel}
