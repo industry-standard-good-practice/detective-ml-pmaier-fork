@@ -200,18 +200,16 @@ VITE_API_BASE_URL=http://localhost:4000
 >
 > **LAN access:** You can keep `VITE_API_BASE_URL=http://localhost:4000` even when testing on a phone. The frontend automatically detects LAN access (e.g. `http://192.168.x.x:3000`) and rewrites API calls to use the correct host.
 
-#### 5b. Backend — `backend/.env`
+#### 5b. Backend — `backend/.env` + `backend/.env.local`
 
-Copy the example and fill in your values:
+The backend uses two env files:
+- **`backend/.env`** — static config (committed to git)
+- **`backend/.env.local`** — secrets like API keys (gitignored, never committed)
 
-```bash
-cp backend/.env.example backend/.env
-```
-
-Edit `backend/.env`:
+`backend/.env` is pre-configured with your Firebase project details:
 
 ```env
-# Firebase Admin SDK — path to your service account key
+# Firebase Admin SDK
 GOOGLE_APPLICATION_CREDENTIALS=.auth/serviceAccountKey.json
 
 # Firebase Configuration
@@ -221,8 +219,12 @@ FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
 # Server Configuration
 PORT=4000
 CORS_ORIGIN=http://localhost:3000
+```
 
-# Gemini API Key (server-side only — never expose to frontend)
+Create `backend/.env.local` for your secrets:
+
+```env
+# Secrets (this file is gitignored)
 GEMINI_API_KEY=AIzaSy...your_gemini_api_key
 ```
 
@@ -234,7 +236,7 @@ GEMINI_API_KEY=AIzaSy...your_gemini_api_key
 | `FIREBASE_STORAGE_BUCKET` | ✅ | — | Firebase Cloud Storage bucket name |
 | `PORT` | — | `4000` | Backend server port |
 | `CORS_ORIGIN` | — | `http://localhost:3000` | Allowed frontend origin for CORS (see below) |
-| `GEMINI_API_KEY` | ✅ | — | Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) |
+| `GEMINI_API_KEY` | ✅ | — | Gemini API key — set in `backend/.env.local` (gitignored) |
 
 **CORS auto-detection:** The backend automatically handles CORS based on the `CORS_ORIGIN` value:
 
@@ -301,8 +303,9 @@ curl http://localhost:4000/api/health
 |------|---------|:------------:|
 | `.env.example` | Template for root env vars | ✅ |
 | `.env.local` | **Your** root env vars (frontend) | ❌ |
+| `backend/.env` | Backend static config | ✅ |
+| `backend/.env.local` | **Your** backend secrets (GEMINI_API_KEY) | ❌ |
 | `backend/.env.example` | Template for backend env vars | ✅ |
-| `backend/.env` | **Your** backend env vars | ❌ |
 | `backend/.auth/serviceAccountKey.json` | Firebase Admin service account key | ❌ |
 | `frontend/.env.example` | Legacy template (same vars as root) | ✅ |
 
