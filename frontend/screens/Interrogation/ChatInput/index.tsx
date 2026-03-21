@@ -241,13 +241,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [showEvidencePicker, setShowEvidencePicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const evidenceMenuRef = useRef<HTMLDivElement>(null);
+  const mobileEvidenceMenuRef = useRef<HTMLDivElement>(null);
   const typeMenuRef = useRef<HTMLDivElement>(null);
   const mobileTypeMenuRef = useRef<HTMLDivElement>(null);
 
   // Close evidence picker on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (evidenceMenuRef.current && !evidenceMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideDesktop = evidenceMenuRef.current?.contains(target);
+      const insideMobile = mobileEvidenceMenuRef.current?.contains(target);
+      if (!insideDesktop && !insideMobile) {
         setShowEvidencePicker(false);
       }
     }
@@ -356,7 +360,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             setShowEvidencePicker={setShowEvidencePicker}
             isEvidenceSelected={isEvidenceSelected}
             toggleEvidence={toggleEvidence}
-            menuRef={evidenceMenuRef}
+            menuRef={mobileEvidenceMenuRef}
           />
           <GhostInput
             ref={inputRef}
