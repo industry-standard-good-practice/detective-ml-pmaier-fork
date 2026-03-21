@@ -21,15 +21,23 @@ export const textHasAnyTimeReference = (text: string): boolean => {
   if (/\d{1,2}:\d{2}/.test(text)) return true;
   // Spelled-out hours with time context (e.g. "around eleven", "at eight", "by nine")
   const lower = text.toLowerCase();
-  const timeContextWords = ['around', 'at', 'about', 'by', 'past', 'before', 'after', 'until', 'til', "o'clock", 'oclock', 'quarter', 'half', 'morning', 'evening', 'night', 'afternoon', 'pm', 'am', 'a.m', 'p.m'];
+  // Require BOTH a standalone time-number word AND a time-context phrase nearby
+  const timeContextPatterns = [
+    /\baround\b/, /\bpast\b/, /\bbefore\b/, /\bafter\b/, /\buntil\b/, /\btil\b/,
+    /\bo'clock\b/, /\boclock\b/, /\bquarter\b/, /\bhalf\b/,
+    /\bmorning\b/, /\bevening\b/, /\bafternoon\b/,
+    /\bpm\b/, /\bam\b/, /\ba\.m\b/, /\bp\.m\b/,
+    /\bat night\b/, /\blast night\b/, /\bthat night\b/
+  ];
+  const hasTimeContext = timeContextPatterns.some(p => p.test(lower));
+  if (!hasTimeContext) return false;
+  // Check for standalone time-number words (not substrings like "someone", "listen")
   for (const word of Object.keys(WORD_TO_NUM)) {
-    if (lower.includes(word)) {
-      // Check if the word appears near a time-context word
-      for (const ctx of timeContextWords) {
-        if (lower.includes(ctx)) return true;
-      }
-    }
+    const wordRegex = new RegExp(`\\b${word}\\b`, 'i');
+    if (wordRegex.test(lower)) return true;
   }
+  // Also match "at X" pattern where X is a standalone time word
+  if (/\bat\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|midnight|noon)\b/i.test(lower)) return true;
   return false;
 };
 
@@ -174,15 +182,18 @@ export const extractTimelineFromText = (
     }
 
     // If no direct/numeric match, try matching spelled-out time words in text
+    // Use word boundaries to avoid "someone" matching "one", "listen" matching "ten", etc.
     if (!matched) {
       const entryNumeric = timeStr.match(/(\d{1,2}):\d{2}/);
       if (entryNumeric) {
         const entryHour = parseInt(entryNumeric[1], 10);
-        // Check if any spelled-out word for this hour appears in the text
         for (const [word, num] of Object.entries(WORD_TO_NUM)) {
-          if (num === entryHour && lowerText.includes(word)) {
-            matched = true;
-            break;
+          if (num === entryHour) {
+            const wordRegex = new RegExp(`\\b${word}\\b`, 'i');
+            if (wordRegex.test(lowerText)) {
+              matched = true;
+              break;
+            }
           }
         }
       }
@@ -201,8 +212,9 @@ export const extractTimelineFromText = (
           if (wordForHour) {
             // Find the sentence containing the spelled-out word
             const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+            const wordBoundaryRegex = new RegExp(`\\b${wordForHour}\\b`, 'i');
             for (const sentence of sentences) {
-              if (sentence.toLowerCase().includes(wordForHour)) {
+              if (wordBoundaryRegex.test(sentence)) {
                 finalStatement = sentence.trim().replace(/^["']+|["']+$/g, '');
                 break;
               }
