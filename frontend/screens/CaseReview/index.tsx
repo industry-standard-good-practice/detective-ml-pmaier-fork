@@ -224,6 +224,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     latestDraftRef.current = draftCase;
   }, [draftCase]);
 
+  /** Eagerly updates the ref AND calls onUpdateDraft — prevents race conditions
+   *  where React's async state update leaves the ref stale between concurrent updates. */
+  const safeUpdateDraft = (updated: CaseData) => {
+    latestDraftRef.current = updated;
+    onUpdateDraft(updated);
+  };
+
   const saveBaselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
   const baselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(() => {
@@ -312,7 +319,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           }
           return cs;
         });
-        onUpdateDraft({ ...currentDraft, suspects: newSuspects });
+        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
       } catch (e) {
         console.error(`[BgGen] Failed portrait for ${s.name}:`, e);
       }
@@ -328,7 +335,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           const { regenerateSingleSuspect } = await import('../../services/geminiImages');
           const updated = await regenerateSingleSuspect(draft.officer as any, draft.id, userId, draft.type || 'Noir');
           const currentDraft = latestDraftRef.current;
-          onUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits: (updated as any).portraits || currentDraft.officer.portraits } });
+          safeUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits: (updated as any).portraits || currentDraft.officer.portraits } });
         } catch (e) {
           console.error('[BgGen] Failed officer portrait:', e);
         }
@@ -342,7 +349,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           const { regenerateSingleSuspect } = await import('../../services/geminiImages');
           const updated = await regenerateSingleSuspect(draft.partner as any, draft.id, userId, draft.type || 'Noir');
           const currentDraft = latestDraftRef.current;
-          onUpdateDraft({ ...currentDraft, partner: { ...currentDraft.partner, portraits: (updated as any).portraits || currentDraft.partner.portraits } });
+          safeUpdateDraft({ ...currentDraft, partner: { ...currentDraft.partner, portraits: (updated as any).portraits || currentDraft.partner.portraits } });
         } catch (e) {
           console.error('[BgGen] Failed partner portrait:', e);
         }
@@ -360,7 +367,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         if (url) {
           const currentDraft = latestDraftRef.current;
           const newInit = currentDraft.initialEvidence.map(e => e.id === ev.id ? { ...e, imageUrl: url } : e);
-          onUpdateDraft({ ...currentDraft, initialEvidence: newInit });
+          safeUpdateDraft({ ...currentDraft, initialEvidence: newInit });
         }
       } catch (e) {
         console.error(`[BgGen] Failed evidence ${ev.title}:`, e);
@@ -381,7 +388,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             const newSuspects = currentDraft.suspects.map(cs =>
               cs.id === s.id ? { ...cs, hiddenEvidence: cs.hiddenEvidence.map(e => e.id === ev.id ? { ...e, imageUrl: url } : e) } : cs
             );
-            onUpdateDraft({ ...currentDraft, suspects: newSuspects });
+            safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
           }
         } catch (e) {
           console.error(`[BgGen] Failed hidden evidence ${ev.title}:`, e);
@@ -394,9 +401,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     const finalDraft = latestDraftRef.current;
     const victim = finalDraft.suspects?.find(s => s.isDeceased);
     if (victim?.portraits?.[Emotion.NEUTRAL] && !finalDraft.heroImageUrl) {
-      onUpdateDraft({ ...finalDraft, heroImageUrl: victim.portraits[Emotion.NEUTRAL] });
+      safeUpdateDraft({ ...finalDraft, heroImageUrl: victim.portraits[Emotion.NEUTRAL] });
     } else if (finalDraft.initialEvidence?.[0]?.imageUrl && !finalDraft.heroImageUrl) {
-      onUpdateDraft({ ...finalDraft, heroImageUrl: finalDraft.initialEvidence[0].imageUrl });
+      safeUpdateDraft({ ...finalDraft, heroImageUrl: finalDraft.initialEvidence[0].imageUrl });
     }
 
     setImageLoadingStates({});
@@ -454,7 +461,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       if (source === 'initial') {
         const currentDraft = latestDraftRef.current;
         const newInit = (currentDraft.initialEvidence || []).map(e => e.id === ev.id ? { ...e, imageUrl: url } : e);
-        onUpdateDraft({ ...currentDraft, initialEvidence: newInit });
+        safeUpdateDraft({ ...currentDraft, initialEvidence: newInit });
       } else if (suspectId) {
         const currentDraft = latestDraftRef.current;
         const newSuspects = (currentDraft.suspects || []).map(s => {
@@ -463,7 +470,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           }
           return s;
         });
-        onUpdateDraft({ ...currentDraft, suspects: newSuspects });
+        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
       }
     };
     updateImage(undefined);
@@ -548,12 +555,12 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
         const freshDraft = latestDraftRef.current;
         if (charId === 'officer') {
-          onUpdateDraft({ ...freshDraft, officer: { ...freshDraft.officer, portraits: (updated as any).portraits || freshDraft.officer.portraits } });
+          safeUpdateDraft({ ...freshDraft, officer: { ...freshDraft.officer, portraits: (updated as any).portraits || freshDraft.officer.portraits } });
         } else if (charId === 'partner') {
-          onUpdateDraft({ ...freshDraft, partner: { ...freshDraft.partner, portraits: (updated as any).portraits || freshDraft.partner.portraits } });
+          safeUpdateDraft({ ...freshDraft, partner: { ...freshDraft.partner, portraits: (updated as any).portraits || freshDraft.partner.portraits } });
         } else {
           const newSuspects = freshDraft.suspects.map(s => s.id === charId ? { ...s, portraits: (updated as any).portraits || s.portraits } : s);
-          onUpdateDraft({ ...freshDraft, suspects: newSuspects });
+          safeUpdateDraft({ ...freshDraft, suspects: newSuspects });
         }
       } catch (e) {
         console.error(`[RetryAI] Failed for ${charId}:`, e);
@@ -600,13 +607,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       const updatedChar = await regenerateSingleSuspect(
         activeSuspect as any, draftCase.id, userId!, draftCase.type
       );
+      // Read latest draft AFTER the await to avoid overwriting concurrent edits
+      const currentDraft = latestDraftRef.current;
       if (selectedSuspectId === 'officer') {
-        onUpdateDraft({ ...draftCase, officer: updatedChar as any });
+        safeUpdateDraft({ ...currentDraft, officer: updatedChar as any });
       } else if (selectedSuspectId === 'partner') {
-        onUpdateDraft({ ...draftCase, partner: updatedChar as any });
+        safeUpdateDraft({ ...currentDraft, partner: updatedChar as any });
       } else {
-        const newSuspects = draftCase.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
-        onUpdateDraft({ ...draftCase, suspects: newSuspects });
+        const newSuspects = currentDraft.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
+        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
       }
       toast.success(`Portrait regenerated for ${activeSuspect.name}!`);
     } catch (e: any) {
@@ -628,13 +637,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         activeSuspect as any, base64, draftCase.id, userId!,
         () => {} // progress not shown in overlay anymore
       );
+      // Read latest draft AFTER the await to avoid overwriting concurrent edits
+      const currentDraft = latestDraftRef.current;
       if (selectedSuspectId === 'officer') {
-        onUpdateDraft({ ...draftCase, officer: updatedChar as any });
+        safeUpdateDraft({ ...currentDraft, officer: updatedChar as any });
       } else if (selectedSuspectId === 'partner') {
-        onUpdateDraft({ ...draftCase, partner: updatedChar as any });
+        safeUpdateDraft({ ...currentDraft, partner: updatedChar as any });
       } else {
-        const newSuspects = draftCase.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
-        onUpdateDraft({ ...draftCase, suspects: newSuspects });
+        const newSuspects = currentDraft.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
+        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
       }
       toast.success(`Image uploaded for ${activeSuspect.name}!`);
     } catch (err: any) {
