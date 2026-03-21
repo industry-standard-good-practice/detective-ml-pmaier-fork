@@ -11,6 +11,7 @@ import { authMiddleware } from './middleware/auth.js';
 import casesRouter from './routes/cases.js';
 import statsRouter from './routes/stats.js';
 import imagesRouter from './routes/images.js';
+import geminiRouter from './routes/gemini.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,6 +104,12 @@ function createApp() {
   app.use('/api/cases', authMiddleware, casesRouter);
   app.use('/api/stats', authMiddleware, statsRouter);
   app.use('/api/images', authMiddleware, imagesRouter);
+
+  // Gemini routes — extended timeout (10 min) for long-running AI operations
+  app.use('/api/gemini', authMiddleware, (req, _res, next) => {
+    req.setTimeout(600000); // 10 min
+    next();
+  }, geminiRouter);
 
   return app;
 }

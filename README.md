@@ -26,9 +26,9 @@ Players can create their own cases by typing a prompt (e.g. *"A murder at a jazz
 |-------|------|
 | Frontend | React 19, TypeScript, Styled Components, Framer Motion |
 | Build | Vite 6 |
-| AI | Google Gemini (`@google/genai`) — chat, case generation, image generation, TTS |
+| AI | Google Gemini (`@google/genai`) — chat, case generation, image generation, TTS (backend-only) |
 | Auth | Firebase Auth (Google sign-in) |
-| Backend | Express 5 (TypeScript) — API proxy for Firebase |
+| Backend | Express 5 (TypeScript) — Firebase proxy + Gemini AI proxy |
 | Database | Firebase Realtime Database |
 | Storage | Firebase Cloud Storage (images) |
 | Monorepo | npm workspaces |
@@ -45,9 +45,10 @@ detective-ml/
 │   ├── hooks/         ← Custom hooks
 │   ├── App.tsx        ← Main orchestrator — game state, routing, all game logic
 │   └── types.ts       ← TypeScript types for the full data model
-├── backend/           ← Express API server — Firebase proxy (port 4000)
+├── backend/           ← Express API server — Firebase + Gemini proxy (port 4000)
 │   └── src/
-│       ├── routes/    ← cases, stats, images endpoints
+│       ├── routes/    ← cases, stats, images, gemini endpoints
+│       ├── services/  ← Gemini AI services (chat, case, images, TTS)
 │       └── middleware/ ← Firebase Auth token verification
 ├── docs/              ← Reference documentation
 ├── .env.local         ← Root env file (frontend vars, loaded by Vite)
@@ -72,16 +73,17 @@ Key services:
 
 | Service | What it does |
 |---------|-------------|
-| `geminiChat.ts` | Suspect interrogation — structured AI responses with emotion, aggravation, evidence reveals |
-| `geminiCase.ts` | Full case generation from a prompt — suspects, evidence, alibis, timelines, relationships |
-| `geminiImages.ts` | AI pixel-art portrait and evidence image generation |
-| `geminiTTS.ts` | Text-to-speech for suspect/partner dialogue |
+| `geminiChat.ts` | Suspect interrogation — delegates to backend AI endpoints |
+| `geminiCase.ts` | Case generation/editing — delegates to backend + client-side helpers |
+| `geminiImages.ts` | AI image generation — delegates to backend; portrait lookup stays client-side |
+| `geminiTTS.ts` | Text-to-speech — delegates to backend; WAV construction stays client-side |
+| `backendGemini.ts` | Authenticated HTTP client for all Gemini backend endpoints |
 | `persistence.ts` | API client for backend (cases, stats, voting) + localStorage drafts |
 | `apiBase.ts` | Smart API base URL — auto-rewrites `localhost` to LAN IP for mobile testing |
 
 ### Backend Architecture
 
-The backend is a thin Express server that acts as a Firebase proxy. The frontend authenticates directly with Firebase Auth (Google sign-in), then sends the Firebase ID token with every API request. The backend verifies the token and performs all database/storage operations using a Firebase Admin SDK service account.
+The backend is an Express server that acts as both a Firebase proxy and a Gemini AI proxy. The frontend authenticates directly with Firebase Auth (Google sign-in), then sends the Firebase ID token with every API request. The backend verifies the token and performs all database/storage/AI operations using its own credentials (Firebase service account + Gemini API key).
 
 **Endpoints:**
 - `GET /api/cases` — list published cases (or `?authorId=` for user-specific)
@@ -92,6 +94,16 @@ The backend is a thin Express server that acts as a Firebase proxy. The frontend
 - `POST /api/stats/:id/results` — record a game result
 - `POST /api/stats/:id/vote` — upvote/downvote
 - `POST /api/images/upload` — upload base64 images to Firebase Storage
+- `POST /api/gemini/chat/suspect` — AI suspect interrogation response
+- `POST /api/gemini/chat/officer` — AI officer/chief chat response
+- `POST /api/gemini/chat/partner` — AI partner intervention (good/bad cop)
+- `POST /api/gemini/chat/badcop-hint` — tactical hint after bad cop
+- `POST /api/gemini/chat/case-summary` — end-game narrative summary
+- `POST /api/gemini/case/generate` — generate full case from prompt
+- `POST /api/gemini/case/consistency` — AI consistency check
+- `POST /api/gemini/case/edit` — AI-driven case editing
+- `POST /api/gemini/image/*` — image generation, variants, pregeneration (8 endpoints)
+- `POST /api/gemini/tts` — text-to-speech audio generation
 - `GET /api/health` — health check (unauthenticated)
 - `GET /api-docs` — Swagger UI (unauthenticated)
 
@@ -156,7 +168,7 @@ If you don't already have a Firebase project, create one:
 
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Click **Create API key**
-3. Copy the key — you'll use it in the frontend env file
+3. Copy the key — you'll use it in the **backend** env file
 
 ### 5. Configure Environment Files
 
@@ -173,10 +185,7 @@ cp .env.example .env.local
 Edit `.env.local`:
 
 ```env
-# Gemini API Key (required for AI-powered game features)
-GEMINI_API_KEY=AIzaSy...your_key_here
-
-# Firebase Configuration (Auth only — DB/Storage go through backend)
+# Firebase Configuration (Auth only — DB/Storage/AI go through backend)
 VITE_FIREBASE_API_KEY=AIzaSy...your_firebase_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=your-project-id
@@ -187,7 +196,7 @@ VITE_FIREBASE_APP_ID=1:123456789012:web:abc123def456
 VITE_API_BASE_URL=http://localhost:4000
 ```
 
-> **Note:** Vite loads `.env.local` from the project root. Variables prefixed with `VITE_` are exposed to the browser; `GEMINI_API_KEY` is injected at build time via `vite.config.ts`.
+> **Note:** Vite loads `.env.local` from the project root. Variables prefixed with `VITE_` are exposed to the browser. All AI operations are handled by the backend — no Gemini API key is needed in the frontend.
 >
 > **LAN access:** You can keep `VITE_API_BASE_URL=http://localhost:4000` even when testing on a phone. The frontend automatically detects LAN access (e.g. `http://192.168.x.x:3000`) and rewrites API calls to use the correct host.
 
@@ -212,6 +221,9 @@ FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
 # Server Configuration
 PORT=4000
 CORS_ORIGIN=http://localhost:3000
+
+# Gemini API Key (server-side only — never expose to frontend)
+GEMINI_API_KEY=AIzaSy...your_gemini_api_key
 ```
 
 | Variable | Required | Default | Description |
@@ -222,6 +234,7 @@ CORS_ORIGIN=http://localhost:3000
 | `FIREBASE_STORAGE_BUCKET` | ✅ | — | Firebase Cloud Storage bucket name |
 | `PORT` | — | `4000` | Backend server port |
 | `CORS_ORIGIN` | — | `http://localhost:3000` | Allowed frontend origin for CORS (see below) |
+| `GEMINI_API_KEY` | ✅ | — | Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) |
 
 **CORS auto-detection:** The backend automatically handles CORS based on the `CORS_ORIGIN` value:
 
@@ -337,7 +350,7 @@ gcloud functions deploy detectiveml-api \
   --trigger-http \
   --allow-unauthenticated \
   --memory=512Mi \
-  --set-env-vars="FIREBASE_DATABASE_URL=https://YOUR_PROJECT-default-rtdb.firebaseio.com,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT.firebasestorage.app,CORS_ORIGIN=https://your-frontend-domain.com"
+  --set-env-vars="FIREBASE_DATABASE_URL=https://YOUR_PROJECT-default-rtdb.firebaseio.com,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT.firebasestorage.app,CORS_ORIGIN=https://your-frontend-domain.com,GEMINI_API_KEY=your-gemini-key"
 ```
 
 > **Note:** `--allow-unauthenticated` is correct here — the app handles its own authentication via Firebase ID tokens. GCP IAM-level auth is not needed.
@@ -349,6 +362,7 @@ Replace the environment variable values with your actual Firebase project detail
 | `FIREBASE_DATABASE_URL` | Your Firebase Realtime Database URL |
 | `FIREBASE_STORAGE_BUCKET` | Your Firebase Cloud Storage bucket name |
 | `CORS_ORIGIN` | Your production frontend URL (e.g. `https://detectiveml.com`) |
+| `GEMINI_API_KEY` | Your Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) |
 
 ### 3. Get the Function URL
 
@@ -411,7 +425,7 @@ If you see no cases on iOS Safari or a phone browser, make sure:
 The backend auto-detects dev vs production based on `CORS_ORIGIN`. In dev mode (localhost), all LAN IPs are allowed. If you're in production and seeing CORS errors, verify `CORS_ORIGIN` matches your deployed frontend URL exactly.
 
 ### Gemini AI features not working
-Ensure `GEMINI_API_KEY` is set in `.env.local` and is a valid key from [Google AI Studio](https://aistudio.google.com/apikey).
+Ensure `GEMINI_API_KEY` is set in `backend/.env` and is a valid key from [Google AI Studio](https://aistudio.google.com/apikey). The Gemini API key is now managed by the backend — it should **not** be in the frontend `.env.local`.
 
 ---
 
