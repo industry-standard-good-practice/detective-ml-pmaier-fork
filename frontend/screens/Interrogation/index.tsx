@@ -337,14 +337,18 @@ const Interrogation: React.FC<InterrogationProps> = ({
 
   const toggleEvidence = (item: Evidence | TimelineStatement) => {
     setSelectedEvidence(prev => {
-      const itemId = 'id' in item ? item.id : `ts-${(item as TimelineStatement).time}`;
+      const isTimeline = 'time' in item && 'statement' in item;
+      const itemId = isTimeline ? `ts-${(item as TimelineStatement).id || (item as TimelineStatement).time}` : (item as Evidence).id;
+      
       const exists = prev.some(ev => {
-        const evId = 'id' in ev ? ev.id : `ts-${(ev as TimelineStatement).time}`;
+        const checkIsTimeline = 'time' in ev && 'statement' in ev;
+        const evId = checkIsTimeline ? `ts-${(ev as TimelineStatement).id || (ev as TimelineStatement).time}` : (ev as Evidence).id;
         return evId === itemId;
       });
       if (exists) {
         return prev.filter(ev => {
-          const evId = 'id' in ev ? ev.id : `ts-${(ev as TimelineStatement).time}`;
+          const checkIsTimeline = 'time' in ev && 'statement' in ev;
+          const evId = checkIsTimeline ? `ts-${(ev as TimelineStatement).id || (ev as TimelineStatement).time}` : (ev as Evidence).id;
           return evId !== itemId;
         });
       }
@@ -353,9 +357,11 @@ const Interrogation: React.FC<InterrogationProps> = ({
   };
 
   const isEvidenceSelected = (item: Evidence | TimelineStatement) => {
-    const itemId = 'id' in item ? item.id : `ts-${(item as TimelineStatement).time}`;
+    const isTimeline = 'time' in item && 'statement' in item;
+    const itemId = isTimeline ? `ts-${(item as TimelineStatement).id || (item as TimelineStatement).time}` : (item as Evidence).id;
     return selectedEvidence.some(ev => {
-      const evId = 'id' in ev ? ev.id : `ts-${(ev as TimelineStatement).time}`;
+      const checkIsTimeline = 'time' in ev && 'statement' in ev;
+      const evId = checkIsTimeline ? `ts-${(ev as TimelineStatement).id || (ev as TimelineStatement).time}` : (ev as Evidence).id;
       return evId === itemId;
     });
   };
