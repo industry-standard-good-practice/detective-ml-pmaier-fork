@@ -371,7 +371,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const handleSaveEditedSuspect = async (newImageUrl: string, onProgress?: (current: number, total: number) => void) => {
     if (!activeSuspect) return;
     try {
-      const updatedPortraits = await generateEmotionalVariantsFromBase(newImageUrl, activeSuspect as any, draftCase.id, userId!, onProgress);
+      const updatedPortraits = await generateEmotionalVariantsFromBase(newImageUrl, activeSuspect as any, draftCase.id, userId!);
       handleSuspectChange(activeSuspect.id, 'portraits', updatedPortraits);
       setShowSuspectEditor(false);
     } catch (err) {
@@ -401,8 +401,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     try {
       const { regenerateSingleSuspect } = await import('../../services/geminiImages');
       const updatedChar = await regenerateSingleSuspect(
-        activeSuspect as any, draftCase.id, userId!, draftCase.type,
-        (progressMsg) => setLoadingState({ visible: true, message: progressMsg })
+        activeSuspect as any, draftCase.id, userId!, draftCase.type
       );
       if (selectedSuspectId === 'officer') {
         onUpdateDraft({ ...draftCase, officer: updatedChar as any });

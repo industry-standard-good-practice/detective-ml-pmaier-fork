@@ -442,7 +442,7 @@ const App: React.FC = () => {
             setGameState(prev => ({
                 ...prev,
                 chatHistory: { ...prev.chatHistory, [currentSuspectId]: [...(prev.chatHistory[currentSuspectId] || []), narratorMsg] },
-                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: examResponse.emotion }
+                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: examResponse.emotion as Emotion }
             }));
             
             setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete(currentSuspectId); return next; });
@@ -562,7 +562,7 @@ const App: React.FC = () => {
                 ...prev,
                 aggravationLevels: { ...prev.aggravationLevels, [currentSuspectId]: finalAgg },
                 sidekickComment: finalWhisper,
-                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion },
+                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion as Emotion },
                 chatHistory: { ...prev.chatHistory, [currentSuspectId]: newHistory },
                 timelineStatementsDiscovered: newTimelineStatements
             };
@@ -743,7 +743,7 @@ const App: React.FC = () => {
           ...prev,
           chatHistory: { ...prev.chatHistory, [currentSuspectId]: updatedHistory },
           aggravationLevels: { ...prev.aggravationLevels, [currentSuspectId]: newAgg },
-          suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion },
+          suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion as Emotion },
           timelineStatementsDiscovered: newTimelineStatements,
           // PERSIST SUGGESTIONS PER SUSPECT
           suspectSuggestions: { ...prev.suspectSuggestions, [currentSuspectId]: response.hints }
