@@ -1182,9 +1182,17 @@ const App: React.FC = () => {
     }
   };
 
+  const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
+
   const handleDeleteDraft = (caseId: string) => {
-    deleteLocalDraft(caseId);
+    setDraftToDelete(caseId);
+  };
+
+  const confirmDeleteDraft = () => {
+    if (!draftToDelete) return;
+    deleteLocalDraft(draftToDelete);
     setLocalDrafts(fetchLocalDrafts());
+    setDraftToDelete(null);
   };
 
   const handlePlayDraft = (caseData: CaseData) => {
@@ -1581,6 +1589,21 @@ const App: React.FC = () => {
             <ModalButtonRow>
               <CancelButton onClick={() => setMyCaseToDelete(null)}>[ Cancel ]</CancelButton>
               <ConfirmButton onClick={confirmDeleteMyCase}>[ DELETE PERMANENTLY ]</ConfirmButton>
+            </ModalButtonRow>
+          </ModalBox>
+        </Overlay>
+      )}
+
+      {draftToDelete && (
+        <Overlay>
+          <ModalBox>
+            <ModalTitle>⚠ DELETE DRAFT ⚠</ModalTitle>
+            <ModalText>
+              Are you sure you want to delete this draft? <strong>This cannot be undone.</strong>
+            </ModalText>
+            <ModalButtonRow>
+              <CancelButton onClick={() => setDraftToDelete(null)}>[ Cancel ]</CancelButton>
+              <ConfirmButton onClick={confirmDeleteDraft}>[ DELETE ]</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>
