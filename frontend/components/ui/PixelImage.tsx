@@ -13,7 +13,7 @@ export const PixelImage = styled.div<{ $src?: string; $size?: string }>`
   ${type.label}
   width: ${props => props.$size || '100%'};
   aspect-ratio: 1;
-  background-color: var(--color-border);
+  background-color: ${props => props.$src && props.$src !== 'PLACEHOLDER' ? 'var(--color-border)' : '#2a2a2a'};
   background-image: ${props => props.$src && props.$src !== 'PLACEHOLDER' ? `url(${props.$src})` : 'none'};
   background-size: cover;
   background-position: center;
@@ -22,8 +22,15 @@ export const PixelImage = styled.div<{ $src?: string; $size?: string }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-subtle);
+  color: #555;
+  font-size: 1.5rem;
   flex-shrink: 0;
+
+  /* Show ? when no image */
+  &:empty::after {
+    content: '?';
+    font-family: 'VT323', monospace;
+  }
 `;
 
 /** Smaller image slot for inline evidence previews */
@@ -31,7 +38,7 @@ export const ImageSlot = styled(PixelImage)`
   width: 60px;
   height: 60px;
   aspect-ratio: auto;
-  background-color: var(--color-bg);
+  background-color: ${props => props.$src && props.$src !== 'PLACEHOLDER' ? 'var(--color-bg)' : '#2a2a2a'};
   border-color: var(--color-border-strong);
   flex-direction: column;
   justify-content: flex-end;

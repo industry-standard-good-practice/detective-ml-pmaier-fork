@@ -57,7 +57,7 @@ const CaseImage = styled.div<{ $src?: string }>`
   aspect-ratio: 1 / 1;
   max-height: calc(80vh - 200px);
   max-width: calc(80vh - 200px);
-  background-color: #080808;
+  background-color: ${props => props.$src && props.$src !== 'PLACEHOLDER' ? '#080808' : '#2a2a2a'};
   background-image: ${props => props.$src && props.$src !== 'PLACEHOLDER' ? `url(${props.$src})` : 'none'};
   background-size: cover;
   background-position: center;
@@ -66,9 +66,9 @@ const CaseImage = styled.div<{ $src?: string }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-border);
-  ${type.small}
-  text-transform: uppercase;
+  color: #555;
+  font-family: 'VT323', monospace;
+  font-size: 3rem;
   flex-shrink: 0;
 `;
 
@@ -222,7 +222,7 @@ const CaseCardRenderer: React.FC<CaseCardRendererProps> = ({
       $theme={theme}
     >
       <CaseImage $src={c.heroImageUrl || c.initialEvidence?.[0]?.imageUrl}>
-        {!(c.heroImageUrl || c.initialEvidence?.[0]?.imageUrl) && "[ NO IMAGE ]"}
+        {!(c.heroImageUrl || c.initialEvidence?.[0]?.imageUrl) && "?"}
       </CaseImage>
       <CardTextContent>
         <CardTitle $color={colors.bright}>{c.title || "[ NO TITLE ]"}</CardTitle>

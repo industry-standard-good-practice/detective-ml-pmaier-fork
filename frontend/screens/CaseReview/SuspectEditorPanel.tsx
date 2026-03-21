@@ -5,7 +5,8 @@ import styled from 'styled-components';
 import { CaseData, Suspect, Emotion, Evidence, Relationship, TimelineEvent } from '../../types';
 import { TTS_VOICES } from '../../constants';
 import EvidenceEditor from '@/components/EvidenceEditor';
-import SuspectPortrait from '@/components/SuspectPortrait';
+import SuspectPortrait, { type ImageLoadingState } from '@/components/SuspectPortrait';
+import { Dropdown } from '@/components/ui';
 
 // --- Styled Components ---
 
@@ -489,97 +490,6 @@ const NarrowInputGroup = styled(InputGroup)`
   width: 80px;
 `;
 
-/* ─── Custom Voice Dropdown (matches evidence ownership dropdown) ─── */
-
-const VoiceDropdownWrapper = styled.div`
-  position: relative;
-  flex: 1;
-  min-width: 0;
-`;
-
-const VoiceDropdownTrigger = styled.button`
-  ${type.body}
-  background: var(--color-surface-raised);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  padding: var(--space);
-  padding-right: calc(var(--space) * 3);
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  position: relative;
-  text-transform: none;
-  font-family: inherit;
-  box-sizing: border-box;
-
-  &::after {
-    content: '▼';
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    ${type.xs}
-    color: var(--color-text-dim);
-    pointer-events: none;
-  }
-
-  &:hover {
-    border-color: var(--color-text-subtle);
-  }
-`;
-
-const VoiceDropdownMenu = styled.div`
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  min-width: 200px;
-  max-height: 250px;
-  overflow-y: auto;
-  z-index: 50;
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
-
-  &::-webkit-scrollbar { width: 6px; }
-  &::-webkit-scrollbar-thumb { background: var(--color-border); }
-`;
-
-const VoiceDropdownOption = styled.button<{ $active?: boolean }>`
-  ${type.body}
-  background: ${props => props.$active ? 'var(--color-accent-green-dark)' : 'transparent'};
-  color: ${props => props.$active ? 'var(--color-accent-green)' : 'var(--color-text-muted)'};
-  border: none;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding: var(--space) calc(var(--space) * 2);
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space);
-  text-transform: none;
-  font-family: inherit;
-
-  &:last-child { border-bottom: none; }
-
-  &:hover {
-    background: var(--color-border-subtle);
-    color: var(--color-text-bright);
-  }
-`;
-
-const VoiceActiveDot = styled.span`
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-accent-green);
-  flex-shrink: 0;
-`;
-
 const PreviewButton = styled.button`
   ${type.body}
   padding: var(--space) calc(var(--space) * 1.5);
@@ -608,44 +518,23 @@ const AccentInput = styled.input`
   &:focus { border-color: var(--color-text-subtle); outline: none; }
 `;
 
+/* ─── Voice Dropdown (using reusable Dropdown component) ─── */
+
 const VoiceDropdown: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  const currentVoice = TTS_VOICES.find(v => v.name === value);
-  const label = !currentVoice || value === 'None'
-    ? 'No Voice'
-    : `${currentVoice.name} (${currentVoice.gender})`;
+  const options = TTS_VOICES.map(v => ({
+    value: v.name,
+    label: v.name === 'None' ? 'No Voice (Silent)' : `${v.name} (${v.gender})`,
+  }));
 
   return (
-    <VoiceDropdownWrapper ref={ref}>
-      <VoiceDropdownTrigger onClick={() => setOpen(!open)} title="TTS Voice">
-        {label}
-      </VoiceDropdownTrigger>
-      {open && (
-        <VoiceDropdownMenu>
-          {TTS_VOICES.map(v => (
-            <VoiceDropdownOption
-              key={v.name}
-              $active={value === v.name}
-              onClick={() => { onChange(v.name); setOpen(false); }}
-            >
-              {value === v.name && <VoiceActiveDot />}
-              {v.name === 'None' ? 'No Voice (Silent)' : `${v.name} (${v.gender})`}
-            </VoiceDropdownOption>
-          ))}
-        </VoiceDropdownMenu>
-      )}
-    </VoiceDropdownWrapper>
+    <Dropdown
+      options={options}
+      value={value}
+      onChange={onChange}
+      placeholder="No Voice"
+      title="TTS Voice"
+      flex
+    />
   );
 };
 
@@ -741,6 +630,7 @@ interface SuspectEditorPanelProps {
   setSelectedSuspectId: (id: string | null) => void;
   loadingVisible: boolean;
   isPreviewingVoice: boolean;
+  imageLoadingStates: Record<string, ImageLoadingState>;
   onSuspectChange: (id: string, field: string, value: any) => void;
   onCaseChange: (field: string, value: any) => void;
   onAddSuspect: () => void;
@@ -768,6 +658,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
   setSelectedSuspectId,
   loadingVisible,
   isPreviewingVoice,
+  imageLoadingStates,
   onSuspectChange,
   onCaseChange,
   onAddSuspect,
@@ -889,7 +780,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
           $selected={selectedSuspectId === 'officer'}
           onClick={() => setSelectedSuspectId('officer')}
         >
-          <SuspectPortrait suspect={draftCase.officer as any} size={50} />
+          <SuspectPortrait suspect={draftCase.officer as any} size={50} imageLoadingState={imageLoadingStates['officer']} />
           <SuspectInfo>
             <SuspectName>{draftCase.officer.name} (CHIEF)</SuspectName>
             <SuspectRole>{draftCase.officer.role}</SuspectRole>
@@ -900,7 +791,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
           $selected={selectedSuspectId === 'partner'}
           onClick={() => setSelectedSuspectId('partner')}
         >
-          <SuspectPortrait suspect={draftCase.partner as any} size={50} />
+          <SuspectPortrait suspect={draftCase.partner as any} size={50} imageLoadingState={imageLoadingStates['partner']} />
           <SuspectInfo>
             <SuspectName>{draftCase.partner.name} (PARTNER)</SuspectName>
             <SuspectRole>{draftCase.partner.role}</SuspectRole>
@@ -913,7 +804,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
             $selected={s.id === selectedSuspectId}
             onClick={() => setSelectedSuspectId(s.id)}
           >
-            <SuspectPortrait suspect={s} size={50} />
+            <SuspectPortrait suspect={s} size={50} imageLoadingState={imageLoadingStates[s.id]} />
             <SuspectInfo>
               <SuspectName>{s.name}</SuspectName>
               <SuspectRole>{s.role}</SuspectRole>
@@ -951,24 +842,25 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
               <SuspectPortrait
                 suspect={activeSuspect as any}
                 style={{ width: '100%', height: 'auto', aspectRatio: '1' }}
+                imageLoadingState={imageLoadingStates[selectedSuspectId || '']}
               />
               <PortraitBtnGrid>
-                <RandomizeButton onClick={onRerollPortrait} disabled={loadingVisible}>
+                <RandomizeButton onClick={onRerollPortrait} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
                   REROLL
                 </RandomizeButton>
                 <EditPortraitButton
                   onClick={onShowSuspectEditor}
-                  disabled={loadingVisible}
+                  disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}
                 >
                   {activeSuspect.portraits?.[Emotion.NEUTRAL] ? 'EDIT' : 'CREATE'}
                 </EditPortraitButton>
-                <UploadButton onClick={onTriggerUpload} disabled={loadingVisible}>
+                <UploadButton onClick={onTriggerUpload} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
                   UPLOAD REF
                 </UploadButton>
-                <PasteButton onClick={() => onPasteFromClipboard(onProcessSuspectImage)} disabled={loadingVisible}>
+                <PasteButton onClick={() => onPasteFromClipboard(onProcessSuspectImage)} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
                   PASTE
                 </PasteButton>
-                <CameraButton onClick={onStartCamera} disabled={loadingVisible}>
+                <CameraButton onClick={onStartCamera} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
                   TAKE PHOTO
                 </CameraButton>
               </PortraitBtnGrid>

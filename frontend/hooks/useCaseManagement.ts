@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { GameState, ScreenState, CaseData, CaseStats } from '../types';
-import { generateCaseFromPrompt, pregenerateCaseImages, calculateDifficulty } from '../services/geminiService';
+import { generateCaseFromPrompt, calculateDifficulty } from '../services/geminiService';
 import { publishCase, deleteCase, updateCase, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, fetchCommunityCases, fetchUserCases, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult } from '../services/persistence';
 import { formatAuthorName } from '../utils/timeUtils';
 import { User } from 'firebase/auth';
@@ -93,10 +93,9 @@ export const useCaseManagement = ({
         newCase.authorId = user.uid;
         newCase.authorDisplayName = formatAuthorName(user.displayName);
         newCase.createdAt = Date.now();
-        setGenerationStatus("Generating suspect portraits and evidence... (0%)");
-        await pregenerateCaseImages(newCase, (msg) => setGenerationStatus(msg), user.uid);
         setGenerationStatus("");
         
+        // Save immediately — images will be generated in the background on the edit screen
         saveLocalDraft(newCase);
         setLocalDrafts(fetchLocalDrafts());
         

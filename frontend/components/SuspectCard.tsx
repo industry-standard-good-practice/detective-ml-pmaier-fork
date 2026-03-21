@@ -4,7 +4,7 @@ import { type } from '../theme';
 import styled, { css, keyframes } from 'styled-components';
 import Atropos from 'atropos/react';
 import { Suspect, Emotion } from '../types';
-import { getPixelArtUrl, getSuspectColor, getSuspectBackingColor, getDisplayStatus } from '../services/gameHelpers';
+import { getSuspectColor, getSuspectBackingColor, getDisplayStatus } from '../services/gameHelpers';
 import SuspectPortrait from './SuspectPortrait';
 
 interface CardWrapperProps {

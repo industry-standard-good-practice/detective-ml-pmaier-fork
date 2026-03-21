@@ -7,7 +7,8 @@ import { CaseData, Suspect, Emotion, Evidence } from '../../types';
 import { TTS_VOICES, getRandomVoice } from '../../constants';
 import { generateTTS } from '../../services/geminiTTS';
 import { playAudioFromUrl } from '../../services/audioPlayer';
-import { pregenerateCaseImages, generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, generateEmotionalVariantsFromBase } from '../../services/geminiService';
+import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, generateEmotionalVariantsFromBase } from '../../services/geminiService';
+import { type ImageLoadingState } from '@/components/SuspectPortrait';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
 import ImageEditorModal from '@/components/ImageEditorModal';
@@ -214,6 +215,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // --- PER-CHARACTER IMAGE LOADING STATES ---
+  const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, ImageLoadingState>>({});
+  const bgGenRunningRef = useRef(false);
+  // Track the latest draft for background generation (avoids stale closures)
+  const latestDraftRef = useRef<CaseData>(draftCase);
+  useEffect(() => {
+    latestDraftRef.current = draftCase;
+  }, [draftCase]);
+
   const saveBaselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
   const baselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(() => {
@@ -246,6 +256,153 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       onUpdateDraft({ ...draftCase, difficulty: newDifficulty });
     }
   }, [draftCase.suspects, draftCase.initialEvidence, draftCase.partnerCharges]);
+
+  // --- AUTO-GENERATE IMAGES IN BACKGROUND FOR FRESH CASES ---
+  useEffect(() => {
+    if (bgGenRunningRef.current || !userId) return;
+    // Check if this is a fresh case with no portraits at all
+    const hasAnyPortraits = draftCase.suspects?.some(s => s.portraits?.[Emotion.NEUTRAL] && s.portraits[Emotion.NEUTRAL] !== 'PLACEHOLDER');
+    if (hasAnyPortraits) return;
+    // Also skip if all suspects already have portraits (editing existing case)
+    if (!draftCase.suspects?.length) return;
+
+    bgGenRunningRef.current = true;
+    autoGenerateImages();
+  }, []); // Only run on mount
+
+  const autoGenerateImages = async () => {
+    if (!userId) return;
+    const draft = latestDraftRef.current;
+    const allCharIds: string[] = [];
+    draft.suspects?.forEach(s => allCharIds.push(s.id));
+    if (draft.officer) allCharIds.push('officer');
+    if (draft.partner) allCharIds.push('partner');
+    // Also queue evidence
+    const evidenceIds: string[] = [];
+    draft.initialEvidence?.forEach(ev => evidenceIds.push(`ev-${ev.id}`));
+    draft.suspects?.forEach(s => {
+      if (!s.isDeceased) s.hiddenEvidence?.forEach(ev => evidenceIds.push(`ev-${ev.id}`));
+    });
+
+    // Mark all as 'waiting'
+    const initialStates: Record<string, ImageLoadingState> = {};
+    allCharIds.forEach(id => { initialStates[id] = 'waiting'; });
+    evidenceIds.forEach(id => { initialStates[id] = 'waiting'; });
+    setImageLoadingStates(initialStates);
+
+    // --- Phase 1: Generate suspect portraits sequentially ---
+    for (const s of (draft.suspects || [])) {
+      setImageLoadingStates(prev => ({ ...prev, [s.id]: 'generating' }));
+      try {
+        const { regenerateSingleSuspect } = await import('../../services/geminiImages');
+        const updated = await regenerateSingleSuspect(s, draft.id, userId, draft.type || 'Noir');
+        // Apply to draft via ref to get latest state
+        const currentDraft = latestDraftRef.current;
+        const newSuspects = currentDraft.suspects.map(cs => {
+          if (cs.id === updated.id) {
+            const result = { ...cs, portraits: (updated as any).portraits || cs.portraits };
+            if (cs.isDeceased && (updated as any).hiddenEvidence) {
+              const updatedEvidence = (updated as any).hiddenEvidence;
+              result.hiddenEvidence = cs.hiddenEvidence.map((ev, j) => {
+                if (updatedEvidence[j]?.imageUrl) return { ...ev, imageUrl: updatedEvidence[j].imageUrl };
+                return ev;
+              });
+            }
+            return result;
+          }
+          return cs;
+        });
+        onUpdateDraft({ ...currentDraft, suspects: newSuspects });
+      } catch (e) {
+        console.error(`[BgGen] Failed portrait for ${s.name}:`, e);
+      }
+      setImageLoadingStates(prev => ({ ...prev, [s.id]: null }));
+    }
+
+    // --- Phase 1b: Officer + Partner in parallel ---
+    const supportTasks: Promise<void>[] = [];
+    if (draft.officer) {
+      setImageLoadingStates(prev => ({ ...prev, officer: 'generating' }));
+      supportTasks.push((async () => {
+        try {
+          const { regenerateSingleSuspect } = await import('../../services/geminiImages');
+          const updated = await regenerateSingleSuspect(draft.officer as any, draft.id, userId, draft.type || 'Noir');
+          const currentDraft = latestDraftRef.current;
+          onUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits: (updated as any).portraits || currentDraft.officer.portraits } });
+        } catch (e) {
+          console.error('[BgGen] Failed officer portrait:', e);
+        }
+        setImageLoadingStates(prev => ({ ...prev, officer: null }));
+      })());
+    }
+    if (draft.partner) {
+      setImageLoadingStates(prev => ({ ...prev, partner: 'generating' }));
+      supportTasks.push((async () => {
+        try {
+          const { regenerateSingleSuspect } = await import('../../services/geminiImages');
+          const updated = await regenerateSingleSuspect(draft.partner as any, draft.id, userId, draft.type || 'Noir');
+          const currentDraft = latestDraftRef.current;
+          onUpdateDraft({ ...currentDraft, partner: { ...currentDraft.partner, portraits: (updated as any).portraits || currentDraft.partner.portraits } });
+        } catch (e) {
+          console.error('[BgGen] Failed partner portrait:', e);
+        }
+        setImageLoadingStates(prev => ({ ...prev, partner: null }));
+      })());
+    }
+    await Promise.all(supportTasks);
+
+    // --- Phase 2: Generate evidence images ---
+    for (const ev of (latestDraftRef.current.initialEvidence || [])) {
+      const stateKey = `ev-${ev.id}`;
+      setImageLoadingStates(prev => ({ ...prev, [stateKey]: 'generating' }));
+      try {
+        const url = await generateEvidenceImage(ev, draft.id, userId);
+        if (url) {
+          const currentDraft = latestDraftRef.current;
+          const newInit = currentDraft.initialEvidence.map(e => e.id === ev.id ? { ...e, imageUrl: url } : e);
+          onUpdateDraft({ ...currentDraft, initialEvidence: newInit });
+        }
+      } catch (e) {
+        console.error(`[BgGen] Failed evidence ${ev.title}:`, e);
+      }
+      setImageLoadingStates(prev => ({ ...prev, [stateKey]: null }));
+    }
+
+    for (const s of (latestDraftRef.current.suspects || [])) {
+      if (s.isDeceased) continue;
+      for (const ev of (s.hiddenEvidence || [])) {
+        if (ev.imageUrl) continue;
+        const stateKey = `ev-${ev.id}`;
+        setImageLoadingStates(prev => ({ ...prev, [stateKey]: 'generating' }));
+        try {
+          const url = await generateEvidenceImage(ev, draft.id, userId);
+          if (url) {
+            const currentDraft = latestDraftRef.current;
+            const newSuspects = currentDraft.suspects.map(cs =>
+              cs.id === s.id ? { ...cs, hiddenEvidence: cs.hiddenEvidence.map(e => e.id === ev.id ? { ...e, imageUrl: url } : e) } : cs
+            );
+            onUpdateDraft({ ...currentDraft, suspects: newSuspects });
+          }
+        } catch (e) {
+          console.error(`[BgGen] Failed hidden evidence ${ev.title}:`, e);
+        }
+        setImageLoadingStates(prev => ({ ...prev, [stateKey]: null }));
+      }
+    }
+
+    // --- Phase 3: Set hero image ---
+    const finalDraft = latestDraftRef.current;
+    const victim = finalDraft.suspects?.find(s => s.isDeceased);
+    if (victim?.portraits?.[Emotion.NEUTRAL] && !finalDraft.heroImageUrl) {
+      onUpdateDraft({ ...finalDraft, heroImageUrl: victim.portraits[Emotion.NEUTRAL] });
+    } else if (finalDraft.initialEvidence?.[0]?.imageUrl && !finalDraft.heroImageUrl) {
+      onUpdateDraft({ ...finalDraft, heroImageUrl: finalDraft.initialEvidence[0].imageUrl });
+    }
+
+    setImageLoadingStates({});
+    bgGenRunningRef.current = false;
+    toast.success('All images generated!');
+  };
 
   const activeSuspect = selectedSuspectId === 'officer' ? draftCase.officer :
     selectedSuspectId === 'partner' ? draftCase.partner :
@@ -291,19 +448,22 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   };
 
   const handleRerollEvidence = async (ev: Evidence, source: 'initial' | 'hidden', suspectId?: string) => {
-    setLoadingState({ visible: true, message: `Rerolling evidence image: ${ev.title}...` });
+    const stateKey = `ev-${ev.id}`;
+    setImageLoadingStates(prev => ({ ...prev, [stateKey]: 'generating' }));
     const updateImage = (url?: string) => {
       if (source === 'initial') {
-        const newInit = (draftCase.initialEvidence || []).map(e => e.id === ev.id ? { ...e, imageUrl: url } : e);
-        onUpdateDraft({ ...draftCase, initialEvidence: newInit });
+        const currentDraft = latestDraftRef.current;
+        const newInit = (currentDraft.initialEvidence || []).map(e => e.id === ev.id ? { ...e, imageUrl: url } : e);
+        onUpdateDraft({ ...currentDraft, initialEvidence: newInit });
       } else if (suspectId) {
-        const newSuspects = (draftCase.suspects || []).map(s => {
+        const currentDraft = latestDraftRef.current;
+        const newSuspects = (currentDraft.suspects || []).map(s => {
           if (s.id === suspectId) {
             return { ...s, hiddenEvidence: (s.hiddenEvidence || []).map(e => e.id === ev.id ? { ...e, imageUrl: url } : e) };
           }
           return s;
         });
-        onUpdateDraft({ ...draftCase, suspects: newSuspects });
+        onUpdateDraft({ ...currentDraft, suspects: newSuspects });
       }
     };
     updateImage(undefined);
@@ -323,7 +483,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       console.error("Evidence reroll failed", e);
       toast.error(`Evidence image reroll failed: ${e?.message || 'Unknown error'}`);
     }
-    setLoadingState({ visible: false, message: '' });
+    setImageLoadingStates(prev => ({ ...prev, [stateKey]: null }));
   };
 
   const handleTransferEvidence = (evidence: Evidence, fromOwner: string, toOwner: string) => {
@@ -350,22 +510,58 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   };
 
   const handleRetryAI = async () => {
-    if (loadingState.visible) return;
-    setLoadingState({ visible: true, message: "Initializing AI protocols..." });
-    const clone: CaseData = JSON.parse(JSON.stringify(draftCase));
-    clone.suspects.forEach(s => {
+    if (bgGenRunningRef.current) return;
+    bgGenRunningRef.current = true;
+    // Re-trigger background image generation for characters with broken/missing images
+    const draft = latestDraftRef.current;
+    const charIds: string[] = [];
+    draft.suspects?.forEach(s => {
       const neutral = s.portraits?.[Emotion.NEUTRAL];
-      if (!neutral || neutral.includes('dicebear')) s.portraits = {};
+      if (!neutral || neutral.includes('dicebear')) charIds.push(s.id);
     });
-    try {
-      await pregenerateCaseImages(clone, (msg) => setLoadingState({ visible: true, message: msg }), userId!);
-      onUpdateDraft(clone);
-    } catch (e: any) {
-      console.error("Retry failed", e);
-      toast.error(`Image regeneration failed: ${e?.message || 'Unknown error. Try again.'}`);
-    } finally {
-      setLoadingState({ visible: false, message: '' });
+    if (!draft.officer?.portraits?.[Emotion.NEUTRAL]) charIds.push('officer');
+    if (!draft.partner?.portraits?.[Emotion.NEUTRAL]) charIds.push('partner');
+
+    if (charIds.length === 0) {
+      toast('All portraits already generated!');
+      bgGenRunningRef.current = false;
+      return;
     }
+
+    // Mark all as waiting
+    const states: Record<string, ImageLoadingState> = {};
+    charIds.forEach(id => { states[id] = 'waiting'; });
+    setImageLoadingStates(prev => ({ ...prev, ...states }));
+
+    for (const charId of charIds) {
+      setImageLoadingStates(prev => ({ ...prev, [charId]: 'generating' }));
+      try {
+        const currentDraft = latestDraftRef.current;
+        let char: any;
+        if (charId === 'officer') char = currentDraft.officer;
+        else if (charId === 'partner') char = currentDraft.partner;
+        else char = currentDraft.suspects?.find(s => s.id === charId);
+        if (!char) continue;
+
+        const { regenerateSingleSuspect } = await import('../../services/geminiImages');
+        const updated = await regenerateSingleSuspect(char, currentDraft.id, userId!, currentDraft.type || 'Noir');
+
+        const freshDraft = latestDraftRef.current;
+        if (charId === 'officer') {
+          onUpdateDraft({ ...freshDraft, officer: { ...freshDraft.officer, portraits: (updated as any).portraits || freshDraft.officer.portraits } });
+        } else if (charId === 'partner') {
+          onUpdateDraft({ ...freshDraft, partner: { ...freshDraft.partner, portraits: (updated as any).portraits || freshDraft.partner.portraits } });
+        } else {
+          const newSuspects = freshDraft.suspects.map(s => s.id === charId ? { ...s, portraits: (updated as any).portraits || s.portraits } : s);
+          onUpdateDraft({ ...freshDraft, suspects: newSuspects });
+        }
+      } catch (e) {
+        console.error(`[RetryAI] Failed for ${charId}:`, e);
+      }
+      setImageLoadingStates(prev => ({ ...prev, [charId]: null }));
+    }
+    bgGenRunningRef.current = false;
+    toast.success('Image regeneration complete!');
   };
 
   const handleSaveEditedSuspect = async (newImageUrl: string, onProgress?: (current: number, total: number) => void) => {
@@ -397,7 +593,8 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
   const handleRerollPortrait = async () => {
     if (!activeSuspect) return;
-    setLoadingState({ visible: true, message: "Generating base portrait..." });
+    const charId = selectedSuspectId!;
+    setImageLoadingStates(prev => ({ ...prev, [charId]: 'generating' }));
     try {
       const { regenerateSingleSuspect } = await import('../../services/geminiImages');
       const updatedChar = await regenerateSingleSuspect(
@@ -417,18 +614,19 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       toast.error(`Portrait generation failed: ${e?.message || 'Unknown error'}`);
       handleSuspectChange(activeSuspect.id, 'avatarSeed', Math.floor(Math.random() * 999999));
     } finally {
-      setLoadingState({ visible: false, message: '' });
+      setImageLoadingStates(prev => ({ ...prev, [charId]: null }));
     }
   };
 
   const processSuspectImage = async (base64: string) => {
     if (!activeSuspect) return;
+    const charId = selectedSuspectId!;
+    setImageLoadingStates(prev => ({ ...prev, [charId]: 'generating' }));
     try {
-      setLoadingState({ visible: true, message: "Converting photo to pixel art..." });
       const { generateSuspectFromUpload } = await import('../../services/geminiImages');
       const updatedChar = await generateSuspectFromUpload(
         activeSuspect as any, base64, draftCase.id, userId!,
-        (progressMsg) => setLoadingState({ visible: true, message: progressMsg })
+        () => {} // progress not shown in overlay anymore
       );
       if (selectedSuspectId === 'officer') {
         onUpdateDraft({ ...draftCase, officer: updatedChar as any });
@@ -438,11 +636,12 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         const newSuspects = draftCase.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
         onUpdateDraft({ ...draftCase, suspects: newSuspects });
       }
+      toast.success(`Image uploaded for ${activeSuspect.name}!`);
     } catch (err: any) {
       console.error(err);
       toast.error(`Image upload failed: ${err?.message || 'Unknown error'}`);
     } finally {
-      setLoadingState({ visible: false, message: '' });
+      setImageLoadingStates(prev => ({ ...prev, [charId]: null }));
     }
   };
 
@@ -450,7 +649,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     if (!e.target.files || !e.target.files[0]) return;
     const file = e.target.files[0];
     const reader = new FileReader();
-    setLoadingState({ visible: true, message: "Reading file..." });
     reader.onload = (event) => {
       if (!event.target?.result) return;
       processSuspectImage(event.target.result as string);
@@ -739,7 +937,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       {showHeroEditor && (
         <ImageEditorModal
           title="Generate Hero Image"
-          initialImageUrl={draftCase.heroImageUrl || 'https://picsum.photos/seed/detective/800/450'}
+          initialImageUrl={draftCase.heroImageUrl || undefined}
           onClose={() => setShowHeroEditor(false)}
           onSave={handleSaveHeroImage}
           aspectRatio="16:9"
@@ -782,6 +980,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         setSelectedSuspectId={setSelectedSuspectId}
         loadingVisible={loadingState.visible}
         isPreviewingVoice={isPreviewingVoice}
+        imageLoadingStates={imageLoadingStates}
         onSuspectChange={handleSuspectChange}
         onCaseChange={handleCaseChange}
         onAddSuspect={handleAddSuspect}

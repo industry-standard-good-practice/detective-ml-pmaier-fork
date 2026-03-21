@@ -4,6 +4,7 @@ import { type } from '../../theme';
 import styled from 'styled-components';
 import { CaseData, Emotion, Evidence, TimelineEvent } from '../../types';
 import EvidenceEditor from '@/components/EvidenceEditor';
+import { Dropdown } from '@/components/ui';
 
 // --- Styled Components ---
 
@@ -372,20 +373,6 @@ const HeroModeButton = styled(SmallButton)`
   flex: 1;
 `;
 
-const StyledSelect = styled.select`
-  background-color: #111;
-  color: #fff;
-  border: 1px solid #444;
-  padding: var(--space);
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 10px;
-  padding-right: calc(var(--space) * 4);
-`;
-
 const FlexSmallButton = styled(SmallButton)`
   flex: 1;
 `;
@@ -702,33 +689,30 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
               </FlexRow>
 
               {heroMode === 'suspect' && (
-                <StyledSelect
-                  onChange={(e) => {
-                    const s = draftCase.suspects?.find(x => x.id === e.target.value);
-                    if (s?.portraits?.[Emotion.NEUTRAL]) onCaseChange('heroImageUrl', s.portraits[Emotion.NEUTRAL]);
-                  }}
-                  value={draftCase.suspects?.find(s => s.portraits?.[Emotion.NEUTRAL] === draftCase.heroImageUrl)?.id || ''}
-                >
-                  <option value="">Select a suspect...</option>
-                  {(draftCase.suspects || []).map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                  ))}
-                </StyledSelect>
+                <Dropdown
+                  options={(draftCase.suspects || []).map(s => ({
+                    value: s.portraits?.[Emotion.NEUTRAL] || s.id,
+                    label: `${s.name} (${s.role})`,
+                  }))}
+                  value={draftCase.heroImageUrl || ''}
+                  onChange={(url) => onCaseChange('heroImageUrl', url)}
+                  placeholder="Select a suspect..."
+                />
               )}
 
               {heroMode === 'evidence' && (
-                <StyledSelect
-                  onChange={(e) => {
-                    const ev = [...draftCase.initialEvidence, ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])].find(x => x.id === e.target.value);
-                    if (ev?.imageUrl) onCaseChange('heroImageUrl', ev.imageUrl);
-                  }}
-                  value={[...draftCase.initialEvidence, ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])].find(ev => ev.imageUrl === draftCase.heroImageUrl)?.id || ''}
-                >
-                  <option value="">Select evidence...</option>
-                  {[...(draftCase.initialEvidence || []), ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])].map(ev => (
-                    <option key={ev.id} value={ev.id}>{ev.title}</option>
-                  ))}
-                </StyledSelect>
+                <Dropdown
+                  options={[
+                    ...(draftCase.initialEvidence || []),
+                    ...(draftCase.suspects?.flatMap(s => s.hiddenEvidence || []) || [])
+                  ].map(ev => ({
+                    value: ev.imageUrl || ev.id,
+                    label: ev.title,
+                  }))}
+                  value={draftCase.heroImageUrl || ''}
+                  onChange={(url) => onCaseChange('heroImageUrl', url)}
+                  placeholder="Select evidence..."
+                />
               )}
 
               {heroMode === 'custom' && (

@@ -18,3 +18,6 @@ export { PixelImage, ImageSlot } from './PixelImage';
 export { ProgressBar } from './ProgressBar';
 
 export { Select } from './Select';
+
+export { default as Dropdown } from './Dropdown';
+export type { DropdownOption, DropdownProps } from './Dropdown';

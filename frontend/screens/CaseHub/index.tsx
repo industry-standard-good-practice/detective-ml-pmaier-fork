@@ -4,7 +4,6 @@ import { type } from '../../theme';
 import styled from 'styled-components';
 import { LayoutGroup } from 'framer-motion';
 import { CaseData, ScreenState, ChatMessage, Evidence, Emotion } from '../../types';
-import { getPixelArtUrl } from '../../services/gameHelpers';
 import SuspectCardDock from '@/components/SuspectCardDock';
 import { useOnboarding, OnboardingStep } from '../../contexts/OnboardingContext';
 
@@ -322,7 +321,7 @@ const CaseHub: React.FC<CaseHubProps> = ({
 
   const officerName = caseData.officer?.name || "Chief";
   const officerRole = caseData.officer?.role || "Police Chief";
-  const officerPortrait = caseData.officer?.portraits?.[Emotion.NEUTRAL] || getPixelArtUrl('police-chief', 60);
+  const officerPortrait = caseData.officer?.portraits?.[Emotion.NEUTRAL] || '';
 
   return (
     <HubContainer>

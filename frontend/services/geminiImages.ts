@@ -6,7 +6,6 @@
  * progress reporting during case creation.
  */
 import { Suspect, CaseData, Emotion, Evidence, SupportCharacter } from "../types";
-import { getPixelArtUrl } from "./gameHelpers";
 import { geminiPost } from "./backendGemini";
 
 // --- CLIENT-SIDE PORTRAIT LOOKUP (no Gemini call) ---
@@ -42,13 +41,8 @@ export const getSuspectPortrait = async (suspect: Suspect, emotion: Emotion, agg
         return suspect.portraits[Emotion.NEUTRAL];
     }
 
-    // 4. Dicebear Procedural Fallback (for non-AI cases or total failure)
-    let seed = suspect.avatarSeed;
-    if (emotion === Emotion.ANGRY || emotion === Emotion.DEFENSIVE || emotion === Emotion.ARROGANT || aggravation > 50) seed += 1;
-    if (emotion === Emotion.HAPPY || emotion === Emotion.CONTENT || emotion === Emotion.SLY) seed += 2;
-    if (emotion === Emotion.NERVOUS || emotion === Emotion.SAD || emotion === Emotion.SURPRISED) seed += 3;
-
-    return getPixelArtUrl(seed, 300);
+    // 4. No portrait available — return null (UI shows gray placeholder with "?")
+    return null;
 };
 
 // --- BACKEND-DELEGATED IMAGE FUNCTIONS ---

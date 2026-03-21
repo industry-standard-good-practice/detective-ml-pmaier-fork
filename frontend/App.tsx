@@ -836,11 +836,9 @@ const App: React.FC = () => {
         newCase.authorId = user.uid;
         newCase.authorDisplayName = formatAuthorName(user.displayName);
         newCase.createdAt = Date.now();
-        setGenerationStatus("Generating suspect portraits and evidence... (0%)");
-        await pregenerateCaseImages(newCase, (msg) => setGenerationStatus(msg), user.uid);
         setGenerationStatus("");
         
-        // Save as local draft
+        // Save immediately — images will be generated in the background on the edit screen
         saveLocalDraft(newCase);
         setLocalDrafts(fetchLocalDrafts());
         

@@ -252,10 +252,11 @@ const BriefingWidget = styled.div`
     border-bottom: 1px solid var(--color-border); padding-bottom: var(--space);
   }
   p {
-    margin: 0; ${type.bodyLg} line-height: 1.6;
+    margin: 0; ${type.h3} line-height: 1.4;
     color: var(--color-text); font-family: 'VT323', monospace;
+    text-transform: none;
   }
-  .tags { display: flex; gap: var(--space); flex-wrap: wrap; }
+  .tags { display: flex; gap: var(--space); flex-wrap: wrap; padding-top: var(--space); }
 `;
 
 const Tag = styled.span<{ $color?: string }>`
@@ -419,15 +420,13 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
           </EvidenceBoard>
 
           <SidePanel>
-            <BriefingWidget>
-              <div id="mission-briefing">
-                <h3>Mission Briefing</h3>
-                <div className="tags">
-                  <Tag>{caseData.type}</Tag>
-                  <Tag $color={getDiffColor(caseData.difficulty)}>{caseData.difficulty}</Tag>
-                </div>
-                <p>{caseData.description}</p>
+            <BriefingWidget id="mission-briefing">
+              <h3>Mission Briefing</h3>
+              <div className="tags">
+                <Tag>{caseData.type}</Tag>
+                <Tag $color={getDiffColor(caseData.difficulty)}>{caseData.difficulty}</Tag>
               </div>
+              <p>{caseData.description}</p>
             </BriefingWidget>
 
             <ChiefWidgetRow>
