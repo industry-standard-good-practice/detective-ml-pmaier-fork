@@ -37,7 +37,8 @@ const generateImageRaw = async (
     prompt: string,
     aspectRatio: string = '1:1',
     refImages: string[] = [],
-    mode: 'create' | 'edit' | 'evidence' = 'create'
+    mode: 'create' | 'edit' | 'evidence' = 'create',
+    modelOverride?: string
 ): Promise<string | null> => {
     try {
         const parts: any[] = [];
@@ -88,7 +89,7 @@ const generateImageRaw = async (
         parts.push({ text: fullPrompt });
 
         const res = await ai.models.generateContent({
-            model: GEMINI_MODELS.IMAGE,
+            model: modelOverride || GEMINI_MODELS.IMAGE,
             contents: { parts },
             config: { imageConfig: { aspectRatio } }
         });
@@ -542,7 +543,8 @@ export const regenerateSingleSuspect = async (
     onProgress?.("Generating base portrait...");
     const refs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
     // Mode 'create' because we are making a NEW base character
-    const neutralRaw = await generateImageRaw(basePrompt, '3:4', refs, 'create');
+    // Use IMAGE_HD (Nano Banana 2) for higher quality base portraits
+    const neutralRaw = await generateImageRaw(basePrompt, '3:4', refs, 'create', GEMINI_MODELS.IMAGE_HD);
     if (!neutralRaw) throw new Error(`Failed to generate base portrait for ${suspect.name}`);
 
     onProgress?.("Uploading base portrait...");
@@ -626,7 +628,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
                 `;
             }
 
-            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create');
+            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create', GEMINI_MODELS.IMAGE_HD);
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/suspects/${s.id}/neutral.png`);
                 neutralMap[s.id] = url;
@@ -642,7 +644,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
         characterTasks.push((async () => {
             const p = caseData.partner;
             const prompt = `Subject: Portrait of a ${p.gender} ${p.role} named ${p.name}. Theme: ${caseData.type}. Expression: Eager, helpful. Background: City street or tech lab. Composition: Front-facing mugshot, full-bleed to the left and right edges. Pixel Art.`;
-            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create');
+            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create', GEMINI_MODELS.IMAGE_HD);
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/partner/neutral.png`);
                 neutralMap['partner'] = url;
@@ -658,7 +660,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, onStatus: (msg: 
         characterTasks.push((async () => {
             const o = caseData.officer;
             const prompt = `Subject: Portrait of a ${o.gender} ${o.role} named ${o.name}. Theme: ${caseData.type}. Expression: Stern, commanding. Background: Office or Command Center. Composition: Front-facing mugshot, full-bleed to the left and right edges. Pixel Art.`;
-            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create');
+            const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create', GEMINI_MODELS.IMAGE_HD);
             if (b64) {
                 const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/officer.png`);
                 o.portraits = o.portraits || {};
