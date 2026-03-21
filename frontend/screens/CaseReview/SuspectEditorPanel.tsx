@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { type } from '../../theme';
 import styled from 'styled-components';
 import { CaseData, Suspect, Emotion, Evidence, Relationship, TimelineEvent } from '../../types';
@@ -489,33 +489,165 @@ const NarrowInputGroup = styled(InputGroup)`
   width: 80px;
 `;
 
-const VoiceSelect = styled.select`
-  background-color: #111;
-  color: #fff;
-  border: 1px solid #444;
-  padding: var(--space);
+/* ─── Custom Voice Dropdown (matches evidence ownership dropdown) ─── */
+
+const VoiceDropdownWrapper = styled.div`
+  position: relative;
   flex: 1;
   min-width: 0;
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ffffff' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 10px;
-  padding-right: calc(var(--space) * 4);
+`;
+
+const VoiceDropdownTrigger = styled.button`
+  ${type.body}
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: var(--space);
+  padding-right: calc(var(--space) * 3);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  text-transform: none;
+  font-family: inherit;
   box-sizing: border-box;
+
+  &::after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    ${type.xs}
+    color: var(--color-text-dim);
+    pointer-events: none;
+  }
+
+  &:hover {
+    border-color: var(--color-text-subtle);
+  }
+`;
+
+const VoiceDropdownMenu = styled.div`
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  min-width: 200px;
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.6);
+
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-thumb { background: var(--color-border); }
+`;
+
+const VoiceDropdownOption = styled.button<{ $active?: boolean }>`
+  ${type.body}
+  background: ${props => props.$active ? 'var(--color-accent-green-dark)' : 'transparent'};
+  color: ${props => props.$active ? 'var(--color-accent-green)' : 'var(--color-text-muted)'};
+  border: none;
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--space) calc(var(--space) * 2);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  text-transform: none;
+  font-family: inherit;
+
+  &:last-child { border-bottom: none; }
+
+  &:hover {
+    background: var(--color-border-subtle);
+    color: var(--color-text-bright);
+  }
+`;
+
+const VoiceActiveDot = styled.span`
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-green);
+  flex-shrink: 0;
 `;
 
 const PreviewButton = styled.button`
-  padding: 8px 12px;
-  background: #333;
-  color: #fff;
-  border: 1px solid #444;
-  font-size: var(--type-xs);
+  ${type.body}
+  padding: var(--space) calc(var(--space) * 1.5);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  font-family: inherit;
   white-space: nowrap;
+  box-sizing: border-box;
   &:disabled { opacity: 0.5; cursor: not-allowed; }
   &:not(:disabled) { cursor: pointer; }
+  &:hover:not(:disabled) { border-color: var(--color-text-subtle); }
 `;
+
+const AccentInput = styled.input`
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: var(--space);
+  ${type.body}
+  font-family: inherit;
+  flex: 1;
+  min-width: 80px;
+  box-sizing: border-box;
+  &::placeholder { color: var(--color-text-dim); }
+  &:focus { border-color: var(--color-text-subtle); outline: none; }
+`;
+
+const VoiceDropdown: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const currentVoice = TTS_VOICES.find(v => v.name === value);
+  const label = !currentVoice || value === 'None'
+    ? 'No Voice'
+    : `${currentVoice.name} (${currentVoice.gender})`;
+
+  return (
+    <VoiceDropdownWrapper ref={ref}>
+      <VoiceDropdownTrigger onClick={() => setOpen(!open)} title="TTS Voice">
+        {label}
+      </VoiceDropdownTrigger>
+      {open && (
+        <VoiceDropdownMenu>
+          {TTS_VOICES.map(v => (
+            <VoiceDropdownOption
+              key={v.name}
+              $active={value === v.name}
+              onClick={() => { onChange(v.name); setOpen(false); }}
+            >
+              {value === v.name && <VoiceActiveDot />}
+              {v.name === 'None' ? 'No Voice (Silent)' : `${v.name} (${v.gender})`}
+            </VoiceDropdownOption>
+          ))}
+        </VoiceDropdownMenu>
+      )}
+    </VoiceDropdownWrapper>
+  );
+};
 
 const EditPortraitButton = styled(RandomizeButton)`
   background: #3b82f6;
@@ -896,16 +1028,16 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
               <InputGroup>
                 <label>TTS Voice</label>
                 <FlexRow>
-                  <VoiceSelect
-                    value={activeSuspect.voice || ''}
-                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'voice', e.target.value)}
-                  >
-                    {TTS_VOICES.map(v => (
-                      <option key={v.name} value={v.name}>
-                        {v.name === 'None' ? 'No Voice (Silent)' : `${v.name} (${v.gender})`}
-                      </option>
-                    ))}
-                  </VoiceSelect>
+                  <VoiceDropdown
+                    value={activeSuspect.voice || 'None'}
+                    onChange={(v) => onSuspectChange(selectedSuspectId!, 'voice', v)}
+                  />
+                  <AccentInput
+                    type="text"
+                    value={activeSuspect.voiceAccent || ''}
+                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'voiceAccent', e.target.value)}
+                    placeholder="Accent..."
+                  />
                   <PreviewButton
                     onClick={onPreviewVoice}
                     disabled={!activeSuspect.voice || activeSuspect.voice === 'None' || isPreviewingVoice}

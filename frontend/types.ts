@@ -82,6 +82,8 @@ export interface Suspect {
   hiddenEvidence: Evidence[]; // Evidence they possess and might reveal
   portraits?: Record<string, string>; // Pre-generated portraits
   voice?: string; // TTS Voice Name
+  voiceAccent?: string; // TTS accent (e.g. 'Southern drawl', 'Brooklyn', 'British RP')
+  voiceStyle?: string; // TTS style prompt for natural delivery
 }
 
 export interface SupportCharacter {
@@ -93,6 +95,8 @@ export interface SupportCharacter {
   avatarSeed: number;
   portraits?: Record<string, string>;
   voice?: string;
+  voiceAccent?: string; // TTS accent
+  voiceStyle?: string; // TTS style prompt for natural delivery
 }
 
 export interface CaseData {

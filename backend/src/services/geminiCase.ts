@@ -30,6 +30,213 @@ const getRandomVoice = (gender: string) => {
   return pool[Math.floor(Math.random() * pool.length)].name;
 };
 
+/**
+ * Generates a TTS voice style prompt for a character using their profile data.
+ * This follows the Gemini TTS prompting guide structure:
+ * Audio Profile → Scene → Director's Notes
+ *
+ * The style prompt is stored on the character and sent with every TTS call
+ * to make the voice sound natural, emotional, and character-appropriate.
+ */
+export const generateVoiceStyle = (
+  character: { name: string; gender?: string; age?: number; personality: string; role: string; bio?: string; physicalDescription?: string; isDeceased?: boolean; voiceAccent?: string },
+  caseDescription: string
+): string => {
+  // For deceased characters, use a forensic narrator style
+  if (character.isDeceased) {
+    return `# AUDIO PROFILE: Forensic Narrator
+## Scene: A dimly lit examination room at the police station.
+### DIRECTOR'S NOTES
+Style: Clinical, detached, documentary-style narration. Speak as a forensic examiner describing findings during a body examination. Calm, professional, and measured.
+Pacing: Slow and deliberate, with pauses between observations.`;
+  }
+
+  // Build a rich style prompt from character data
+  const ageDesc = character.age ? `${character.age}-year-old` : '';
+  const genderDesc = character.gender || '';
+  const lines: string[] = [];
+
+  lines.push(`# AUDIO PROFILE: ${character.name}`);
+  lines.push(`## "${character.role}"`);
+  lines.push('');
+  lines.push(`## THE SCENE: Police interrogation room`);
+  lines.push(`${character.name} is sitting across from a detective in a stark interrogation room. The atmosphere is tense. ${caseDescription ? `Context: ${caseDescription.substring(0, 200)}` : ''}`);
+  lines.push('');
+  lines.push(`### DIRECTOR'S NOTES`);
+
+  // Build style direction from personality
+  const personality = character.personality || 'guarded';
+  lines.push(`Style: Speak as a ${ageDesc} ${genderDesc} ${character.role.toLowerCase()} being questioned by police. ${personality}. The voice should reflect someone under pressure in an interrogation — not a narrator or announcer.`);
+
+  // Accent instruction — explicit TTS accent control
+  if (character.voiceAccent && character.voiceAccent.trim().length > 0) {
+    lines.push(`Accent: Speak with a ${character.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+  }
+
+  // Infer pacing from personality
+  const personalityLower = personality.toLowerCase();
+  if (personalityLower.includes('nervous') || personalityLower.includes('anxious') || personalityLower.includes('jittery')) {
+    lines.push('Pacing: Speaks quickly and unevenly, with occasional stammers and hesitations. Sentences trail off or speed up when touching on sensitive topics.');
+  } else if (personalityLower.includes('calm') || personalityLower.includes('composed') || personalityLower.includes('stoic') || personalityLower.includes('cold')) {
+    lines.push('Pacing: Measured and controlled. Deliberate pauses between statements. Never rushes.');
+  } else if (personalityLower.includes('aggressive') || personalityLower.includes('hostile') || personalityLower.includes('angry') || personalityLower.includes('volatile')) {
+    lines.push('Pacing: Forceful and punchy. Short, clipped sentences. Builds in intensity. May raise voice on key words.');
+  } else if (personalityLower.includes('arrogant') || personalityLower.includes('smug') || personalityLower.includes('condescending')) {
+    lines.push('Pacing: Leisurely and self-assured. Speaks as if doing the detective a favor. Slight drawl on words, with a patronizing undertone.');
+  } else if (personalityLower.includes('sad') || personalityLower.includes('grief') || personalityLower.includes('mourning') || personalityLower.includes('depressed')) {
+    lines.push('Pacing: Slow and heavy. Words come out with effort. Long pauses. Voice may crack or waver.');
+  } else if (personalityLower.includes('friendly') || personalityLower.includes('cooperative') || personalityLower.includes('eager') || personalityLower.includes('chatty')) {
+    lines.push('Pacing: Conversational and warm. Natural rhythm with occasional enthusiasm. Willing to elaborate.');
+  } else if (personalityLower.includes('evasive') || personalityLower.includes('cagey') || personalityLower.includes('secretive') || personalityLower.includes('guarded')) {
+    lines.push('Pacing: Careful and measured. Gives short answers. Pauses before responding, as if weighing every word.');
+  } else {
+    lines.push('Pacing: Natural conversational pace appropriate for a police interrogation. React naturally to the emotional content of the transcript.');
+  }
+
+  return lines.join('\n');
+};
+
+/**
+ * Stamps voiceStyle on all characters in a case (suspects, officer, partner).
+ * Always regenerates to stay in sync with editable fields (personality, accent).
+ */
+export const generateVoiceStyles = (caseData: any): void => {
+  const caseDesc = caseData.description || '';
+
+  // Officer
+  if (caseData.officer) {
+    caseData.officer.voiceStyle = generateVoiceStyle(
+      { ...caseData.officer, isDeceased: false },
+      caseDesc
+    );
+  }
+
+  // Partner
+  if (caseData.partner) {
+    caseData.partner.voiceStyle = generateVoiceStyle(
+      { ...caseData.partner, isDeceased: false },
+      caseDesc
+    );
+  }
+
+  // Suspects
+  (caseData.suspects || []).forEach((s: any) => {
+    s.voiceStyle = generateVoiceStyle(s, caseDesc);
+  });
+};
+
+/**
+ * Ensures all characters have voiceStyle set. Carries forward voiceAccent from
+ * original if AI dropped it, then regenerates voiceStyle from current data.
+ * Call this in post-processing after enforceSuspectSchema.
+ */
+export const enforceVoiceStyles = (caseData: any, originalCase?: any): void => {
+  const caseDesc = caseData.description || '';
+  const origSuspects: any[] = originalCase?.suspects || [];
+
+  // Officer — carry forward accent, then regenerate style
+  if (caseData.officer) {
+    if (!caseData.officer.voiceAccent && originalCase?.officer?.voiceAccent) {
+      caseData.officer.voiceAccent = originalCase.officer.voiceAccent;
+    }
+    caseData.officer.voiceStyle = generateVoiceStyle({ ...caseData.officer, isDeceased: false }, caseDesc);
+  }
+
+  // Partner — carry forward accent, then regenerate style
+  if (caseData.partner) {
+    if (!caseData.partner.voiceAccent && originalCase?.partner?.voiceAccent) {
+      caseData.partner.voiceAccent = originalCase.partner.voiceAccent;
+    }
+    caseData.partner.voiceStyle = generateVoiceStyle({ ...caseData.partner, isDeceased: false }, caseDesc);
+  }
+
+  // Suspects — carry forward accent, then regenerate style
+  (caseData.suspects || []).forEach((s: any) => {
+    const orig = origSuspects.find((os: any) => os.id === s.id);
+    if (!s.voiceAccent && orig?.voiceAccent) {
+      s.voiceAccent = orig.voiceAccent;
+    }
+    s.voiceStyle = generateVoiceStyle(s, caseDesc);
+  });
+};
+
+/**
+ * Infers a contextually appropriate accent from character data.
+ * Checks bio, professional background, name, and role for geographic/cultural cues.
+ * Returns a natural-language accent description or null if no strong signal.
+ */
+export const inferVoiceAccent = (
+  character: { name?: string; bio?: string; professionalBackground?: string; role?: string; personality?: string }
+): string | null => {
+  const text = [
+    character.bio || '',
+    character.professionalBackground || '',
+    character.role || '',
+    character.name || '',
+    character.personality || ''
+  ].join(' ').toLowerCase();
+
+  // Geographic/cultural accent mapping (ordered by specificity)
+  const accentPatterns: [RegExp, string][] = [
+    // US Regional
+    [/\b(brooklyn|bronx|queens|new york|nyc|manhattan)\b/, 'New York'],
+    [/\b(boston|massachusetts|bostonian)\b/, 'Boston'],
+    [/\b(southern|dixie|georgia|alabama|mississippi|tennessee|texas|louisiana|cajun|bayou|drawl)\b/, 'Southern American'],
+    [/\b(midwest|chicago|wisconsin|minnesota|iowa)\b/, 'Midwestern American'],
+    [/\b(california|valley|surfer|laid-back|cali)\b/, 'Californian'],
+    // European
+    [/\b(british|english|london|oxford|cambridge|eton|posh|aristocrat)\b/, 'British'],
+    [/\b(irish|ireland|dublin)\b/, 'Irish'],
+    [/\b(scottish|scotland|edinburgh|glasgow)\b/, 'Scottish'],
+    [/\b(french|paris|france|français)\b/, 'French'],
+    [/\b(italian|italy|rome|milan|sicily|naples)\b/, 'Italian'],
+    [/\b(russian|moscow|soviet|siberia)\b/, 'Russian'],
+    [/\b(german|berlin|munich|bavarian)\b/, 'German'],
+    [/\b(spanish|spain|madrid|barcelona)\b/, 'Spanish'],
+    // Other
+    [/\b(australian|aussie|sydney|melbourne)\b/, 'Australian'],
+    [/\b(japanese|tokyo|japan)\b/, 'Japanese'],
+    [/\b(chinese|beijing|shanghai|mandarin|cantonese)\b/, 'Chinese'],
+    [/\b(indian|mumbai|delhi|hindu|bollywood)\b/, 'Indian'],
+    [/\b(jamaican|kingston|reggae|caribbean)\b/, 'Jamaican'],
+    [/\b(mexican|mexico|guadalajara)\b/, 'Mexican'],
+    // Role-based (less specific)
+    [/\b(professor|academic|scholar|intellectual|university)\b/, 'educated and articulate'],
+    [/\b(street|gang|thug|dealer|hood)\b/, 'street-smart urban'],
+    [/\b(country|rural|farm|ranch)\b/, 'rural American'],
+    [/\b(military|soldier|marine|sergeant|officer|veteran)\b/, 'clipped military'],
+  ];
+
+  for (const [pattern, accent] of accentPatterns) {
+    if (pattern.test(text)) {
+      return accent;
+    }
+  }
+
+  return null; // No strong accent signal — leave unset
+};
+
+/**
+ * Infers and stamps voiceAccent on all characters that don't already have one.
+ * Only sets accents where there's a strong signal from character data.
+ */
+export const inferVoiceAccents = (caseData: any): void => {
+  // Officer
+  if (caseData.officer && !caseData.officer.voiceAccent) {
+    caseData.officer.voiceAccent = inferVoiceAccent(caseData.officer) || undefined;
+  }
+  // Partner
+  if (caseData.partner && !caseData.partner.voiceAccent) {
+    caseData.partner.voiceAccent = inferVoiceAccent(caseData.partner) || undefined;
+  }
+  // Suspects
+  (caseData.suspects || []).forEach((s: any) => {
+    if (!s.voiceAccent) {
+      s.voiceAccent = inferVoiceAccent(s) || undefined;
+    }
+  });
+};
+
 // --- HELPERS ---
 
 export const calculateDifficulty = (caseData: Partial<CaseData>): "Easy" | "Medium" | "Hard" => {
@@ -774,6 +981,8 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
         // --- PORTRAITS & VOICE: always carry forward (AI never generates these) ---
         if (!s.portraits || Object.keys(s.portraits).length === 0) s.portraits = orig.portraits || {};
         if (!s.voice) s.voice = orig.voice;
+        if (!s.voiceAccent) s.voiceAccent = orig.voiceAccent;
+        if (!s.voiceStyle) s.voiceStyle = orig.voiceStyle;
     });
 
     // --- INITIAL EVIDENCE: carry forward descriptions from original ---
@@ -1421,6 +1630,9 @@ ${userChangeLog}
 
         const finalData = ensureBroughtInEntry(enforceStartTimeAlignment(enforceSuspectSchema(enforceTimelines(enforceRelationships(hydratedCase)), caseData)));
 
+        // Ensure all characters have TTS voice style prompts
+        enforceVoiceStyles(finalData, caseData);
+
         // --- SAFETY NET: Re-apply user's field-level edits ---
         // The AI was instructed to respect these, but we enforce them as a fallback
         if (baseline) {
@@ -1710,6 +1922,9 @@ ${userChangeLog}
         });
 
         const finalData = ensureBroughtInEntry(enforceStartTimeAlignment(enforceSuspectSchema(enforceTimelines(enforceRelationships(hydratedCase)), caseData)));
+
+        // Ensure all characters have TTS voice style prompts
+        enforceVoiceStyles(finalData, caseData);
 
         // --- SAFETY NET: Re-apply user's field-level edits ---
         if (baseline) {
@@ -2025,5 +2240,10 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
 
     // Run logic to enforce relationships existence (Suspects only, as victim is a suspect)
     const finalData = ensureBroughtInEntry(enforceStartTimeAlignment(enforceSuspectSchema(enforceTimelines(enforceRelationships(data)))));
+
+    // Infer voice accents from character data, then generate TTS voice style prompts
+    inferVoiceAccents(finalData);
+    generateVoiceStyles(finalData);
+
     return finalData as CaseData;
 };

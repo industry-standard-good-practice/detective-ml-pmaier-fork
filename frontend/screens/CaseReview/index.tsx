@@ -559,8 +559,38 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     setLoadingState({ visible: true, message: "Saving case..." });
     try {
       const { updateCase, saveLocalDraft } = await import('../../services/persistence');
+
+      // Regenerate voiceStyle for all characters to reflect latest accent/personality edits
+      const buildStyle = (char: any, caseDesc: string) => {
+        if (char.isDeceased) return '# AUDIO PROFILE: Forensic Narrator\n## Scene: A dimly lit examination room at the police station.\n### DIRECTOR\'S NOTES\nStyle: Clinical, detached, documentary-style narration.\nPacing: Slow and deliberate, with pauses between observations.';
+        const lines: string[] = [];
+        const ageDesc = char.age ? `${char.age}-year-old` : '';
+        const genderDesc = char.gender || '';
+        lines.push(`# AUDIO PROFILE: ${char.name}`);
+        lines.push(`## "${char.role}"`);
+        lines.push('');
+        lines.push(`## THE SCENE: Police interrogation room`);
+        lines.push(`${char.name} is sitting across from a detective in a stark interrogation room. The atmosphere is tense. ${caseDesc ? `Context: ${caseDesc.substring(0, 200)}` : ''}`);
+        lines.push('');
+        lines.push(`### DIRECTOR'S NOTES`);
+        const personality = char.personality || 'guarded';
+        lines.push(`Style: Speak as a ${ageDesc} ${genderDesc} ${(char.role || '').toLowerCase()} being questioned by police. ${personality}. The voice should reflect someone under pressure in an interrogation — not a narrator or announcer.`);
+        if (char.voiceAccent && char.voiceAccent.trim()) {
+          lines.push(`Accent: Speak with a ${char.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+        }
+        lines.push('Pacing: Natural conversational pace appropriate for a police interrogation. React naturally to the emotional content of the transcript.');
+        return lines.join('\n');
+      };
+      const caseDesc = draftCase.description || '';
+      const updatedSuspects = (draftCase.suspects || []).map(s => ({ ...s, voiceStyle: buildStyle(s, caseDesc) }));
+      const updatedOfficer = draftCase.officer ? { ...draftCase.officer, voiceStyle: buildStyle({ ...draftCase.officer, isDeceased: false }, caseDesc) } : draftCase.officer;
+      const updatedPartner = draftCase.partner ? { ...draftCase.partner, voiceStyle: buildStyle({ ...draftCase.partner, isDeceased: false }, caseDesc) } : draftCase.partner;
+
       const stampedCase = {
         ...draftCase,
+        suspects: updatedSuspects,
+        officer: updatedOfficer,
+        partner: updatedPartner,
         authorId: draftCase.authorId || userId,
         authorDisplayName: draftCase.authorDisplayName || userDisplayName || 'Unknown Author'
       };
@@ -627,7 +657,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
   const handlePreviewVoice = async () => {
     if (!activeSuspect || !activeSuspect.voice || activeSuspect.voice === 'None' || isPreviewingVoice) return;
-    let currentChar: { name: string; role: string; voice: string } | undefined;
+    let currentChar: { name: string; role: string; voice: string; voiceStyle?: string; voiceAccent?: string; personality?: string; gender?: string; age?: number; isDeceased?: boolean } | undefined;
     if (selectedSuspectId === 'officer') currentChar = draftCase.officer as any;
     else if (selectedSuspectId === 'partner') currentChar = draftCase.partner as any;
     else currentChar = draftCase.suspects?.find(s => s.id === selectedSuspectId) as any;
@@ -635,8 +665,24 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
     setIsPreviewingVoice(true);
     try {
+      // Build a fresh style prompt so preview reflects latest accent/personality edits
+      const lines: string[] = [];
+      lines.push(`# AUDIO PROFILE: ${currentChar.name}`);
+      lines.push(`## "${currentChar.role}"`);
+      lines.push('');
+      lines.push(`## THE SCENE: Police interrogation room`);
+      lines.push(`${currentChar.name} is being questioned by a detective.`);
+      lines.push('');
+      lines.push(`### DIRECTOR'S NOTES`);
+      const personality = currentChar.personality || 'guarded';
+      lines.push(`Style: Speak as ${currentChar.role?.toLowerCase() || 'a person'} being questioned by police. ${personality}.`);
+      if (currentChar.voiceAccent && currentChar.voiceAccent.trim()) {
+        lines.push(`Accent: Speak with a ${currentChar.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+      }
+      const freshStyle = lines.join('\n');
+
       const previewText = `My name is ${currentChar.name}. My role is ${currentChar.role}.`;
-      const audioUrl = await generateTTS(previewText, currentChar.voice);
+      const audioUrl = await generateTTS(previewText, currentChar.voice, freshStyle);
       if (audioUrl) {
         if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
         setVoicePreviewUrl(audioUrl);

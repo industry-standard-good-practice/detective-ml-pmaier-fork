@@ -258,8 +258,9 @@ export const useGameActions = ({
         // Generate TTS for the PARTNER's dialogue
         let partnerAudioUrl: string | null = null;
         const partnerVoice = currentCase.partner?.voice;
+        const partnerVoiceStyle = currentCase.partner?.voiceStyle;
         if (!isMuted && partnerVoice && partnerVoice !== 'None') {
-            partnerAudioUrl = await generateTTS(partnerDialogue, partnerVoice);
+            partnerAudioUrl = await generateTTS(partnerDialogue, partnerVoice, partnerVoiceStyle);
         }
 
         const partnerMsg: ChatMessage = {
@@ -296,7 +297,7 @@ export const useGameActions = ({
             
             let examAudioUrl: string | null = null;
             if (!isMuted && suspect.voice && suspect.voice !== 'None') {
-                examAudioUrl = await generateTTS(examResponse.text, suspect.voice);
+                examAudioUrl = await generateTTS(examResponse.text, suspect.voice, suspect.voiceStyle);
             }
             
             const narratorMsg: ChatMessage = {
@@ -346,7 +347,8 @@ export const useGameActions = ({
         if (!isMuted && suspect.voice && suspect.voice !== 'None') {
             audioUrl = await generateTTS(
               finalAgg >= 100 ? "That's it! I want my lawyer!" : response.text,
-              suspect.voice
+              suspect.voice,
+              suspect.voiceStyle
             );
         }
 
@@ -493,7 +495,7 @@ export const useGameActions = ({
       // Generate TTS Audio
       let audioUrl: string | null = null;
       if (!isMuted && currentSuspect.voice && currentSuspect.voice !== 'None') {
-          audioUrl = await generateTTS(finalMsgText, currentSuspect.voice);
+          audioUrl = await generateTTS(finalMsgText, currentSuspect.voice, currentSuspect.voiceStyle);
       }
       
       const suspectMsg: ChatMessage = { 

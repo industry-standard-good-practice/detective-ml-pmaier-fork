@@ -194,8 +194,8 @@ router.post('/image/edit', async (req: Request, res: Response) => {
 
 router.post('/tts', async (req: Request, res: Response) => {
   try {
-    const { text, voiceName } = req.body;
-    const base64Audio = await generateTTS(text, voiceName);
+    const { text, voiceName, stylePrompt } = req.body;
+    const base64Audio = await generateTTS(text, voiceName, stylePrompt);
     res.json({ audio: base64Audio });
   } catch (error: any) {
     console.error('[Gemini Route] tts error:', error);

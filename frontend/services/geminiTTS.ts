@@ -57,15 +57,16 @@ const registerPcmData = (base64: string, id: string): string => {
 /**
  * Generates TTS audio for the given text and voice.
  * The backend generates the raw PCM base64; here we construct the WAV and register it.
+ * @param stylePrompt - Optional style/persona prompt for natural delivery
  */
-export const generateTTS = async (text: string, voiceName: string): Promise<string | null> => {
+export const generateTTS = async (text: string, voiceName: string, stylePrompt?: string): Promise<string | null> => {
   if (!voiceName || voiceName === 'None') {
     if (voiceName === 'None') console.log("[TTS] Skipped: Voice set to None");
     return null;
   }
 
   try {
-    const result = await geminiPost<{ audio: string | null }>('/tts', { text, voiceName });
+    const result = await geminiPost<{ audio: string | null }>('/tts', { text, voiceName, stylePrompt });
     
     if (result.audio) {
       const id = `tts-${Date.now()}`;
