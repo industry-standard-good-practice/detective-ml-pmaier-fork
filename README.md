@@ -352,6 +352,7 @@ gcloud functions deploy detectiveml-api \
   --entry-point=api \
   --trigger-http \
   --allow-unauthenticated \
+  --timeout=600s \
   --memory=512Mi \
   --set-env-vars="FIREBASE_DATABASE_URL=https://YOUR_PROJECT-default-rtdb.firebaseio.com,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT.firebasestorage.app,CORS_ORIGIN=https://your-frontend-domain.com,GEMINI_API_KEY=your-gemini-key"
 ```
