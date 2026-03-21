@@ -17,7 +17,7 @@ interface CaseData {
   id: string; title: string; type: string; description: string; difficulty: string;
   suspects: Suspect[]; initialEvidence: Evidence[]; initialTimeline: any[];
   officer: SupportCharacter; partner: SupportCharacter; startTime?: string;
-  heroImageUrl?: string; authorId?: string; [key: string]: any;
+  heroImageUrl?: string; authorId?: string;[key: string]: any;
 }
 
 // Emotion enum (duplicated from frontend types)
@@ -142,7 +142,7 @@ export const generateImageRaw = async (
     if (blockReason) throw new Error(`Prompt blocked by safety filter (${blockReason}).`);
 
     const part = candidate?.content?.parts?.find((p: any) => p.inlineData);
-    if (part) return part.inlineData.data;
+    if (part?.inlineData?.data) return part.inlineData.data;
 
     throw new Error('No image was returned. This is usually caused by a safety filter.');
   } catch (e: any) {
@@ -354,7 +354,7 @@ export const generateSuspectFromUpload = async (
       config: { imageConfig: { aspectRatio: '3:4' } }
     });
     const part = res.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
-    if (part) neutralRaw = part.inlineData.data;
+    if (part?.inlineData?.data) neutralRaw = part.inlineData.data;
   } catch (e: any) {
     console.error("Upload conversion failed", e);
     throw new Error(`Failed to convert uploaded image to pixel art: ${e?.message || 'Unknown error'}`);

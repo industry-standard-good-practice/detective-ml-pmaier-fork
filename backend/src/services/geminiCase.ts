@@ -8,26 +8,26 @@ type CaseData = any;
 
 // Inline getRandomVoice (from frontend/constants.ts)
 const TTS_VOICES = [
-  { name: "Achernar", gender: "Female" }, { name: "Achird", gender: "Male" },
-  { name: "Algenib", gender: "Male" }, { name: "Algieba", gender: "Female" },
-  { name: "Alnilam", gender: "Female" }, { name: "Aoede", gender: "Female" },
-  { name: "Autonoe", gender: "Female" }, { name: "Callirrhoe", gender: "Female" },
-  { name: "Charon", gender: "Male" }, { name: "Despina", gender: "Female" },
-  { name: "Enceladus", gender: "Male" }, { name: "Erinome", gender: "Female" },
-  { name: "Fenrir", gender: "Female" }, { name: "Gacrux", gender: "Female" },
-  { name: "Iapetus", gender: "Male" }, { name: "Kore", gender: "Female" },
-  { name: "Laomedeia", gender: "Female" }, { name: "Leda", gender: "Female" },
-  { name: "Orus", gender: "Male" }, { name: "Pulcherrima", gender: "Female" },
-  { name: "Puck", gender: "Male" }, { name: "Rasalgethi", gender: "Male" },
-  { name: "Sadachbia", gender: "Female" }, { name: "Sadaltager", gender: "Female" },
-  { name: "Schedar", gender: "Male" }, { name: "Sulafat", gender: "Female" },
-  { name: "Umbriel", gender: "Female" }, { name: "Vindemiatrix", gender: "Female" },
-  { name: "Zephyr", gender: "Female" }, { name: "Zubenelgenubi", gender: "Male" }
+    { name: "Achernar", gender: "Female" }, { name: "Achird", gender: "Male" },
+    { name: "Algenib", gender: "Male" }, { name: "Algieba", gender: "Female" },
+    { name: "Alnilam", gender: "Female" }, { name: "Aoede", gender: "Female" },
+    { name: "Autonoe", gender: "Female" }, { name: "Callirrhoe", gender: "Female" },
+    { name: "Charon", gender: "Male" }, { name: "Despina", gender: "Female" },
+    { name: "Enceladus", gender: "Male" }, { name: "Erinome", gender: "Female" },
+    { name: "Fenrir", gender: "Female" }, { name: "Gacrux", gender: "Female" },
+    { name: "Iapetus", gender: "Male" }, { name: "Kore", gender: "Female" },
+    { name: "Laomedeia", gender: "Female" }, { name: "Leda", gender: "Female" },
+    { name: "Orus", gender: "Male" }, { name: "Pulcherrima", gender: "Female" },
+    { name: "Puck", gender: "Male" }, { name: "Rasalgethi", gender: "Male" },
+    { name: "Sadachbia", gender: "Female" }, { name: "Sadaltager", gender: "Female" },
+    { name: "Schedar", gender: "Male" }, { name: "Sulafat", gender: "Female" },
+    { name: "Umbriel", gender: "Female" }, { name: "Vindemiatrix", gender: "Female" },
+    { name: "Zephyr", gender: "Female" }, { name: "Zubenelgenubi", gender: "Male" }
 ];
 const getRandomVoice = (gender: string) => {
-  const filtered = TTS_VOICES.filter(v => v.gender.toLowerCase() === gender.toLowerCase());
-  const pool = filtered.length > 0 ? filtered : TTS_VOICES;
-  return pool[Math.floor(Math.random() * pool.length)].name;
+    const filtered = TTS_VOICES.filter(v => v.gender.toLowerCase() === gender.toLowerCase());
+    const pool = filtered.length > 0 ? filtered : TTS_VOICES;
+    return pool[Math.floor(Math.random() * pool.length)].name;
 };
 
 /**
@@ -39,61 +39,61 @@ const getRandomVoice = (gender: string) => {
  * to make the voice sound natural, emotional, and character-appropriate.
  */
 export const generateVoiceStyle = (
-  character: { name: string; gender?: string; age?: number; personality: string; role: string; bio?: string; physicalDescription?: string; isDeceased?: boolean; voiceAccent?: string },
-  caseDescription: string
+    character: { name: string; gender?: string; age?: number; personality: string; role: string; bio?: string; physicalDescription?: string; isDeceased?: boolean; voiceAccent?: string },
+    caseDescription: string
 ): string => {
-  // For deceased characters, use a forensic narrator style
-  if (character.isDeceased) {
-    return `# AUDIO PROFILE: Forensic Narrator
+    // For deceased characters, use a forensic narrator style
+    if (character.isDeceased) {
+        return `# AUDIO PROFILE: Forensic Narrator
 ## Scene: A dimly lit examination room at the police station.
 ### DIRECTOR'S NOTES
 Style: Clinical, detached, documentary-style narration. Speak as a forensic examiner describing findings during a body examination. Calm, professional, and measured.
 Pacing: Slow and deliberate, with pauses between observations.`;
-  }
+    }
 
-  // Build a rich style prompt from character data
-  const ageDesc = character.age ? `${character.age}-year-old` : '';
-  const genderDesc = character.gender || '';
-  const lines: string[] = [];
+    // Build a rich style prompt from character data
+    const ageDesc = character.age ? `${character.age}-year-old` : '';
+    const genderDesc = character.gender || '';
+    const lines: string[] = [];
 
-  lines.push(`# AUDIO PROFILE: ${character.name}`);
-  lines.push(`## "${character.role}"`);
-  lines.push('');
-  lines.push(`## THE SCENE: Police interrogation room`);
-  lines.push(`${character.name} is sitting across from a detective in a stark interrogation room. The atmosphere is tense. ${caseDescription ? `Context: ${caseDescription.substring(0, 200)}` : ''}`);
-  lines.push('');
-  lines.push(`### DIRECTOR'S NOTES`);
+    lines.push(`# AUDIO PROFILE: ${character.name}`);
+    lines.push(`## "${character.role}"`);
+    lines.push('');
+    lines.push(`## THE SCENE: Police interrogation room`);
+    lines.push(`${character.name} is sitting across from a detective in a stark interrogation room. The atmosphere is tense. ${caseDescription ? `Context: ${caseDescription.substring(0, 200)}` : ''}`);
+    lines.push('');
+    lines.push(`### DIRECTOR'S NOTES`);
 
-  // Build style direction from personality
-  const personality = character.personality || 'guarded';
-  lines.push(`Style: Speak as a ${ageDesc} ${genderDesc} ${character.role.toLowerCase()} being questioned by police. ${personality}. The voice should reflect someone under pressure in an interrogation — not a narrator or announcer.`);
+    // Build style direction from personality
+    const personality = character.personality || 'guarded';
+    lines.push(`Style: Speak as a ${ageDesc} ${genderDesc} ${character.role.toLowerCase()} being questioned by police. ${personality}. The voice should reflect someone under pressure in an interrogation — not a narrator or announcer.`);
 
-  // Accent instruction — explicit TTS accent control
-  if (character.voiceAccent && character.voiceAccent.trim().length > 0) {
-    lines.push(`Accent: Speak with a ${character.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
-  }
+    // Accent instruction — explicit TTS accent control
+    if (character.voiceAccent && character.voiceAccent.trim().length > 0) {
+        lines.push(`Accent: Speak with a ${character.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+    }
 
-  // Infer pacing from personality
-  const personalityLower = personality.toLowerCase();
-  if (personalityLower.includes('nervous') || personalityLower.includes('anxious') || personalityLower.includes('jittery')) {
-    lines.push('Pacing: Speaks quickly and unevenly, with occasional stammers and hesitations. Sentences trail off or speed up when touching on sensitive topics.');
-  } else if (personalityLower.includes('calm') || personalityLower.includes('composed') || personalityLower.includes('stoic') || personalityLower.includes('cold')) {
-    lines.push('Pacing: Measured and controlled. Deliberate pauses between statements. Never rushes.');
-  } else if (personalityLower.includes('aggressive') || personalityLower.includes('hostile') || personalityLower.includes('angry') || personalityLower.includes('volatile')) {
-    lines.push('Pacing: Forceful and punchy. Short, clipped sentences. Builds in intensity. May raise voice on key words.');
-  } else if (personalityLower.includes('arrogant') || personalityLower.includes('smug') || personalityLower.includes('condescending')) {
-    lines.push('Pacing: Leisurely and self-assured. Speaks as if doing the detective a favor. Slight drawl on words, with a patronizing undertone.');
-  } else if (personalityLower.includes('sad') || personalityLower.includes('grief') || personalityLower.includes('mourning') || personalityLower.includes('depressed')) {
-    lines.push('Pacing: Slow and heavy. Words come out with effort. Long pauses. Voice may crack or waver.');
-  } else if (personalityLower.includes('friendly') || personalityLower.includes('cooperative') || personalityLower.includes('eager') || personalityLower.includes('chatty')) {
-    lines.push('Pacing: Conversational and warm. Natural rhythm with occasional enthusiasm. Willing to elaborate.');
-  } else if (personalityLower.includes('evasive') || personalityLower.includes('cagey') || personalityLower.includes('secretive') || personalityLower.includes('guarded')) {
-    lines.push('Pacing: Careful and measured. Gives short answers. Pauses before responding, as if weighing every word.');
-  } else {
-    lines.push('Pacing: Natural conversational pace appropriate for a police interrogation. React naturally to the emotional content of the transcript.');
-  }
+    // Infer pacing from personality
+    const personalityLower = personality.toLowerCase();
+    if (personalityLower.includes('nervous') || personalityLower.includes('anxious') || personalityLower.includes('jittery')) {
+        lines.push('Pacing: Speaks quickly and unevenly, with occasional stammers and hesitations. Sentences trail off or speed up when touching on sensitive topics.');
+    } else if (personalityLower.includes('calm') || personalityLower.includes('composed') || personalityLower.includes('stoic') || personalityLower.includes('cold')) {
+        lines.push('Pacing: Measured and controlled. Deliberate pauses between statements. Never rushes.');
+    } else if (personalityLower.includes('aggressive') || personalityLower.includes('hostile') || personalityLower.includes('angry') || personalityLower.includes('volatile')) {
+        lines.push('Pacing: Forceful and punchy. Short, clipped sentences. Builds in intensity. May raise voice on key words.');
+    } else if (personalityLower.includes('arrogant') || personalityLower.includes('smug') || personalityLower.includes('condescending')) {
+        lines.push('Pacing: Leisurely and self-assured. Speaks as if doing the detective a favor. Slight drawl on words, with a patronizing undertone.');
+    } else if (personalityLower.includes('sad') || personalityLower.includes('grief') || personalityLower.includes('mourning') || personalityLower.includes('depressed')) {
+        lines.push('Pacing: Slow and heavy. Words come out with effort. Long pauses. Voice may crack or waver.');
+    } else if (personalityLower.includes('friendly') || personalityLower.includes('cooperative') || personalityLower.includes('eager') || personalityLower.includes('chatty')) {
+        lines.push('Pacing: Conversational and warm. Natural rhythm with occasional enthusiasm. Willing to elaborate.');
+    } else if (personalityLower.includes('evasive') || personalityLower.includes('cagey') || personalityLower.includes('secretive') || personalityLower.includes('guarded')) {
+        lines.push('Pacing: Careful and measured. Gives short answers. Pauses before responding, as if weighing every word.');
+    } else {
+        lines.push('Pacing: Natural conversational pace appropriate for a police interrogation. React naturally to the emotional content of the transcript.');
+    }
 
-  return lines.join('\n');
+    return lines.join('\n');
 };
 
 /**
@@ -101,28 +101,28 @@ Pacing: Slow and deliberate, with pauses between observations.`;
  * Always regenerates to stay in sync with editable fields (personality, accent).
  */
 export const generateVoiceStyles = (caseData: any): void => {
-  const caseDesc = caseData.description || '';
+    const caseDesc = caseData.description || '';
 
-  // Officer
-  if (caseData.officer) {
-    caseData.officer.voiceStyle = generateVoiceStyle(
-      { ...caseData.officer, isDeceased: false },
-      caseDesc
-    );
-  }
+    // Officer
+    if (caseData.officer) {
+        caseData.officer.voiceStyle = generateVoiceStyle(
+            { ...caseData.officer, isDeceased: false },
+            caseDesc
+        );
+    }
 
-  // Partner
-  if (caseData.partner) {
-    caseData.partner.voiceStyle = generateVoiceStyle(
-      { ...caseData.partner, isDeceased: false },
-      caseDesc
-    );
-  }
+    // Partner
+    if (caseData.partner) {
+        caseData.partner.voiceStyle = generateVoiceStyle(
+            { ...caseData.partner, isDeceased: false },
+            caseDesc
+        );
+    }
 
-  // Suspects
-  (caseData.suspects || []).forEach((s: any) => {
-    s.voiceStyle = generateVoiceStyle(s, caseDesc);
-  });
+    // Suspects
+    (caseData.suspects || []).forEach((s: any) => {
+        s.voiceStyle = generateVoiceStyle(s, caseDesc);
+    });
 };
 
 /**
@@ -131,33 +131,33 @@ export const generateVoiceStyles = (caseData: any): void => {
  * Call this in post-processing after enforceSuspectSchema.
  */
 export const enforceVoiceStyles = (caseData: any, originalCase?: any): void => {
-  const caseDesc = caseData.description || '';
-  const origSuspects: any[] = originalCase?.suspects || [];
+    const caseDesc = caseData.description || '';
+    const origSuspects: any[] = originalCase?.suspects || [];
 
-  // Officer — carry forward accent, then regenerate style
-  if (caseData.officer) {
-    if (!caseData.officer.voiceAccent && originalCase?.officer?.voiceAccent) {
-      caseData.officer.voiceAccent = originalCase.officer.voiceAccent;
+    // Officer — carry forward accent, then regenerate style
+    if (caseData.officer) {
+        if (!caseData.officer.voiceAccent && originalCase?.officer?.voiceAccent) {
+            caseData.officer.voiceAccent = originalCase.officer.voiceAccent;
+        }
+        caseData.officer.voiceStyle = generateVoiceStyle({ ...caseData.officer, isDeceased: false }, caseDesc);
     }
-    caseData.officer.voiceStyle = generateVoiceStyle({ ...caseData.officer, isDeceased: false }, caseDesc);
-  }
 
-  // Partner — carry forward accent, then regenerate style
-  if (caseData.partner) {
-    if (!caseData.partner.voiceAccent && originalCase?.partner?.voiceAccent) {
-      caseData.partner.voiceAccent = originalCase.partner.voiceAccent;
+    // Partner — carry forward accent, then regenerate style
+    if (caseData.partner) {
+        if (!caseData.partner.voiceAccent && originalCase?.partner?.voiceAccent) {
+            caseData.partner.voiceAccent = originalCase.partner.voiceAccent;
+        }
+        caseData.partner.voiceStyle = generateVoiceStyle({ ...caseData.partner, isDeceased: false }, caseDesc);
     }
-    caseData.partner.voiceStyle = generateVoiceStyle({ ...caseData.partner, isDeceased: false }, caseDesc);
-  }
 
-  // Suspects — carry forward accent, then regenerate style
-  (caseData.suspects || []).forEach((s: any) => {
-    const orig = origSuspects.find((os: any) => os.id === s.id);
-    if (!s.voiceAccent && orig?.voiceAccent) {
-      s.voiceAccent = orig.voiceAccent;
-    }
-    s.voiceStyle = generateVoiceStyle(s, caseDesc);
-  });
+    // Suspects — carry forward accent, then regenerate style
+    (caseData.suspects || []).forEach((s: any) => {
+        const orig = origSuspects.find((os: any) => os.id === s.id);
+        if (!s.voiceAccent && orig?.voiceAccent) {
+            s.voiceAccent = orig.voiceAccent;
+        }
+        s.voiceStyle = generateVoiceStyle(s, caseDesc);
+    });
 };
 
 /**
@@ -166,54 +166,54 @@ export const enforceVoiceStyles = (caseData: any, originalCase?: any): void => {
  * Returns a natural-language accent description or null if no strong signal.
  */
 export const inferVoiceAccent = (
-  character: { name?: string; bio?: string; professionalBackground?: string; role?: string; personality?: string }
+    character: { name?: string; bio?: string; professionalBackground?: string; role?: string; personality?: string }
 ): string | null => {
-  const text = [
-    character.bio || '',
-    character.professionalBackground || '',
-    character.role || '',
-    character.name || '',
-    character.personality || ''
-  ].join(' ').toLowerCase();
+    const text = [
+        character.bio || '',
+        character.professionalBackground || '',
+        character.role || '',
+        character.name || '',
+        character.personality || ''
+    ].join(' ').toLowerCase();
 
-  // Geographic/cultural accent mapping (ordered by specificity)
-  const accentPatterns: [RegExp, string][] = [
-    // US Regional
-    [/\b(brooklyn|bronx|queens|new york|nyc|manhattan)\b/, 'New York'],
-    [/\b(boston|massachusetts|bostonian)\b/, 'Boston'],
-    [/\b(southern|dixie|georgia|alabama|mississippi|tennessee|texas|louisiana|cajun|bayou|drawl)\b/, 'Southern American'],
-    [/\b(midwest|chicago|wisconsin|minnesota|iowa)\b/, 'Midwestern American'],
-    [/\b(california|valley|surfer|laid-back|cali)\b/, 'Californian'],
-    // European
-    [/\b(british|english|london|oxford|cambridge|eton|posh|aristocrat)\b/, 'British'],
-    [/\b(irish|ireland|dublin)\b/, 'Irish'],
-    [/\b(scottish|scotland|edinburgh|glasgow)\b/, 'Scottish'],
-    [/\b(french|paris|france|français)\b/, 'French'],
-    [/\b(italian|italy|rome|milan|sicily|naples)\b/, 'Italian'],
-    [/\b(russian|moscow|soviet|siberia)\b/, 'Russian'],
-    [/\b(german|berlin|munich|bavarian)\b/, 'German'],
-    [/\b(spanish|spain|madrid|barcelona)\b/, 'Spanish'],
-    // Other
-    [/\b(australian|aussie|sydney|melbourne)\b/, 'Australian'],
-    [/\b(japanese|tokyo|japan)\b/, 'Japanese'],
-    [/\b(chinese|beijing|shanghai|mandarin|cantonese)\b/, 'Chinese'],
-    [/\b(indian|mumbai|delhi|hindu|bollywood)\b/, 'Indian'],
-    [/\b(jamaican|kingston|reggae|caribbean)\b/, 'Jamaican'],
-    [/\b(mexican|mexico|guadalajara)\b/, 'Mexican'],
-    // Role-based (less specific)
-    [/\b(professor|academic|scholar|intellectual|university)\b/, 'educated and articulate'],
-    [/\b(street|gang|thug|dealer|hood)\b/, 'street-smart urban'],
-    [/\b(country|rural|farm|ranch)\b/, 'rural American'],
-    [/\b(military|soldier|marine|sergeant|officer|veteran)\b/, 'clipped military'],
-  ];
+    // Geographic/cultural accent mapping (ordered by specificity)
+    const accentPatterns: [RegExp, string][] = [
+        // US Regional
+        [/\b(brooklyn|bronx|queens|new york|nyc|manhattan)\b/, 'New York'],
+        [/\b(boston|massachusetts|bostonian)\b/, 'Boston'],
+        [/\b(southern|dixie|georgia|alabama|mississippi|tennessee|texas|louisiana|cajun|bayou|drawl)\b/, 'Southern American'],
+        [/\b(midwest|chicago|wisconsin|minnesota|iowa)\b/, 'Midwestern American'],
+        [/\b(california|valley|surfer|laid-back|cali)\b/, 'Californian'],
+        // European
+        [/\b(british|english|london|oxford|cambridge|eton|posh|aristocrat)\b/, 'British'],
+        [/\b(irish|ireland|dublin)\b/, 'Irish'],
+        [/\b(scottish|scotland|edinburgh|glasgow)\b/, 'Scottish'],
+        [/\b(french|paris|france|français)\b/, 'French'],
+        [/\b(italian|italy|rome|milan|sicily|naples)\b/, 'Italian'],
+        [/\b(russian|moscow|soviet|siberia)\b/, 'Russian'],
+        [/\b(german|berlin|munich|bavarian)\b/, 'German'],
+        [/\b(spanish|spain|madrid|barcelona)\b/, 'Spanish'],
+        // Other
+        [/\b(australian|aussie|sydney|melbourne)\b/, 'Australian'],
+        [/\b(japanese|tokyo|japan)\b/, 'Japanese'],
+        [/\b(chinese|beijing|shanghai|mandarin|cantonese)\b/, 'Chinese'],
+        [/\b(indian|mumbai|delhi|hindu|bollywood)\b/, 'Indian'],
+        [/\b(jamaican|kingston|reggae|caribbean)\b/, 'Jamaican'],
+        [/\b(mexican|mexico|guadalajara)\b/, 'Mexican'],
+        // Role-based (less specific)
+        [/\b(professor|academic|scholar|intellectual|university)\b/, 'educated and articulate'],
+        [/\b(street|gang|thug|dealer|hood)\b/, 'street-smart urban'],
+        [/\b(country|rural|farm|ranch)\b/, 'rural American'],
+        [/\b(military|soldier|marine|sergeant|officer|veteran)\b/, 'clipped military'],
+    ];
 
-  for (const [pattern, accent] of accentPatterns) {
-    if (pattern.test(text)) {
-      return accent;
+    for (const [pattern, accent] of accentPatterns) {
+        if (pattern.test(text)) {
+            return accent;
+        }
     }
-  }
 
-  return null; // No strong accent signal — leave unset
+    return null; // No strong accent signal — leave unset
 };
 
 /**
@@ -221,36 +221,36 @@ export const inferVoiceAccent = (
  * Only sets accents where there's a strong signal from character data.
  */
 export const inferVoiceAccents = (caseData: any): void => {
-  // Officer
-  if (caseData.officer && !caseData.officer.voiceAccent) {
-    caseData.officer.voiceAccent = inferVoiceAccent(caseData.officer) || undefined;
-  }
-  // Partner
-  if (caseData.partner && !caseData.partner.voiceAccent) {
-    caseData.partner.voiceAccent = inferVoiceAccent(caseData.partner) || undefined;
-  }
-  // Suspects
-  (caseData.suspects || []).forEach((s: any) => {
-    if (!s.voiceAccent) {
-      s.voiceAccent = inferVoiceAccent(s) || undefined;
+    // Officer
+    if (caseData.officer && !caseData.officer.voiceAccent) {
+        caseData.officer.voiceAccent = inferVoiceAccent(caseData.officer) || undefined;
     }
-  });
+    // Partner
+    if (caseData.partner && !caseData.partner.voiceAccent) {
+        caseData.partner.voiceAccent = inferVoiceAccent(caseData.partner) || undefined;
+    }
+    // Suspects
+    (caseData.suspects || []).forEach((s: any) => {
+        if (!s.voiceAccent) {
+            s.voiceAccent = inferVoiceAccent(s) || undefined;
+        }
+    });
 };
 
 // --- HELPERS ---
 
 export const calculateDifficulty = (caseData: Partial<CaseData>): "Easy" | "Medium" | "Hard" => {
     const suspects = caseData.suspects || [];
-    const aliveSuspects = suspects.filter(s => !s.isDeceased);
+    const aliveSuspects = suspects.filter((s: any) => !s.isDeceased);
     const suspectCount = aliveSuspects.length;
     const initialEvidenceCount = caseData.initialEvidence?.length || 0;
-    const hiddenEvidenceCount = suspects.reduce((acc, s) => acc + (s.hiddenEvidence?.length || 0), 0);
+    const hiddenEvidenceCount = suspects.reduce((acc: any, s: any) => acc + (s.hiddenEvidence?.length || 0), 0);
     const initialTimelineCount = caseData.initialTimeline?.length || 0;
     const totalEvidence = initialEvidenceCount + hiddenEvidenceCount;
 
     // Multiple victims and multiple guilty suspects significantly increase difficulty
-    const victimCount = suspects.filter(s => s.isDeceased).length;
-    const guiltyCount = suspects.filter(s => s.isGuilty).length;
+    const victimCount = suspects.filter((s: any) => s.isDeceased).length;
+    const guiltyCount = suspects.filter((s: any) => s.isGuilty).length;
 
     // Base complexity from suspect count and evidence
     let points = (suspectCount * 2) + totalEvidence - (initialTimelineCount * 0.5);
@@ -263,7 +263,7 @@ export const calculateDifficulty = (caseData: Partial<CaseData>): "Easy" | "Medi
 
     // Higher base aggravation = more hostile/uncooperative suspects = harder to extract info
     if (aliveSuspects.length > 0) {
-        const avgAggravation = aliveSuspects.reduce((sum, s) => sum + (s.baseAggravation || 0), 0) / aliveSuspects.length;
+        const avgAggravation = aliveSuspects.reduce((sum: any, s: any) => sum + (s.baseAggravation || 0), 0) / aliveSuspects.length;
         points += (avgAggravation / 100) * 6;
     }
 
@@ -313,8 +313,8 @@ export const computeUserDiff = (baseline: CaseData, current: CaseData): Record<s
         'physicalDescription', 'professionalBackground', 'witnessObservations',
         'isGuilty', 'isDeceased', 'baseAggravation'
     ];
-    current.suspects.forEach(s => {
-        const bs = baseline.suspects.find(b => b.id === s.id);
+    current.suspects.forEach((s: any) => {
+        const bs = baseline.suspects.find((b: any) => b.id === s.id);
         if (!bs) return; // Newly added suspect, no baseline to compare
         const fieldDiff: Record<string, any> = {};
         suspectFields.forEach(f => {
@@ -368,7 +368,7 @@ export const formatUserChangeLog = (diff: Record<string, any>, baseline: CaseDat
     const suspectDiffs = diff._suspects as Record<string, Record<string, any>> | undefined;
     if (suspectDiffs) {
         Object.entries(suspectDiffs).forEach(([suspectId, fields]) => {
-            const baselineSuspect = baseline.suspects.find(s => s.id === suspectId);
+            const baselineSuspect = baseline.suspects.find((s: any) => s.id === suspectId);
             const suspectLabel = baselineSuspect?.name || suspectId;
 
             Object.entries(fields).forEach(([field, value]) => {
@@ -421,7 +421,7 @@ export const applyUserDiff = (aiCase: CaseData, userDiff: Record<string, any>): 
     const suspectDiffs = userDiff._suspects as Record<string, Record<string, any>> | undefined;
     if (suspectDiffs) {
         Object.entries(suspectDiffs).forEach(([suspectId, fields]) => {
-            const suspect = aiCase.suspects.find(s => s.id === suspectId);
+            const suspect = aiCase.suspects.find((s: any) => s.id === suspectId);
             if (suspect) {
                 Object.entries(fields).forEach(([field, value]) => {
                     (suspect as any)[field] = value;
@@ -570,12 +570,12 @@ export const enforceRelationships = (caseData: any) => {
             if (hasVictim) {
                 targets.push("The Victim");
             }
-            aliveSuspectNames.forEach(name => {
+            aliveSuspectNames.forEach((name: any) => {
                 if (name !== currentName) targets.push(name);
             });
         } else {
             // The victim has relationships with all ALIVE suspects
-            aliveSuspectNames.forEach(name => targets.push(name));
+            aliveSuspectNames.forEach((name: any) => targets.push(name));
         }
 
         // 3. Ensure relationships with all targets
@@ -1383,8 +1383,8 @@ export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg
     if (onProgress) onProgress("Stripping visual assets for analysis...");
     const { stripped: lightweightCase, imageMap } = stripImagesFromCase(caseData);
 
-    const guiltySuspects = caseData.suspects.filter(s => s.isGuilty);
-    const guiltyNames = guiltySuspects.length > 0 ? guiltySuspects.map(s => s.name).join(', ') : "Unknown";
+    const guiltySuspects = caseData.suspects.filter((s: any) => s.isGuilty);
+    const guiltyNames = guiltySuspects.length > 0 ? guiltySuspects.map((s: any) => s.name).join(', ') : "Unknown";
 
     // Build dynamic user-edits prompt section
     const userEditsSection = userChangeLog ? `
@@ -1602,8 +1602,8 @@ ${userChangeLog}
         });
 
         // Merge suspects
-        hydratedCase.suspects.forEach(s => {
-            const origSuspect = caseData.suspects.find(os => os.id === s.id);
+        hydratedCase.suspects.forEach((s: any) => {
+            const origSuspect = caseData.suspects.find((os: any) => os.id === s.id);
             if (origSuspect) {
                 if (s.avatarSeed === undefined) s.avatarSeed = origSuspect.avatarSeed;
                 if (s.voice === undefined) s.voice = origSuspect.voice;
@@ -1614,8 +1614,8 @@ ${userChangeLog}
         // --- HARD SAFETY NET: Force-restore isGuilty and isDeceased flags ---
         // The AI is instructed never to change these, but we enforce it programmatically
         // so even a disobedient model cannot alter the story's core truth.
-        hydratedCase.suspects.forEach(s => {
-            const origSuspect = caseData.suspects.find(os => os.id === s.id);
+        hydratedCase.suspects.forEach((s: any) => {
+            const origSuspect = caseData.suspects.find((os: any) => os.id === s.id);
             if (origSuspect) {
                 if (s.isGuilty !== origSuspect.isGuilty) {
                     console.warn(`[SAFETY NET] AI tried to change isGuilty for ${s.name} from ${origSuspect.isGuilty} to ${s.isGuilty}. Reverting.`);
@@ -1651,7 +1651,7 @@ ${userChangeLog}
 
         const allEvidence = [
             ...(finalData.initialEvidence || []),
-            ...(finalData.suspects || []).flatMap(s => s.hiddenEvidence || [])
+            ...(finalData.suspects || []).flatMap((s: any) => s.hiddenEvidence || [])
         ];
 
         allEvidence.forEach(ev => {
@@ -1869,8 +1869,8 @@ ${userChangeLog}
         });
 
         // 2. Check Suspects for changes
-        hydratedCase.suspects.forEach(s => {
-            const origSuspect = caseData.suspects.find(os => os.id === s.id);
+        hydratedCase.suspects.forEach((s: any) => {
+            const origSuspect = caseData.suspects.find((os: any) => os.id === s.id);
             if (origSuspect) {
                 const roleChanged = s.role !== origSuspect.role;
                 const descChanged = s.physicalDescription !== origSuspect.physicalDescription;
@@ -1914,8 +1914,8 @@ ${userChangeLog}
             });
         };
         checkEvidence(hydratedCase.initialEvidence || [], caseData.initialEvidence || []);
-        hydratedCase.suspects.forEach(s => {
-            const orig = caseData.suspects.find(os => os.id === s.id);
+        hydratedCase.suspects.forEach((s: any) => {
+            const orig = caseData.suspects.find((os: any) => os.id === s.id);
             if (orig) {
                 checkEvidence(s.hiddenEvidence || [], orig.hiddenEvidence || []);
             }
@@ -1957,7 +1957,7 @@ ${userChangeLog}
         });
 
         // 2. Suspect Portraits
-        finalData.suspects.forEach(s => {
+        finalData.suspects.forEach((s: any) => {
             if (!s.portraits || Object.keys(s.portraits).length === 0) {
                 generationTasks.push((async () => {
                     try {
@@ -1973,7 +1973,7 @@ ${userChangeLog}
         // 3. Evidence Images
         const allEvidence = [
             ...(finalData.initialEvidence || []),
-            ...(finalData.suspects || []).flatMap(s => s.hiddenEvidence || [])
+            ...(finalData.suspects || []).flatMap((s: any) => s.hiddenEvidence || [])
         ];
 
         allEvidence.forEach(ev => {
