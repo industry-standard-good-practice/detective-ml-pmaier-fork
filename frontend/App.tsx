@@ -1190,10 +1190,14 @@ const App: React.FC = () => {
     setDraftToDelete(caseId);
   };
 
-  const confirmDeleteDraft = () => {
+  const confirmDeleteDraft = async () => {
     if (!draftToDelete) return;
+    // Delete from Firebase (case may have been saved but not published)
+    await deleteCase(draftToDelete);
+    // Delete from local drafts
     deleteLocalDraft(draftToDelete);
     setLocalDrafts(fetchLocalDrafts());
+    setCommunityCases(prev => prev.filter(c => c.id !== draftToDelete));
     setDraftToDelete(null);
   };
 
