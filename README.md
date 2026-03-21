@@ -295,6 +295,97 @@ curl http://localhost:4000/api/health
 
 ---
 
+## Deploying to Google Cloud Functions
+
+The backend is containerized and ready to deploy as a [Google Cloud Function (2nd gen)](https://cloud.google.com/functions/docs/concepts/version-comparison). Cloud Functions 2nd gen runs on Cloud Run under the hood.
+
+### Prerequisites
+
+1. Install the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) and authenticate:
+   ```bash
+   gcloud auth login
+   gcloud config set project YOUR_GCP_PROJECT_ID
+   ```
+2. Enable the required APIs:
+   ```bash
+   gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com run.googleapis.com
+   ```
+3. Ensure your GCP project's default service account has **Firebase Admin** permissions (Realtime Database, Cloud Storage). On GCP, the Firebase Admin SDK uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials) automatically — no service account key file is needed.
+
+### 1. Build the Backend
+
+From the project root:
+
+```bash
+cd backend
+npm run build
+```
+
+This compiles TypeScript to `backend/dist/`. The Cloud Function entry point is `dist/function.js`, which wraps the Express app with `@google-cloud/functions-framework`.
+
+### 2. Deploy
+
+From the `backend/` directory:
+
+```bash
+gcloud functions deploy detectiveml-api \
+  --gen2 \
+  --runtime=nodejs20 \
+  --region=us-central1 \
+  --source=. \
+  --entry-point=api \
+  --trigger-http \
+  --allow-unauthenticated \
+  --memory=512Mi \
+  --set-env-vars="FIREBASE_DATABASE_URL=https://YOUR_PROJECT-default-rtdb.firebaseio.com,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT.firebasestorage.app,CORS_ORIGIN=https://your-frontend-domain.com"
+```
+
+> **Note:** `--allow-unauthenticated` is correct here — the app handles its own authentication via Firebase ID tokens. GCP IAM-level auth is not needed.
+
+Replace the environment variable values with your actual Firebase project details:
+
+| Variable | Value |
+|----------|-------|
+| `FIREBASE_DATABASE_URL` | Your Firebase Realtime Database URL |
+| `FIREBASE_STORAGE_BUCKET` | Your Firebase Cloud Storage bucket name |
+| `CORS_ORIGIN` | Your production frontend URL (e.g. `https://detectiveml.com`) |
+
+### 3. Get the Function URL
+
+After deployment completes, `gcloud` prints the function's URL. You can also retrieve it:
+
+```bash
+gcloud functions describe detectiveml-api --gen2 --region=us-central1 --format='value(serviceConfig.uri)'
+```
+
+### 4. Update the Frontend
+
+Point the frontend at your deployed backend by updating `VITE_API_BASE_URL` in `.env.local`:
+
+```env
+VITE_API_BASE_URL=https://detectiveml-api-XXXXXXXXXX-uc.a.run.app
+```
+
+### Alternative: Deploy via Docker
+
+You can also build and push a Docker image directly:
+
+```bash
+cd backend
+docker build -t gcr.io/YOUR_PROJECT/detectiveml-backend .
+docker push gcr.io/YOUR_PROJECT/detectiveml-backend
+
+gcloud run deploy detectiveml-api \
+  --image=gcr.io/YOUR_PROJECT/detectiveml-backend \
+  --region=us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="FIREBASE_DATABASE_URL=...,FIREBASE_STORAGE_BUCKET=...,CORS_ORIGIN=..."
+```
+
+> For more detailed deployment options, see [backend/DEPLOY.md](./backend/DEPLOY.md).
+
+---
+
 ## Troubleshooting
 
 ### "Missing or invalid Authorization header"
@@ -328,4 +419,5 @@ Ensure `GEMINI_API_KEY` is set in `.env.local` and is a valid key from [Google A
 
 - [Backend API Reference](./backend/README.md) — full endpoint docs with curl examples
 - [API Spec (OpenAPI)](./backend/openapi.yaml) — machine-readable API specification
+- [Deployment Guide](./backend/DEPLOY.md) — detailed Cloud Function and Docker deployment options
 - [Firebase Migration Notes](./docs/FIREBASE_MIGRATION.md) — architecture decisions and migration history

@@ -51,10 +51,9 @@ function initFirebase() {
   }
 }
 
-// --- Express Server ---
-function createServer() {
+// --- Express App Factory ---
+function createApp() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 4000;
 
   // CORS — auto-detects dev vs production:
   //  • CORS_ORIGIN set to a real domain (e.g. https://detectiveml.com) → strict, production-only
@@ -105,14 +104,22 @@ function createServer() {
   app.use('/api/stats', authMiddleware, statsRouter);
   app.use('/api/images', authMiddleware, imagesRouter);
 
-  // Start server
+  return app;
+}
+
+// --- Initialize Firebase & create the Express app ---
+initFirebase();
+export const app = createApp();
+
+// --- Local dev: start listening ---
+// Cloud Functions sets K_SERVICE / FUNCTION_TARGET automatically.
+// When those are absent, we're running locally — start the HTTP server.
+const isCloudFunction = process.env.K_SERVICE || process.env.FUNCTION_TARGET;
+if (!isCloudFunction) {
+  const PORT = Number(process.env.PORT) || 4000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🔍 DetectiveML Backend running on http://0.0.0.0:${PORT}`);
     console.log(`📚 API Docs: http://localhost:${PORT}/api-docs`);
     console.log(`❤️  Health:   http://localhost:${PORT}/api/health\n`);
   });
 }
-
-// --- Entry Point ---
-initFirebase();
-createServer();
