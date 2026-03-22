@@ -1,0 +1,1303 @@
+openapi: '3.0.3'
+info:
+  title: DetectiveML Backend API
+  description: |
+    Backend API for DetectiveML. All endpoints require Firebase Authentication — 
+    clients send `Authorization: Bearer <firebaseIdToken>` to prove identity.
+    The backend validates the token and performs Firebase operations using a service account.
+    
+    Gemini AI operations (chat, case generation, image generation, TTS) are proxied through
+    the backend under `/api/gemini/`. The backend holds the GEMINI_API_KEY securely —
+    the frontend never interacts with the Gemini SDK directly.
+  version: '2.0.0'
+
+servers:
+  - url: http://localhost:4000
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID Token
+      description: Firebase ID token obtained via `auth.currentUser.getIdToken()`
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      example:
+        error: "Something went wrong."
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      example:
+        success: true
+
+    CaseData:
+      type: object
+      required: [id, title, type, description, difficulty, suspects, authorId]
+      properties:
+        id:
+          type: string
+          example: "case_abc123"
+        title:
+          type: string
+          example: "The Missing Diamond"
+        type:
+          type: string
+          example: "Larceny"
+        description:
+          type: string
+          example: "A priceless diamond vanishes from a locked museum exhibit."
+        difficulty:
+          type: string
+          enum: [Easy, Medium, Hard]
+        isUploaded:
+          type: boolean
+          description: "Whether the case is published (read-only, controlled by publish endpoint)"
+        authorId:
+          type: string
+          example: "uid_user123"
+        authorDisplayName:
+          type: string
+          example: "Detective Jane"
+        version:
+          type: integer
+          example: 3
+        createdAt:
+          type: number
+          description: "Epoch timestamp (ms)"
+        updatedAt:
+          type: number
+          description: "Epoch timestamp (ms)"
+        heroImageUrl:
+          type: string
+        suspects:
+          type: array
+          items:
+            type: object
+        initialEvidence:
+          type: array
+          items:
+            type: object
+        initialTimeline:
+          type: array
+          items:
+            type: object
+        officer:
+          type: object
+        partner:
+          type: object
+
+    CaseStats:
+      type: object
+      properties:
+        plays:
+          type: integer
+          example: 42
+        successes:
+          type: integer
+          example: 28
+        failures:
+          type: integer
+          example: 14
+        upvotes:
+          type: integer
+          example: 35
+        downvotes:
+          type: integer
+          example: 3
+        totalEvidenceFound:
+          type: integer
+          example: 120
+        totalSuspectsSpoken:
+          type: integer
+          example: 85
+        totalTimelineFound:
+          type: integer
+          example: 60
+
+    AttemptDetail:
+      type: object
+      required: [evidenceFound, suspectsSpoken, timelineFound]
+      properties:
+        evidenceFound:
+          type: integer
+          example: 4
+        suspectsSpoken:
+          type: integer
+          example: 3
+        timelineFound:
+          type: integer
+          example: 2
+
+    ImageUploadRequest:
+      type: object
+      required: [base64, path]
+      properties:
+        base64:
+          type: string
+          description: "Base64-encoded image data (may include data:image/png;base64, prefix)"
+          example: "data:image/png;base64,iVBORw0KGgo..."
+        path:
+          type: string
+          description: "Storage path"
+          example: "images/uid123/cases/case456/hero.png"
+
+    ImageUploadResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          example: "https://storage.googleapis.com/detectiveml.firebasestorage.app/images/uid123/cases/case456/hero.png"
+
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      security: []
+      tags: [System]
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    example: "2026-03-17T15:00:00.000Z"
+
+  /api/cases:
+    get:
+      summary: List cases
+      description: |
+        Without query params, returns all published community cases.
+        With `?authorId=<uid>`, returns all cases (published + unpublished) for that user.
+      tags: [Cases]
+      parameters:
+        - name: authorId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Filter by author UID (returns all their cases, not just published)"
+      responses:
+        '200':
+          description: Array of cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CaseData'
+              example:
+                - id: "case_abc123"
+                  title: "The Missing Diamond"
+                  type: "Larceny"
+                  isUploaded: true
+                  authorId: "uid_user123"
+                  authorDisplayName: "Detective Jane"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cases/{id}:
+    put:
+      summary: Create or update a case
+      description: |
+        Creates a new case or updates an existing one. Business logic:
+        - Preserves original author identity from existing data
+        - Strips `isUploaded` from input (publish state is controlled by the publish endpoint)
+        - Increments version on major updates (title, suspects, evidence changes)
+        - New cases are always created as unpublished
+      tags: [Cases]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseData'
+      responses:
+        '200':
+          description: Case saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request (missing authorId or authorDisplayName)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "authorId is required in the request body."
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+    delete:
+      summary: Delete a case
+      tags: [Cases]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Case deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/cases/{id}/publish:
+    post:
+      summary: Publish a case
+      description: |
+        Sets `isUploaded: true` on the case. Validates that authorId and 
+        authorDisplayName are present and valid before publishing.
+      tags: [Cases]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseData'
+      responses:
+        '200':
+          description: Case published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request (missing author info)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Cannot publish: valid authorDisplayName is required."
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/stats/{id}:
+    get:
+      summary: Get stats for a case
+      tags: [Stats]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Case statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseStats'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/stats/{id}/results:
+    post:
+      summary: Record a game result
+      description: "Atomically increments play count and success/failure counters using a transaction."
+      tags: [Stats]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result, detail]
+              properties:
+                result:
+                  type: string
+                  enum: [SUCCESS, PARTIAL, FAILURE]
+                  example: "SUCCESS"
+                detail:
+                  $ref: '#/components/schemas/AttemptDetail'
+            example:
+              result: "SUCCESS"
+              detail:
+                evidenceFound: 4
+                suspectsSpoken: 3
+                timelineFound: 2
+      responses:
+        '200':
+          description: Result recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/stats/{id}/vote:
+    get:
+      summary: Get current user's vote
+      tags: [Voting]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User's vote
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vote:
+                    type: string
+                    nullable: true
+                    enum: [up, down, null]
+              example:
+                vote: "up"
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+    post:
+      summary: Submit or change a vote
+      description: |
+        Records the user's vote and atomically updates aggregate vote counts.
+        If the user already voted, the old vote is undone first.
+      tags: [Voting]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vote]
+              properties:
+                vote:
+                  type: string
+                  enum: [up, down]
+            example:
+              vote: "up"
+      responses:
+        '200':
+          description: Vote submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  previousVote:
+                    type: string
+                    nullable: true
+              example:
+                success: true
+                previousVote: null
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'vote must be "up" or "down"'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/stats:
+    get:
+      summary: Get all case stats
+      tags: [Stats]
+      responses:
+        '200':
+          description: Map of caseId to stats
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/CaseStats'
+              example:
+                case_abc123:
+                  plays: 42
+                  successes: 28
+                  failures: 14
+                  upvotes: 35
+                  downvotes: 3
+                  totalEvidenceFound: 120
+                  totalSuspectsSpoken: 85
+                  totalTimelineFound: 60
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/images/upload:
+    post:
+      summary: Upload an image
+      description: |
+        Uploads a base64-encoded image to Firebase Storage using the backend's service account.
+        Returns the public download URL.
+      tags: [Images]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequest'
+      responses:
+        '200':
+          description: Image uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageUploadResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  # ──────────────────────────────────────────────
+  # Gemini AI Endpoints
+  # All require Firebase Auth. Backend uses its own GEMINI_API_KEY.
+  # Extended timeout: 10 minutes for long-running AI operations.
+  # ──────────────────────────────────────────────
+
+  /api/gemini/chat/suspect:
+    post:
+      summary: Get suspect interrogation response
+      description: |
+        Generates an AI response for a suspect during interrogation. Returns the response text,
+        emotional state, aggravation change, revealed evidence, and timeline statements.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suspect, caseData, userInput, type, currentAggravation, isFirstTurn]
+              properties:
+                suspect:
+                  type: object
+                  description: The suspect being interrogated
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                userInput:
+                  type: string
+                  description: Player's question or action
+                type:
+                  type: string
+                  enum: [talk, action]
+                evidenceAttachment:
+                  type: string
+                  nullable: true
+                  description: ID of evidence being presented
+                currentAggravation:
+                  type: number
+                isFirstTurn:
+                  type: boolean
+                discoveredEvidence:
+                  type: array
+                  items:
+                    type: object
+                currentGameTime:
+                  type: number
+                conversationHistory:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: AI suspect response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  emotion:
+                    type: string
+                  aggravationDelta:
+                    type: number
+                  revealedEvidence:
+                    type: array
+                    items:
+                      type: string
+                  revealedTimelineStatements:
+                    type: array
+                    items:
+                      type: object
+                  hints:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/chat/officer:
+    post:
+      summary: Get officer (Chief) chat response
+      description: Returns AI dialogue from the officer/chief character when the player radios in.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData, userMessage, evidenceFound, notes, chatHistory]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                userMessage:
+                  type: string
+                evidenceFound:
+                  type: array
+                  items:
+                    type: object
+                notes:
+                  type: object
+                chatHistory:
+                  type: object
+      responses:
+        '200':
+          description: Officer response text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/chat/partner:
+    post:
+      summary: Get partner intervention response
+      description: Generates a Good Cop, Bad Cop, examine, or hint intervention from the partner character.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, suspect, caseData, history]
+              properties:
+                type:
+                  type: string
+                  enum: [goodCop, badCop, examine, hint]
+                suspect:
+                  type: object
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                history:
+                  type: array
+                  items:
+                    type: object
+                discoveredEvidence:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Partner intervention text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/chat/badcop-hint:
+    post:
+      summary: Get bad cop hint
+      description: Generates a tactical hint based on unrevealed evidence after a bad cop intervention.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suspect, unrevealed, responseText]
+              properties:
+                suspect:
+                  type: object
+                unrevealed:
+                  type: array
+                  items:
+                    type: object
+                responseText:
+                  type: string
+      responses:
+        '200':
+          description: Hint text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/chat/case-summary:
+    post:
+      summary: Generate end-game case summary
+      description: Generates a narrative summary of the completed case for the end-game screen.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData, gameResult, evidenceDiscovered]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                accusedId:
+                  type: string
+                  nullable: true
+                gameResult:
+                  type: string
+                  enum: [SUCCESS, PARTIAL, FAILURE]
+                evidenceDiscovered:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Summary text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/case/generate:
+    post:
+      summary: Generate a new case from a prompt
+      description: |
+        Uses AI to generate a complete mystery case from a user prompt.
+        Returns full CaseData with suspects, evidence, timelines, alibis, and relationships.
+        This is a long-running operation (may take 30-60 seconds).
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userPrompt:
+                  type: string
+                  description: Case theme/description (empty with isLucky for random)
+                  example: "A murder at a jazz club in 1920s New York"
+                isLucky:
+                  type: boolean
+                  description: If true and no prompt, generates a random theme
+                  default: false
+      responses:
+        '200':
+          description: Generated case data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseData'
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/case/consistency:
+    post:
+      summary: Run AI consistency check on a case
+      description: |
+        Validates a case for internal consistency (timelines, relationships, evidence).
+        Returns the updated case with fixes applied and a detailed report.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                baseline:
+                  $ref: '#/components/schemas/CaseData'
+                editContext:
+                  type: string
+      responses:
+        '200':
+          description: Updated case and consistency report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCase:
+                    $ref: '#/components/schemas/CaseData'
+                  report:
+                    type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/case/edit:
+    post:
+      summary: Apply AI-driven edits to a case
+      description: |
+        Allows broad AI-driven editing of a case via natural language prompt.
+        Handles theme changes, suspect modifications, evidence updates, etc.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData, userPrompt]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                userPrompt:
+                  type: string
+                  example: "Change the setting to a Victorian mansion"
+                baseline:
+                  $ref: '#/components/schemas/CaseData'
+      responses:
+        '200':
+          description: Edited case and change report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCase:
+                    $ref: '#/components/schemas/CaseData'
+                  report:
+                    type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/generate:
+    post:
+      summary: Generate a raw image
+      description: Generates an image from a prompt using Gemini. Returns raw base64 PNG data.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                aspectRatio:
+                  type: string
+                  default: "1:1"
+                refImages:
+                  type: array
+                  items:
+                    type: string
+                mode:
+                  type: string
+                  enum: [create, edit, evidence]
+                  default: create
+                modelOverride:
+                  type: string
+      responses:
+        '200':
+          description: Base64 PNG image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  base64:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Image generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/evidence:
+    post:
+      summary: Generate an evidence image
+      description: Generates a pixel-art evidence image and uploads it to Firebase Storage.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [evidence, caseId, userId]
+              properties:
+                evidence:
+                  type: object
+                caseId:
+                  type: string
+                userId:
+                  type: string
+                refImage:
+                  type: string
+      responses:
+        '200':
+          description: Public URL of the uploaded evidence image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Image generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/variants:
+    post:
+      summary: Generate emotional portrait variants
+      description: |
+        Given a neutral base portrait, generates emotional variants (happy, angry, nervous, etc.)
+        and uploads them to Firebase Storage.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [neutralBase64, suspect, caseId, userId]
+              properties:
+                neutralBase64:
+                  type: string
+                  description: Base64 PNG of the neutral portrait
+                suspect:
+                  type: object
+                caseId:
+                  type: string
+                userId:
+                  type: string
+      responses:
+        '200':
+          description: Map of emotion → Firebase Storage URL
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/suspect-upload:
+    post:
+      summary: Generate suspect portraits from uploaded image
+      description: |
+        Takes a user-uploaded image and generates pixel-art portraits in the game style,
+        then uploads all variants to Firebase Storage.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suspect, userImageBase64, caseId, userId]
+              properties:
+                suspect:
+                  type: object
+                userImageBase64:
+                  type: string
+                caseId:
+                  type: string
+                userId:
+                  type: string
+      responses:
+        '200':
+          description: Updated suspect with portrait URLs
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/regenerate:
+    post:
+      summary: Regenerate a single suspect's portraits
+      description: Regenerates all portraits (neutral + emotional variants) for a single suspect.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suspect, caseId, userId]
+              properties:
+                suspect:
+                  type: object
+                caseId:
+                  type: string
+                userId:
+                  type: string
+                theme:
+                  type: string
+                  default: "Noir"
+      responses:
+        '200':
+          description: Updated suspect with new portrait URLs
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/pregenerate:
+    post:
+      summary: Pre-generate all images for a case
+      description: |
+        Generates all portraits (suspects, officer, partner) and evidence images for a case.
+        This is the longest-running operation — may take several minutes.
+        Returns the full CaseData with all image URLs populated.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData, userId]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                userId:
+                  type: string
+      responses:
+        '200':
+          description: CaseData with all image URLs populated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseData'
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/create:
+    post:
+      summary: Create an image from a user prompt
+      description: Generates a pixel-art styled image from a freeform user prompt.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userPrompt]
+              properties:
+                userPrompt:
+                  type: string
+                aspectRatio:
+                  type: string
+                  default: "3:4"
+      responses:
+        '200':
+          description: Base64 PNG image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  base64:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Image generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/image/edit:
+    post:
+      summary: Edit an existing image with a prompt
+      description: Applies AI-driven edits to an existing image based on a user prompt.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [baseImageBase64, userPrompt]
+              properties:
+                baseImageBase64:
+                  type: string
+                userPrompt:
+                  type: string
+                aspectRatio:
+                  type: string
+                  default: "3:4"
+      responses:
+        '200':
+          description: Base64 PNG of the edited image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  base64:
+                    type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Image generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/tts:
+    post:
+      summary: Generate text-to-speech audio
+      description: |
+        Converts text to speech using a Gemini TTS model.
+        Returns raw base64 PCM audio data (16-bit mono, 24kHz).
+        The client is responsible for WAV header construction.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, voiceName]
+              properties:
+                text:
+                  type: string
+                  description: Text to convert to speech
+                voiceName:
+                  type: string
+                  description: Voice name (e.g. "Charon", "Aoede")
+      responses:
+        '200':
+          description: Base64 PCM audio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audio:
+                    type: string
+                    nullable: true
+                    description: Base64-encoded PCM audio, or null if generation failed
+        '401':
+          description: Unauthorized
+        '500':
+          description: TTS generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+tags:
+  - name: System
+    description: Health checks and system info
+  - name: Cases
+    description: Case CRUD operations
+  - name: Stats
+    description: Game statistics
+  - name: Voting
+    description: Case voting
+  - name: Images
+    description: Image upload to Firebase Storage
+  - name: Gemini AI
+    description: |
+      AI-powered game features (chat, case generation, image generation, TTS).
+      All endpoints use the backend's GEMINI_API_KEY — the frontend never touches Gemini directly.
+      Extended timeout of 10 minutes for long-running operations.
