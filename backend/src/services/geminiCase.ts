@@ -134,24 +134,34 @@ export const enforceVoiceStyles = (caseData: any, originalCase?: any): void => {
     const caseDesc = caseData.description || '';
     const origSuspects: any[] = originalCase?.suspects || [];
 
-    // Officer — carry forward accent, then regenerate style
+    // Helper: strip empty-string accents so they're treated as absent
+    const sanitizeAccent = (char: any) => {
+        if (char && typeof char.voiceAccent === 'string' && char.voiceAccent.trim().length === 0) {
+            delete char.voiceAccent;
+        }
+    };
+
+    // Officer — sanitize, carry forward accent, then regenerate style
     if (caseData.officer) {
+        sanitizeAccent(caseData.officer);
         if (!caseData.officer.voiceAccent && originalCase?.officer?.voiceAccent) {
             caseData.officer.voiceAccent = originalCase.officer.voiceAccent;
         }
         caseData.officer.voiceStyle = generateVoiceStyle({ ...caseData.officer, isDeceased: false }, caseDesc);
     }
 
-    // Partner — carry forward accent, then regenerate style
+    // Partner — sanitize, carry forward accent, then regenerate style
     if (caseData.partner) {
+        sanitizeAccent(caseData.partner);
         if (!caseData.partner.voiceAccent && originalCase?.partner?.voiceAccent) {
             caseData.partner.voiceAccent = originalCase.partner.voiceAccent;
         }
         caseData.partner.voiceStyle = generateVoiceStyle({ ...caseData.partner, isDeceased: false }, caseDesc);
     }
 
-    // Suspects — carry forward accent, then regenerate style
+    // Suspects — sanitize, carry forward accent, then regenerate style
     (caseData.suspects || []).forEach((s: any) => {
+        sanitizeAccent(s);
         const orig = origSuspects.find((os: any) => os.id === s.id);
         if (!s.voiceAccent && orig?.voiceAccent) {
             s.voiceAccent = orig.voiceAccent;
@@ -221,17 +231,20 @@ export const inferVoiceAccent = (
  * Only sets accents where there's a strong signal from character data.
  */
 export const inferVoiceAccents = (caseData: any): void => {
+    // Helper: treat empty-string accents as absent
+    const isEmpty = (val: any) => !val || (typeof val === 'string' && val.trim().length === 0);
+
     // Officer
-    if (caseData.officer && !caseData.officer.voiceAccent) {
+    if (caseData.officer && isEmpty(caseData.officer.voiceAccent)) {
         caseData.officer.voiceAccent = inferVoiceAccent(caseData.officer) || undefined;
     }
     // Partner
-    if (caseData.partner && !caseData.partner.voiceAccent) {
+    if (caseData.partner && isEmpty(caseData.partner.voiceAccent)) {
         caseData.partner.voiceAccent = inferVoiceAccent(caseData.partner) || undefined;
     }
     // Suspects
     (caseData.suspects || []).forEach((s: any) => {
-        if (!s.voiceAccent) {
+        if (isEmpty(s.voiceAccent)) {
             s.voiceAccent = inferVoiceAccent(s) || undefined;
         }
     });
@@ -981,7 +994,7 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
         // --- PORTRAITS & VOICE: always carry forward (AI never generates these) ---
         if (!s.portraits || Object.keys(s.portraits).length === 0) s.portraits = orig.portraits || {};
         if (!s.voice) s.voice = orig.voice;
-        if (!s.voiceAccent) s.voiceAccent = orig.voiceAccent;
+        if (!s.voiceAccent || (typeof s.voiceAccent === 'string' && s.voiceAccent.trim().length === 0)) s.voiceAccent = orig.voiceAccent;
         if (!s.voiceStyle) s.voiceStyle = orig.voiceStyle;
     });
 
