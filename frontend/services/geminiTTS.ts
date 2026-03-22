@@ -3,6 +3,7 @@
  * WAV construction and AudioContext registration remain client-side.
  */
 import { geminiPost } from './backendGemini';
+import { registerPcmData as registerPcmCache } from './audioPlayer';
 
 // --- AudioContext PCM registration (client-side only) ---
 let audioCtx: AudioContext | null = null;
@@ -47,6 +48,10 @@ const registerPcmData = (base64: string, id: string): string => {
 
   const blob = new Blob([wav], { type: 'audio/wav' });
   const url = URL.createObjectURL(blob);
+
+  // Feed the audio player's PCM cache so iOS Safari can use the unlocked element path
+  const pcmInt16 = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.byteLength / 2);
+  registerPcmCache(url, pcmInt16, 24000);
 
   // Decode in the background for potential reuse
   ctx.decodeAudioData(wav.buffer.slice(0)).then(buf => audioMap.set(id, buf)).catch(() => {});
