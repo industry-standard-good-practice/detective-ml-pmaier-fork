@@ -142,7 +142,11 @@ export const formatUserChangeLog = (diff: Record<string, any>, baseline: CaseDat
                 if (field === 'name') {
                     lines.push(`- Suspect "${oldVal}" was RENAMED to "${value}" — this is the COMPLETE new name. Use "${value}" EXACTLY and COMPLETELY. Do NOT keep any part of the old name "${oldVal}". Update ALL references to this character everywhere (description, bios, relationships, alibis, evidence, timeline, motives, secrets, witness observations).`);
                 } else if (field === 'isGuilty') {
-                    lines.push(`- Suspect "${suspectLabel}" guilt status changed to: ${value ? 'GUILTY' : 'INNOCENT'}`);
+                    if (value) {
+                        lines.push(`- Suspect "${suspectLabel}" is now GUILTY. Rewrite the narrative so this person now makes sense as a perpetrator: align motive, secret, behavior, timeline pressure points, contradictory statements, and incriminating evidence references. If there are now multiple guilty suspects, ensure all guilty parties have coherent roles and non-conflicting involvement.`);
+                    } else {
+                        lines.push(`- Suspect "${suspectLabel}" is now INNOCENT. Remove perpetrator implications and ensure their motive/secret/evidence/timeline no longer frames them as a killer.`);
+                    }
                 } else if (field === 'isDeceased') {
                     lines.push(`- Suspect "${suspectLabel}" deceased status changed to: ${value ? 'DECEASED (victim)' : 'ALIVE'}`);
                 } else if (field === 'alibi' && typeof value === 'object') {
@@ -786,7 +790,24 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
 // --- CORE FUNCTIONS ---
 
 export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg: string) => void, baseline?: CaseData, editContext?: string): Promise<{ updatedCase: CaseData, report: any }> => {
-    if (onProgress) onProgress('Running consistency check on server...');
+    const progressSteps = [
+        'Step 1/5: Preparing case data for narrative audit...',
+        'Step 2/5: Sending suspects, evidence, and timeline for analysis...',
+        'Step 3/5: Cross-checking motives, alibis, and contradictions...',
+        'Step 4/5: Validating relationship consistency and chronology...',
+        'Step 5/5: Finalizing consistency report...'
+    ];
+    let currentStep = 0;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    if (onProgress) {
+        onProgress(progressSteps[0]);
+        progressTimer = setInterval(() => {
+            if (currentStep < progressSteps.length - 1) {
+                currentStep += 1;
+                onProgress(progressSteps[currentStep]);
+            }
+        }, 2500);
+    }
     try {
         const result = await geminiPost<{ updatedCase: CaseData, report: any }>('/case/consistency', {
             caseData, baseline, editContext
@@ -795,6 +816,8 @@ export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg
     } catch (e) {
         console.error('Consistency Check Failed:', e);
         return { updatedCase: caseData, report: 'Consistency check failed.' };
+    } finally {
+        if (progressTimer) clearInterval(progressTimer);
     }
 };
 
@@ -803,7 +826,24 @@ export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg
  * Handles everything from theme changes to suspect management.
  */
 export const editCaseWithPrompt = async (caseData: CaseData, userPrompt: string, onProgress?: (msg: string) => void, baseline?: CaseData): Promise<{ updatedCase: CaseData, report: any }> => {
-    if (onProgress) onProgress('Applying AI edits on server...');
+    const progressSteps = [
+        'Step 1/5: Preparing your requested case edits...',
+        'Step 2/5: Rewriting narrative, characters, and key scene details...',
+        'Step 3/5: Updating clues, motives, and alibi context...',
+        'Step 4/5: Reconciling timeline and relationship dependencies...',
+        'Step 5/5: Assembling transformed case output...'
+    ];
+    let currentStep = 0;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    if (onProgress) {
+        onProgress(progressSteps[0]);
+        progressTimer = setInterval(() => {
+            if (currentStep < progressSteps.length - 1) {
+                currentStep += 1;
+                onProgress(progressSteps[currentStep]);
+            }
+        }, 2500);
+    }
     try {
         const result = await geminiPost<{ updatedCase: CaseData, report: any }>('/case/edit', {
             caseData, userPrompt, baseline
@@ -812,10 +852,40 @@ export const editCaseWithPrompt = async (caseData: CaseData, userPrompt: string,
     } catch (e) {
         console.error('Edit Case Failed:', e);
         throw e;
+    } finally {
+        if (progressTimer) clearInterval(progressTimer);
     }
 };
 
-export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolean = false): Promise<CaseData> => {
-    return geminiPost<CaseData>('/case/generate', { userPrompt, isLucky });
+export const generateCaseFromPrompt = async (
+    userPrompt: string,
+    isLucky: boolean = false,
+    onProgress?: (msg: string) => void
+): Promise<CaseData> => {
+    const progressSteps = [
+        'Step 1/6: Building case concept from your prompt...',
+        'Step 2/6: Designing suspects, victim, and narrative roles...',
+        'Step 3/6: Drafting motives, alibis, and hidden evidence...',
+        'Step 4/6: Constructing timeline and event chronology...',
+        'Step 5/6: Calibrating interrogation personalities and difficulty...',
+        'Step 6/6: Finalizing investigation dossier...'
+    ];
+    let currentStep = 0;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    if (onProgress) {
+        onProgress(progressSteps[0]);
+        progressTimer = setInterval(() => {
+            if (currentStep < progressSteps.length - 1) {
+                currentStep += 1;
+                onProgress(progressSteps[currentStep]);
+            }
+        }, 2500);
+    }
+
+    try {
+        return await geminiPost<CaseData>('/case/generate', { userPrompt, isLucky });
+    } finally {
+        if (progressTimer) clearInterval(progressTimer);
+    }
 };
 

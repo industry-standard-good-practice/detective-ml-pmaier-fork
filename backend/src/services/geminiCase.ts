@@ -447,6 +447,47 @@ export const applyUserDiff = (aiCase: CaseData, userDiff: Record<string, any>): 
     }
 };
 
+const NARRATIVE_PROPAGATION_FIELDS = new Set([
+    'isGuilty',
+    'isDeceased',
+    'motive',
+    'secret',
+    'alibi',
+    'name',
+    'role',
+    'bio',
+    'personality',
+    'status',
+    'physicalDescription',
+    'professionalBackground',
+    'witnessObservations',
+]);
+
+const requiresNarrativePropagation = (userDiff: Record<string, any>): boolean => {
+    if (!userDiff || Object.keys(userDiff).length === 0) return false;
+
+    // Top-level case rewrites usually require broad narrative synchronization.
+    if (userDiff.title !== undefined || userDiff.type !== undefined || userDiff.description !== undefined) {
+        return true;
+    }
+
+    // Support character identity/personality shifts tend to ripple through the narrative.
+    for (const key of ['_officer', '_partner']) {
+        const charDiff = userDiff[key];
+        if (charDiff && Object.keys(charDiff).length > 0) return true;
+    }
+
+    // Suspect-level high-impact fields should trigger full propagation mode.
+    const suspectDiffs = userDiff._suspects as Record<string, Record<string, any>> | undefined;
+    if (!suspectDiffs) return false;
+    for (const fields of Object.values(suspectDiffs)) {
+        for (const field of Object.keys(fields)) {
+            if (NARRATIVE_PROPAGATION_FIELDS.has(field)) return true;
+        }
+    }
+    return false;
+};
+
 
 export const stripImagesFromCase = (caseData: CaseData): { stripped: any, imageMap: Record<string, string> } => {
     const imageMap: Record<string, string> = {};
@@ -1404,11 +1445,17 @@ export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg
 
     // Compute user changes from baseline for the AI prompt
     let userChangeLog = '';
+    let userDiff: Record<string, any> = {};
+    let shouldPropagateNarrative = false;
     if (baseline) {
-        const userDiff = computeUserDiff(baseline, caseData);
+        userDiff = computeUserDiff(baseline, caseData);
         userChangeLog = formatUserChangeLog(userDiff, baseline);
+        shouldPropagateNarrative = requiresNarrativePropagation(userDiff);
         if (userChangeLog) {
             console.log('[DEBUG] checkCaseConsistency: User change log:\n' + userChangeLog);
+        }
+        if (shouldPropagateNarrative) {
+            console.log('[DEBUG] checkCaseConsistency: Using narrative-propagation mode (high-impact manual edits detected).');
         }
     }
 
@@ -1436,34 +1483,36 @@ ${userChangeLog}
        Focus on fixing logical/narrative gaps, timeline conflicts, and structural issues — not on rewriting content that is already consistent.
 `;
 
-    // If this consistency check is running after an AI edit, include the user's original request
+    // Optional context from caller (e.g. prior edit intent or manual change rationale)
     const editContextSection = editContext ? `
-    **IMPORTANT — EDIT CONTEXT (DO NOT REVERT INTENTIONAL CHANGES):**
-       This case was JUST transformed by an AI edit with the following user request:
+    **IMPORTANT — CONTEXT TO PRESERVE:**
+       Additional context was provided for this consistency run:
        "${editContext}"
        
-       All changes made by that edit are INTENTIONAL and MUST be PRESERVED. Do NOT flag them as issues.
-       
-       **CRITICAL EXAMPLES OF WHAT NOT TO DO:**
-       - If the edit removed alibi corroboration → do NOT re-add witnesses or confirmations
-       - If the edit weakened alibis → do NOT strengthen them back
-       - If the edit changed the difficulty → do NOT "fix" it to be easier or harder
-       - If the edit changed the setting/time period → do NOT flag the startTime as wrong
-       
-       Your ONLY job is to check for factual contradictions (wrong names, impossible locations, broken references) — NOT to undo the edit or "improve" the mystery design.
+       Treat this as intentional direction and preserve it while repairing consistency.
+       Do NOT revert these intended changes.
 ` : '';
 
-    if (onProgress) onProgress("Initializing Narrative Audit...");
+    if (onProgress) onProgress(shouldPropagateNarrative ? "Initializing Narrative Reconciliation..." : "Initializing Narrative Audit...");
 
     // Detailed loading sequence
-    const progressSteps = [
-        "Auditing suspect alibis...",
-        "Verifying timeline continuity...",
-        "Checking motive consistency...",
-        "Cross-referencing evidence links...",
-        "Identifying logical narrative gaps...",
-        "Synthesizing forensic findings..."
-    ];
+    const progressSteps = shouldPropagateNarrative
+        ? [
+            "Identifying high-impact user edits...",
+            "Rebuilding suspect motive and role alignment...",
+            "Reconciling timeline, alibis, and relationships...",
+            "Re-linking evidence to updated narrative facts...",
+            "Validating cross-field consistency...",
+            "Synthesizing reconciliation report..."
+        ]
+        : [
+            "Auditing suspect alibis...",
+            "Verifying timeline continuity...",
+            "Checking motive consistency...",
+            "Cross-referencing evidence links...",
+            "Identifying logical narrative gaps...",
+            "Synthesizing forensic findings..."
+        ];
 
     let stepIdx = 0;
     const progressInterval = setInterval(() => {
@@ -1476,14 +1525,21 @@ ${userChangeLog}
     try {
         const result = await ai.models.generateContent({
             model: GEMINI_MODELS.CASE_ENGINE,
-            contents: `You are a Continuity Proofreader — a careful, conservative editor.
+            contents: `${shouldPropagateNarrative
+    ? `You are a Narrative Consistency Refactorer.
+    I will provide a JSON object representing a detective mystery game case.
+    
+    YOUR MISSION:
+    Perform a targeted narrative synchronization pass. Some user-edited fields are authoritative and may require dependent fields to be rewritten so the full case remains coherent.
+    You must preserve the user's explicit field values and update dependent narrative data where required (bios, motives, secrets, alibis, relationships, timeline activity, and evidence descriptions).`
+    : `You are a Continuity Proofreader — a careful, conservative editor.
     I will provide a JSON object representing a detective mystery game case.
     
     YOUR MISSION:
     Perform a **minimalist quality-control pass**. You are looking for ACTUAL ERRORS — factual contradictions, broken references, impossible timelines.
     **If the case is already consistent, you should make ZERO changes and return the case data exactly as-is.**
     You are NOT rewriting content. You are NOT improving prose. You are NOT redesigning the mystery.
-    Your job is to find and fix ONLY genuine contradictions and broken references — nothing else.
+    Your job is to find and fix ONLY genuine contradictions and broken references — nothing else.`}
     
     ${editContextSection}
     ${userEditsSection}
@@ -1495,14 +1551,20 @@ ${userChangeLog}
        - The 'isDeceased' flags are LOCKED. Do NOT change any suspect's living/dead status.
        - If you change isGuilty or isDeceased for ANY suspect, your entire output is INVALID and will be rejected.
     
-    2. **NEVER CHANGE THE STORY.**
+    ${shouldPropagateNarrative
+    ? `2. **PROPAGATE USER-AUTHORITATIVE CHANGES THROUGH DEPENDENCIES.**
+       - The current JSON values are authoritative for any user-edited field.
+       - You MAY rewrite dependent narrative fields when required for coherence.
+       - Keep all unaffected content stable; only change what is needed to resolve newly introduced narrative conflicts.
+       - Do NOT introduce unrelated twists or brand-new plotlines.`
+    : `2. **NEVER CHANGE THE STORY.**
        - The overall narrative, plot, setting, characters, and creative choices are the CREATOR'S work and are NOT yours to alter.
        - Do NOT rewrite bios, secrets, motives, personalities, or descriptions unless they contain a factual contradiction with another field.
        - Do NOT change character names, roles, ages, or genders.
        - Do NOT add, remove, or rename suspects.
        - Do NOT add, remove, or substantially rewrite evidence items.
        - Do NOT change the case title, type, or description.
-       - "I would write it differently" is NOT a reason to change something. Only "this directly contradicts another field in the case" is a valid reason.
+       - "I would write it differently" is NOT a reason to change something. Only "this directly contradicts another field in the case" is a valid reason.`}
     
     3. **NEVER ALTER MYSTERY DIFFICULTY.**
        - Do NOT make alibis corroborate each other. If Suspect A says they were alone, leave it that way.
@@ -1511,16 +1573,16 @@ ${userChangeLog}
        - Do NOT add or remove alibi witnesses.
        - Alibi structure is a GAME DESIGN choice, not a continuity error.
     
-    4. **PREFER NO CHANGES OVER UNNECESSARY CHANGES.**
+    4. **MINIMIZE COLLATERAL CHANGES.**
        - If a field is imperfect but not contradictory, LEAVE IT ALONE.
        - If evidence is vague but not wrong, LEAVE IT ALONE.
        - If a timeline has gaps but no conflicts, LEAVE IT ALONE.
        - If prose is mediocre but accurate, LEAVE IT ALONE.
        - When in doubt, DO NOT CHANGE IT.
     
-    ${editContextSection ? '' : `**CRITICAL RESTATEMENT:** If you cannot identify a specific, concrete factual contradiction between two fields in the case, you should return the case UNCHANGED with an empty changesMade array and a report saying "No inconsistencies found."`}
+    ${(!editContextSection && !shouldPropagateNarrative) ? `**CRITICAL RESTATEMENT:** If you cannot identify a specific, concrete factual contradiction between two fields in the case, you should return the case UNCHANGED with an empty changesMade array and a report saying "No inconsistencies found."` : ''}
     
-    **WHAT YOU MAY FIX (the ONLY valid reasons to change something):**
+    **WHAT YOU MAY FIX:**
     - A suspect's timeline says they were at Location A at 8 PM, but their alibi says Location B at 8 PM → fix the contradiction
     - A relationship references a person who doesn't exist in the case → fix the broken reference
     - A name is misspelled differently across fields → unify the spelling
@@ -1529,16 +1591,19 @@ ${userChangeLog}
     - Required fields are completely empty/missing → populate them minimally
     - Timeline uses 24-hour format → convert to 12-hour AM/PM
     - A relationship description is just one word repeating the type → add a minimal 2-sentence description
+    ${shouldPropagateNarrative ? `
+    - Dependent fields that became inconsistent after user edits (e.g. motives/secrets/alibis/bios/evidence links no longer match current role flags) → rewrite those dependencies to restore coherence
+    - Case description or suspect summaries that conflict with authoritative edited fields → update to align with current truth` : ''}
     
     **WHAT YOU MUST NEVER DO:**
-    - Rewrite bios to "improve" them
+    - Rewrite content for stylistic preference only
     - Add new evidence to "fill gaps"
-    - Change secrets or motives because you think yours would be better
+    - Change secrets or motives arbitrarily without dependency reason
     - Modify personality traits
     - Alter the startTime unless it literally contradicts timeline events
     - Add witness observations that didn't exist
-    - Change relationship dynamics or add new tensions
-    - "Improve" the narrative in any way
+    - Change relationship dynamics or add new tensions unrelated to required coherence work
+    - "Improve" the narrative in any way unrelated to consistency/reconciliation
     
     **FORMAT RULES (apply these ONLY where formatting is currently wrong):**
     ${PROMPT_RULES.TIMELINE_FORMAT}

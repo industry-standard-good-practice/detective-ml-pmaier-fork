@@ -7,7 +7,7 @@ import { CaseData, Suspect, Emotion, Evidence } from '../../types';
 import { TTS_VOICES, getRandomVoice } from '../../constants';
 import { generateTTS } from '../../services/geminiTTS';
 import { playAudioFromUrl } from '../../services/audioPlayer';
-import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, generateEmotionalVariantsFromBase } from '../../services/geminiService';
+import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateEmotionalVariantsFromBase } from '../../services/geminiService';
 import { type ImageLoadingState } from '@/components/SuspectPortrait';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
@@ -822,9 +822,18 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const handleCheckConsistency = async () => {
     setLoadingState({ visible: true, message: "Initializing Narrative Audit...", step: 'Step 1/1', stepDetail: 'Consistency Check' });
     try {
+      const userDiff = computeUserDiff(baselineRef.current, draftCase);
+      const userChangeLog = formatUserChangeLog(userDiff, baselineRef.current);
+      const editContext = userChangeLog
+        ? [
+          'The user made manual edits that MUST be reflected consistently across the entire case.',
+          'Apply these changes holistically so motives, evidence, timeline, alibis, relationships, and bios remain coherent:',
+          userChangeLog
+        ].join('\n\n')
+        : undefined;
       const { updatedCase, report } = await checkCaseConsistency(draftCase, (msg) => {
         setLoadingState({ visible: true, message: msg, step: 'Step 1/1', stepDetail: 'Consistency Check' });
-      }, baselineRef.current);
+      }, baselineRef.current, editContext);
       setConsistencyModal({ visible: true, report, updatedCase });
     } catch (e) {
       console.error("Consistency Audit Failed:", e);

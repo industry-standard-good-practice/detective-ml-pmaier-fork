@@ -829,9 +829,11 @@ const App: React.FC = () => {
     }
     
     setIsGenerating(true);
-    setGenerationStatus("Creating criminal profiles...");
+    setGenerationStatus("Step 1/6: Building case concept from your prompt...");
     try {
-        const newCase = await generateCaseFromPrompt(prompt, isLucky);
+        const newCase = await generateCaseFromPrompt(prompt, isLucky, (msg) => {
+          setGenerationStatus(msg);
+        });
         // CRITICAL: Always stamp creator identity — never optional
         newCase.authorId = user.uid;
         newCase.authorDisplayName = formatAuthorName(user.displayName);

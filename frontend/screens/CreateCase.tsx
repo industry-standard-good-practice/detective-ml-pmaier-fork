@@ -160,6 +160,7 @@ interface CreateCaseProps {
 
 const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading, loadingStatus }) => {
   const [prompt, setPrompt] = useState('');
+  const activeStatus = loadingStatus || "Step 1/6: Building case concept from your prompt...";
 
   return (
     <Container>
@@ -198,13 +199,13 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
       ) : (
         <LoadingWrapper>
           <LoadingText>
-            {loadingStatus || "ANALYZING CRIME SCENE DATA..."}
+            {activeStatus}
           </LoadingText>
 
           <ProgressBar />
 
           <NoteText>
-            Note: Generating case details and descriptions for every suspect takes quite a bit of time. Time for a cup of coffee, Detective. This is gonna take a minute or two.
+            Multi-step generation in progress: concept design, suspect construction, evidence drafting, timeline synthesis, and final validation. This usually takes 1-2 minutes.
           </NoteText>
         </LoadingWrapper>
       )}
