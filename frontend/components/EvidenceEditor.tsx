@@ -1,10 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { Evidence, Suspect } from '../types';
 import { TextInput, TextArea, Button } from './ui';
 import { ImageSlot } from './ui/PixelImage';
 import { type } from '../theme';
+import { type ImageLoadingState } from './SuspectPortrait';
+import Spinner from './Spinner';
 
 const Container = styled.div`
   display: flex;
@@ -96,6 +98,45 @@ const EmptyState = styled.div`
   font-style: italic;
   padding: calc(var(--space) * 1.25);
   border: 1px dashed var(--color-border);
+`;
+
+/* ─── Evidence Loading Overlay ─── */
+
+const pulse = keyframes`
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+`;
+
+const EvidenceImageWrapper = styled.div`
+  position: relative;
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+`;
+
+const EvidenceLoadingOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2;
+  pointer-events: none;
+`;
+
+const EvidenceWaitDots = styled.div`
+  display: flex;
+  gap: 3px;
+  & > span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-text-dim);
+    animation: ${pulse} 1.2s ease-in-out infinite;
+  }
+  & > span:nth-child(2) { animation-delay: 0.2s; }
+  & > span:nth-child(3) { animation-delay: 0.4s; }
 `;
 
 /* ─── Custom Ownership Dropdown ─── */
@@ -253,6 +294,8 @@ interface EvidenceEditorProps {
   suspects?: Suspect[];
   /** Callback when evidence should be transferred to a different owner */
   onTransferEvidence?: (evidence: Evidence, fromOwner: OwnerKey, toOwner: OwnerKey) => void;
+  /** Per-evidence loading states, keyed by `ev-${evidence.id}` */
+  imageLoadingStates?: Record<string, ImageLoadingState>;
 }
 
 const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
@@ -263,6 +306,7 @@ const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
   ownerKey,
   suspects,
   onTransferEvidence,
+  imageLoadingStates,
 }) => {
 
   const handleChange = (index: number, field: 'title' | 'description', value: string) => {
@@ -297,13 +341,30 @@ const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
       {evidenceList.map((ev, i) => (
         <EvidenceCard key={ev.id || i}>
           <CardTop>
-            <ImageSlot $src={ev.imageUrl}>
-              {onRerollImage && (
-                <RerollButton onClick={() => onRerollImage(ev)} title="Generate new pixel art">
-                  REROLL
-                </RerollButton>
-              )}
-            </ImageSlot>
+            <EvidenceImageWrapper>
+              <ImageSlot $src={ev.imageUrl}>
+                {onRerollImage && (
+                  <RerollButton onClick={() => onRerollImage(ev)} title="Generate new pixel art">
+                    REROLL
+                  </RerollButton>
+                )}
+              </ImageSlot>
+              {(() => {
+                const loadState = imageLoadingStates?.[`ev-${ev.id}`];
+                if (!loadState) return null;
+                return (
+                  <EvidenceLoadingOverlay>
+                    {loadState === 'generating' ? (
+                      <Spinner $size={18} />
+                    ) : (
+                      <EvidenceWaitDots>
+                        <span /><span /><span />
+                      </EvidenceWaitDots>
+                    )}
+                  </EvidenceLoadingOverlay>
+                );
+              })()}
+            </EvidenceImageWrapper>
 
             <ContentCol>
               <TextInput

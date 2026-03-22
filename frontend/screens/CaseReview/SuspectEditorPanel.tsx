@@ -1133,6 +1133,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 ownerKey={activeSuspect.id}
                 suspects={draftCase.suspects}
                 onTransferEvidence={onTransferEvidence}
+                imageLoadingStates={imageLoadingStates}
               />
 
               <InputGroup>

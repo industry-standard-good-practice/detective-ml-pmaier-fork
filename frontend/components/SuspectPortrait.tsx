@@ -101,6 +101,8 @@ interface SuspectPortraitProps {
   className?: string;
   /** Optional loading state indicator overlaid on the portrait */
   imageLoadingState?: ImageLoadingState;
+  /** When true, hide text labels and only show spinner/dots (auto-set when size <= 60) */
+  compact?: boolean;
 }
 
 const SuspectPortrait: React.FC<SuspectPortraitProps> = ({ 
@@ -111,8 +113,11 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
   turnId,
   style, 
   className,
-  imageLoadingState = null
+  imageLoadingState = null,
+  compact: compactProp
 }) => {
+  // Auto-compact when rendered at small sizes
+  const isCompact = compactProp ?? (size != null && size <= 60);
   const [imgSrc, setImgSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -146,14 +151,14 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
           {imageLoadingState === 'generating' ? (
             <>
               <SpinnerRing />
-              <LoadingLabel>GENERATING</LoadingLabel>
+              {!isCompact && <LoadingLabel>GENERATING</LoadingLabel>}
             </>
           ) : (
             <>
               <WaitDots>
                 <span /><span /><span />
               </WaitDots>
-              <LoadingLabel>QUEUED</LoadingLabel>
+              {!isCompact && <LoadingLabel>QUEUED</LoadingLabel>}
             </>
           )}
         </LoadingOverlay>

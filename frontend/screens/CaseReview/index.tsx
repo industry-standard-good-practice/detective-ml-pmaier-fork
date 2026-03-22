@@ -195,13 +195,14 @@ interface CaseReviewProps {
   onCancel: () => void;
   userId?: string;
   userDisplayName?: string;
+  volume?: number;
   onRegisterSave?: (saveFn: () => Promise<void>) => void;
   onRegisterCheckConsistency?: (fn: () => void) => void;
   onRegisterClose?: (fn: () => void) => void;
   onHasUnsavedChanges?: (hasChanges: boolean) => void;
 }
 
-const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
+const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, volume = 0.7, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
   const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(draftCase.suspects?.[0]?.id || 'officer');
   const [loadingState, setLoadingState] = useState<{ visible: boolean, message: string, step?: string, stepDetail?: string }>({ visible: false, message: '' });
   const [showCamera, setShowCamera] = useState(false);
@@ -894,7 +895,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       if (audioUrl) {
         if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
         setVoicePreviewUrl(audioUrl);
-        await playAudioFromUrl(audioUrl);
+        await playAudioFromUrl(audioUrl, volume);
       } else {
         toast.error('Voice preview failed: No audio was returned.');
       }
@@ -981,6 +982,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           onCheckConsistency={handleCheckConsistency}
           onCancel={handleCancel}
           onStart={onStart}
+          imageLoadingStates={imageLoadingStates}
         />
       </LeftColumn>
 

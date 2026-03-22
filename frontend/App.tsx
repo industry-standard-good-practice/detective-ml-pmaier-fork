@@ -1421,6 +1421,7 @@ const App: React.FC = () => {
                 }}
                 userId={user?.uid}
                 userDisplayName={formatAuthorName(user?.displayName)}
+                volume={volume}
                 onRegisterSave={(fn) => { draftSaveFnRef.current = fn; }}
                 onRegisterCheckConsistency={(fn) => { draftCheckConsistencyFnRef.current = fn; }}
                 onRegisterClose={(fn) => { draftCloseFnRef.current = fn; }}

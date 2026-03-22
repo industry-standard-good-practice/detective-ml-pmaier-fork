@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { CaseData, Emotion, Evidence, TimelineEvent } from '../../types';
 import EvidenceEditor from '@/components/EvidenceEditor';
 import { Dropdown } from '@/components/ui';
+import { type ImageLoadingState } from '@/components/SuspectPortrait';
 
 // --- Styled Components ---
 
@@ -495,6 +496,7 @@ interface CaseDetailsPanelProps {
   onCheckConsistency: () => void;
   onCancel: () => void;
   onStart: () => void;
+  imageLoadingStates?: Record<string, ImageLoadingState>;
 }
 
 const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
@@ -515,6 +517,7 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
   onCheckConsistency,
   onCancel,
   onStart,
+  imageLoadingStates,
 }) => {
   return (
     <Panel $mobileHidden={mobileTab !== 'case'}>
@@ -789,6 +792,7 @@ const CaseDetailsPanel: React.FC<CaseDetailsPanelProps> = ({
         ownerKey="initial"
         suspects={draftCase.suspects}
         onTransferEvidence={onTransferEvidence}
+        imageLoadingStates={imageLoadingStates}
       />
 
       <Fieldset>

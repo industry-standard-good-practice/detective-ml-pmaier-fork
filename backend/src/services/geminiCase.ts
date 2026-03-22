@@ -141,31 +141,34 @@ export const enforceVoiceStyles = (caseData: any, originalCase?: any): void => {
         }
     };
 
-    // Officer — sanitize, carry forward accent, then regenerate style
+    // Officer — sanitize, carry forward accent, fallback, then regenerate style
     if (caseData.officer) {
         sanitizeAccent(caseData.officer);
         if (!caseData.officer.voiceAccent && originalCase?.officer?.voiceAccent) {
             caseData.officer.voiceAccent = originalCase.officer.voiceAccent;
         }
+        if (!caseData.officer.voiceAccent) caseData.officer.voiceAccent = 'General American';
         caseData.officer.voiceStyle = generateVoiceStyle({ ...caseData.officer, isDeceased: false }, caseDesc);
     }
 
-    // Partner — sanitize, carry forward accent, then regenerate style
+    // Partner — sanitize, carry forward accent, fallback, then regenerate style
     if (caseData.partner) {
         sanitizeAccent(caseData.partner);
         if (!caseData.partner.voiceAccent && originalCase?.partner?.voiceAccent) {
             caseData.partner.voiceAccent = originalCase.partner.voiceAccent;
         }
+        if (!caseData.partner.voiceAccent) caseData.partner.voiceAccent = 'General American';
         caseData.partner.voiceStyle = generateVoiceStyle({ ...caseData.partner, isDeceased: false }, caseDesc);
     }
 
-    // Suspects — sanitize, carry forward accent, then regenerate style
+    // Suspects — sanitize, carry forward accent, fallback, then regenerate style
     (caseData.suspects || []).forEach((s: any) => {
         sanitizeAccent(s);
         const orig = origSuspects.find((os: any) => os.id === s.id);
         if (!s.voiceAccent && orig?.voiceAccent) {
             s.voiceAccent = orig.voiceAccent;
         }
+        if (!s.voiceAccent) s.voiceAccent = 'General American';
         s.voiceStyle = generateVoiceStyle(s, caseDesc);
     });
 };
@@ -1226,6 +1229,19 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
 - WRONG (robotic): "Robert Chen claims Robert Chen was at Robert Chen's apartment during the time of the murder."
 - CORRECT (natural): "Robert Chen claims he was at his apartment during the time of the murder."
 - If fixing existing text that overuses full names, rewrite it to sound natural by replacing repeated names with appropriate pronouns.`,
+
+    /** Voice accent generation — used in generation; carried forward in consistency/edit */
+    VOICE_ACCENT: `**VOICE ACCENT (REQUIRED FOR ALL CHARACTERS):**
+- Every suspect, officer, and partner MUST have a 'voiceAccent' field.
+- The voiceAccent describes how the character speaks for text-to-speech. It should be a short, natural-language accent description (e.g. "Mexican", "British", "Southern American", "Japanese", "New York", "French").
+- **CONTEXT MATTERS:** The accent MUST be appropriate to the character's background, nationality, setting, and the case's location/theme:
+  * A case set in Mexico → most characters should have a "Mexican" accent unless their bio explicitly says otherwise.
+  * A case set in Tokyo → most characters should have a "Japanese" accent.
+  * A case set in 1920s Chicago → characters should have accents like "Chicago", "Italian-American", "Irish-American", etc.
+  * Use the character's name, bio, professional background, and the case description to determine the most fitting accent.
+- Do NOT default to "General American" or "American" unless the character is clearly American.
+- Do NOT leave the voiceAccent field empty or blank. Every character must have one.
+- Vary accents between characters when the setting supports diversity.`,
 } as const;
 
 // --- SCHEMAS ---
@@ -1245,7 +1261,8 @@ const CASE_SCHEMA = {
                 id: { type: Type.STRING },
                 name: { type: Type.STRING },
                 role: { type: Type.STRING },
-                gender: { type: Type.STRING }
+                gender: { type: Type.STRING },
+                voiceAccent: { type: Type.STRING }
             }
         },
         partner: {
@@ -1254,7 +1271,8 @@ const CASE_SCHEMA = {
                 id: { type: Type.STRING },
                 name: { type: Type.STRING },
                 role: { type: Type.STRING },
-                gender: { type: Type.STRING }
+                gender: { type: Type.STRING },
+                voiceAccent: { type: Type.STRING }
             }
         },
         initialEvidence: {
@@ -1331,6 +1349,7 @@ const CASE_SCHEMA = {
                     knownFacts: { type: Type.ARRAY, items: { type: Type.STRING } },
                     professionalBackground: { type: Type.STRING },
                     witnessObservations: { type: Type.STRING },
+                    voiceAccent: { type: Type.STRING },
                     hiddenEvidence: {
                         type: Type.ARRAY,
                         items: {
@@ -2062,6 +2081,8 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     
     ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
     
+    ${PROMPT_RULES.VOICE_ACCENT}
+    
     CRITICAL INSTRUCTION - START TIME:
     ${PROMPT_RULES.START_TIME_ALIGNMENT}
     
@@ -2090,8 +2111,9 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                             name: { type: Type.STRING },
                             gender: { type: Type.STRING },
                             role: { type: Type.STRING },
-                            personality: { type: Type.STRING }
-                        }, required: ["name", "gender", "role", "personality"]
+                            personality: { type: Type.STRING },
+                            voiceAccent: { type: Type.STRING }
+                        }, required: ["name", "gender", "role", "personality", "voiceAccent"]
                     },
                     partner: {
                         type: Type.OBJECT, properties: {
@@ -2099,8 +2121,9 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                             name: { type: Type.STRING },
                             gender: { type: Type.STRING },
                             role: { type: Type.STRING },
-                            personality: { type: Type.STRING }
-                        }, required: ["name", "gender", "role", "personality"]
+                            personality: { type: Type.STRING },
+                            voiceAccent: { type: Type.STRING }
+                        }, required: ["name", "gender", "role", "personality", "voiceAccent"]
                     },
                     initialEvidence: {
                         type: Type.ARRAY, items: {
@@ -2169,6 +2192,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                                     }
                                 },
                                 knownFacts: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                voiceAccent: { type: Type.STRING },
                                 hiddenEvidence: {
                                     type: Type.ARRAY, items: {
                                         type: Type.OBJECT, properties: {
@@ -2178,7 +2202,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                                         }, required: ["title", "description"]
                                     }
                                 }
-                            }, required: ["name", "gender", "role", "status", "bio", "personality", "secret", "isGuilty", "baseAggravation", "motive", "alibi", "relationships", "knownFacts", "hiddenEvidence", "timeline", "professionalBackground", "witnessObservations"]
+                            }, required: ["name", "gender", "role", "status", "bio", "personality", "secret", "isGuilty", "baseAggravation", "motive", "alibi", "relationships", "knownFacts", "hiddenEvidence", "timeline", "professionalBackground", "witnessObservations", "voiceAccent"]
                         }
                     }
                 },
@@ -2254,8 +2278,47 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     // Run logic to enforce relationships existence (Suspects only, as victim is a suspect)
     const finalData = ensureBroughtInEntry(enforceStartTimeAlignment(enforceSuspectSchema(enforceTimelines(enforceRelationships(data)))));
 
-    // Infer voice accents from character data, then generate TTS voice style prompts
-    inferVoiceAccents(finalData);
+    // Fallback: fill any missing accents (AI should have generated them, but just in case)
+    // Use the case description to infer a contextual default rather than keyword-matching bios
+    const inferDefaultAccent = (caseDesc: string): string => {
+        const text = caseDesc.toLowerCase();
+        if (/\b(mexico|mexican|guadalajara|tijuana|cancun|oaxaca|puebla|monterrey)\b/.test(text)) return 'Mexican';
+        if (/\b(japan|japanese|tokyo|osaka|kyoto)\b/.test(text)) return 'Japanese';
+        if (/\b(china|chinese|beijing|shanghai|hong kong)\b/.test(text)) return 'Chinese';
+        if (/\b(india|indian|mumbai|delhi|bangalore)\b/.test(text)) return 'Indian';
+        if (/\b(france|french|paris|marseille)\b/.test(text)) return 'French';
+        if (/\b(italy|italian|rome|milan|sicily|naples)\b/.test(text)) return 'Italian';
+        if (/\b(spain|spanish|madrid|barcelona)\b/.test(text)) return 'Spanish';
+        if (/\b(germany|german|berlin|munich)\b/.test(text)) return 'German';
+        if (/\b(russia|russian|moscow)\b/.test(text)) return 'Russian';
+        if (/\b(brazil|brazilian|rio|são paulo|sao paulo)\b/.test(text)) return 'Brazilian';
+        if (/\b(australia|australian|sydney|melbourne)\b/.test(text)) return 'Australian';
+        if (/\b(ireland|irish|dublin)\b/.test(text)) return 'Irish';
+        if (/\b(scotland|scottish|edinburgh|glasgow)\b/.test(text)) return 'Scottish';
+        if (/\b(britain|british|london|england|english)\b/.test(text)) return 'British';
+        if (/\b(korea|korean|seoul)\b/.test(text)) return 'Korean';
+        if (/\b(jamaica|jamaican|caribbean)\b/.test(text)) return 'Jamaican';
+        if (/\b(new york|brooklyn|bronx|nyc)\b/.test(text)) return 'New York';
+        if (/\b(southern|dixie|georgia|alabama|louisiana|bayou)\b/.test(text)) return 'Southern American';
+        if (/\b(texas|texan)\b/.test(text)) return 'Texan';
+        return 'General American';
+    };
+    const contextualDefault = inferDefaultAccent(`${data.title || ''} ${data.description || ''} ${data.type || ''}`);
+
+    (finalData.suspects || []).forEach((s: any) => {
+        if (!s.voiceAccent || (typeof s.voiceAccent === 'string' && s.voiceAccent.trim().length === 0)) {
+            console.log(`[DEBUG] generateCaseFromPrompt: AI did not generate voiceAccent for suspect "${s.name}", defaulting to "${contextualDefault}"`);
+            s.voiceAccent = contextualDefault;
+        }
+    });
+    if (finalData.officer && (!finalData.officer.voiceAccent || finalData.officer.voiceAccent.trim().length === 0)) {
+        console.log(`[DEBUG] generateCaseFromPrompt: AI did not generate voiceAccent for officer "${finalData.officer.name}", defaulting to "${contextualDefault}"`);
+        finalData.officer.voiceAccent = contextualDefault;
+    }
+    if (finalData.partner && (!finalData.partner.voiceAccent || finalData.partner.voiceAccent.trim().length === 0)) {
+        console.log(`[DEBUG] generateCaseFromPrompt: AI did not generate voiceAccent for partner "${finalData.partner.name}", defaulting to "${contextualDefault}"`);
+        finalData.partner.voiceAccent = contextualDefault;
+    }
     generateVoiceStyles(finalData);
 
     return finalData as CaseData;
