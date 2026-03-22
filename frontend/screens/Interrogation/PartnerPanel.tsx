@@ -228,6 +228,7 @@ interface PartnerPanelProps {
   sidekickComment: string | null;
   partnerCharges: number;
   isLocked: boolean;
+  isThinking: boolean;
   initialExamDone: boolean;
   mobileIntelOpen: boolean;
   onCloseMobileIntel?: () => void;
@@ -242,6 +243,7 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
   sidekickComment,
   partnerCharges,
   isLocked,
+  isThinking,
   initialExamDone,
   mobileIntelOpen,
   onCloseMobileIntel,
@@ -320,7 +322,7 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
                 <ActionButton
                   $type="neutral"
                   onClick={() => { onPartnerAction('examine'); onCloseMobileIntel?.(); }}
-                  disabled={partnerCharges <= 0 || initialExamDone}
+                  disabled={partnerCharges <= 0 || initialExamDone || isThinking}
                   title="Perform Initial Examination (Once)"
                 >
                   {initialExamDone ? "Exam Done" : "Initial Exam"}
@@ -331,7 +333,7 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
                 <ActionButton
                   $type="good"
                   onClick={() => { onPartnerAction('goodCop'); onCloseMobileIntel?.(); }}
-                  disabled={partnerCharges <= 0 || isLocked}
+                  disabled={partnerCharges <= 0 || isLocked || isThinking}
                   title="Calm Suspect (-50% Aggravation)"
                 >
                   Good Cop
@@ -339,7 +341,7 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
                 <ActionButton
                   $type="bad"
                   onClick={() => { onPartnerAction('badCop'); onCloseMobileIntel?.(); }}
-                  disabled={partnerCharges <= 0 || isLocked}
+                  disabled={partnerCharges <= 0 || isLocked || isThinking}
                   title="Force Evidence (+Aggravation)"
                 >
                   Bad Cop

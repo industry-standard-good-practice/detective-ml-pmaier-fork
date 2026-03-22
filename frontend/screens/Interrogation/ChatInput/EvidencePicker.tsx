@@ -198,7 +198,11 @@ const EvidencePickerContent: React.FC<{
           return (
             <TimelineEvidenceOption
               key={ts.id}
-              onClick={() => toggleEvidence(ts)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleEvidence(ts);
+              }}
               style={selected ? { background: '#1a2e3e', borderColor: '#0ff' } : undefined}
             >
               <div className="header">
@@ -224,7 +228,11 @@ const EvidencePickerContent: React.FC<{
             return (
               <EvidenceOption
                 key={ev.id}
-                onClick={() => toggleEvidence(ev)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleEvidence(ev);
+                }}
                 style={selected ? { background: '#1a2a1a', borderColor: '#0f0' } : undefined}
               >
                 <div style={{ fontWeight: 'bold', color: selected ? '#0f0' : '#fff', display: 'flex', alignItems: 'center', gap: 'var(--space)' }}>
@@ -273,7 +281,10 @@ const EvidencePicker: React.FC<EvidencePickerProps> = ({
 }) => (
   <PlusButtonWrapper ref={menuRef}>
     <PlusButton
-      onClick={() => setShowEvidencePicker(!showEvidencePicker)}
+      onClick={(e) => {
+        e.preventDefault();
+        setShowEvidencePicker(!showEvidencePicker);
+      }}
       $active={selectedEvidence.length > 0}
       disabled={isLocked}
       title="Present Evidence"

@@ -32,6 +32,7 @@ export const useGameActions = ({
   thinkingSuspectIds,
   setThinkingSuspectIds,
 }: UseGameActionsParams) => {
+  const actionInProgressRef = useRef(false);
 
   const selectCase = (caseInput: string | CaseData, communityCases: CaseData[], localDrafts: CaseData[], draftCase: CaseData | null) => {
     console.log('[DEBUG] selectCase:', typeof caseInput === 'string' ? caseInput : caseInput.title);
@@ -215,9 +216,11 @@ export const useGameActions = ({
 
   const handlePartnerAction = async (action: 'goodCop' | 'badCop' | 'examine' | 'hint') => {
       console.log('[DEBUG] handlePartnerAction:', action);
+      if (actionInProgressRef.current) return;
       const { currentSuspectId, partnerCharges, aggravationLevels, selectedCaseId, evidenceDiscovered, chatHistory, gameTime } = gameState;
       if (!currentSuspectId || !selectedCaseId || partnerCharges <= 0) return;
 
+      actionInProgressRef.current = true;
       const currentCase = findCaseById(selectedCaseId)!;
       const suspect = currentCase.suspects.find(s => s.id === currentSuspectId)!;
       const currentAgg = aggravationLevels[currentSuspectId] || 0;
@@ -415,15 +418,18 @@ export const useGameActions = ({
           }
         }));
       } finally {
+        actionInProgressRef.current = false;
         setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete(currentSuspectId); return next; });
       }
   };
 
   const handleSendMessage = async (text: string, type: 'talk' | 'action' = 'talk', attachment?: string) => {
     console.log('[DEBUG] handleSendMessage:', { text, type, attachment });
+    if (actionInProgressRef.current) return;
     const { selectedCaseId, currentSuspectId, chatHistory, aggravationLevels, evidenceDiscovered, gameTime } = gameState;
     if (!selectedCaseId || !currentSuspectId) return;
 
+    actionInProgressRef.current = true;
     const currentCase = findCaseById(selectedCaseId);
     if (!currentCase) return;
 
@@ -542,13 +548,16 @@ export const useGameActions = ({
         }
       }));
     } finally {
+      actionInProgressRef.current = false;
       setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete(currentSuspectId); return next; });
     }
   };
 
   const handleSendOfficerMessage = async (text: string) => {
+    if (actionInProgressRef.current) return;
     if (gameState.officerHintsRemaining <= 0 || !gameState.selectedCaseId) return;
     
+    actionInProgressRef.current = true;
     const newGameTime = gameState.gameTime + TIME_INCREMENT_MS;
 
     const userMsg: ChatMessage = { sender: 'player', text, timestamp: formatTime(newGameTime) };
@@ -586,6 +595,7 @@ export const useGameActions = ({
         officerHistory: [...prev.officerHistory, { sender: 'system', text: "[SECURE LINE DISCONNECTED]", timestamp: formatTime(newGameTime) }]
       }));
     } finally {
+      actionInProgressRef.current = false;
       setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete('__officer__'); return next; });
     }
   };
