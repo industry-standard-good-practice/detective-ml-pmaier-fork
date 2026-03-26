@@ -160,6 +160,7 @@ export const getSuspectResponse = async (
       INSTRUCTIONS:
       1. Describe ONLY what the detective PHYSICALLY SEES and TOUCHES (or moves, lifts, scans) in SECOND PERSON ("You notice...", "Your fingers find...", "You see...").
          Write in a gritty, noir style. The detective may inspect the corpse **or** the surrounding space (floor, walls, furniture, doorway, objects away from the body) when their action implies it.
+         **Survey-class** room actions: describe **sightlines and layout** from a standing position only — **no** opening drawers, **no** reaching inside containers, **no** narrating retrieval of items tied to UNREVEALED clues until the action is **targeted** (section 3).
       2. **ABSOLUTE NARRATIVE RESTRICTION (CRITICAL):**
          You are a CAMERA, not a storyteller. You describe what is VISIBLE and TANGIBLE. You must NEVER:
          - Interpret what evidence means or implies
@@ -173,17 +174,21 @@ export const getSuspectResponse = async (
       3. **LOCATION-GATED REVEALS (CRITICAL):**
          - Each UNREVEALED clue has **DISCOVERY_ZONE**. Match the User Action to the correct zone:
            * **body** — only reveal if the action targets the corpse or its clothing (pockets, lining, hands, face, shoes, pat-down, etc.).
-           * **environment** — only reveal if the action targets the **room or scene** (floor, wall, furniture, window, door, corner, "search the room", "check under the desk", blood spatter on wall, etc.). A vague **body-only** sweep must NOT reveal environment clues.
-         - Synonyms and reasonable inference allowed (e.g. breast pocket ≈ inside jacket chest pocket; "nightstand" ≈ WHERE_HIDDEN mentioning nightstand).
-         - **Vague whole-body / whole-scene actions** with no specific focus (e.g. "examine the body", "look at the victim", "inspect the corpse", "check the body", generic *action* with no sub-area) → **ZERO** new reveals. Narrate only high-level impression (pose, clothing, room layout) without producing hidden items.
+           * **environment** — only reveal if the action is **targeted** at a **specific** scene feature, container, or sub-area that matches **WHERE_HIDDEN** for that clue (named furniture, named surface, a named direction, or an explicit manipulation: open, lift, pull, search inside, look under, look behind, tip over, empty). A **room survey** does **not** qualify.
+         - **Survey-class vs targeted (hard rule):**
+           * **Survey-class** = orienting in the space without singling out one object or region for manipulation: taking in the room, looking around, scanning, a general glance at the scene, stepping back to observe — **no** container opened, **no** drawer pulled, **no** object moved, **no** cushion lifted, **no** fabric peeled back. **revealedEvidence MUST be []** (no titles). Narrate layout, light, and **salient fixtures** the detective might **later** choose to inspect (desk, rug, window, door) as **possible** next steps only — **not** as discoveries of hidden items.
+           * **Targeted** = the user names a specific thing to inspect or uses a manipulation verb on a specific object/area so that only clues whose WHERE_HIDDEN fits may be revealed.
+         - Synonyms and reasonable inference are allowed **only for targeted actions** (matching WHERE_HIDDEN to the named feature).
+         - **Vague whole-body / whole-scene actions** with no specific focus ("examine the body", "look at the victim", "inspect the corpse", "check the body", generic action with no sub-area) → **ZERO** new reveals. Narrate only high-level impression (pose, clothing, room layout) without producing hidden items.
          - If WHERE_HIDDEN is "(unspecified — require a targeted search...)", **no reveal** until the user names a concrete place that matches DETAIL well enough.
          - If User Input references **[PARTNER EXAMINATION]** or **[PARTNER HINT]**, use the partner's quoted words to infer body region **or** scene area; only reveal clues whose DISCOVERY_ZONE and WHERE_HIDDEN fit. If vague, **at most one** clue or none.
          - For each clue you do reveal, describe retrieving or spotting it in second person in the same beat.
       ENVIRONMENTAL CLUES (for camera — each has a **distinct** scene portrait; use **exact** id strings):
       ${envScenePortraitGuide}
       4. **VISUAL UPDATE (STRICT MAPPING — location variants, not emotions):**
-         - If the action targets the **room or scene** (floor, wall, furniture, rug, window, door, corner, "search the room", blood on wall) -> Set emotion to 'ENVIRONMENT'.
-         - When emotion is 'ENVIRONMENT' and the action clearly focuses **one** environmental clue from the list above, set **environmentEvidenceId** to that clue's **id** (exact string). If several match, pick the single best fit. If the action is a vague room scan or no clue clearly fits, set **environmentEvidenceId** to "".
+         - If the action is **survey-class** for the room (see section 3) OR broadly concerns the scene without a single environmental clue locked in -> Set emotion to 'ENVIRONMENT' and **environmentEvidenceId** to "" (general room / scene view; no per-clue scene portrait until the player targets one clue).
+         - If the action is **targeted** at the **room or scene** and clearly matches **one** environmental clue from the list above, set emotion to 'ENVIRONMENT' and **environmentEvidenceId** to that clue's **id** (exact string). If several match, pick the single best fit.
+         - If the action is a vague room scan or no clue clearly fits, set emotion to 'ENVIRONMENT' and **environmentEvidenceId** to "".
          - If user says 'check pockets', 'search jacket', 'look at chest', 'examine torso' -> Set emotion to 'TORSO' and environmentEvidenceId to "".
          - If user says 'check face', 'examine head', 'look at eyes', 'check mouth' -> Set emotion to 'HEAD' and environmentEvidenceId to "".
          - If user says 'check hands', 'look at fingers', 'examine nails' -> Set emotion to 'HANDS' and environmentEvidenceId to "".
