@@ -119,6 +119,22 @@ const App: React.FC = () => {
     localStorage.setItem('globalVolume', String(volume));
   }, [volume]);
 
+  const [musicEnabled, setMusicEnabled] = useState(() => {
+    const saved = localStorage.getItem('musicEnabled');
+    if (saved === null) return true;
+    return saved === 'true';
+  });
+  const [musicVolume, setMusicVolume] = useState(() => {
+    const saved = localStorage.getItem('musicVolume');
+    return saved !== null ? parseFloat(saved) : 0.35;
+  });
+  useEffect(() => {
+    localStorage.setItem('musicEnabled', String(musicEnabled));
+  }, [musicEnabled]);
+  useEffect(() => {
+    localStorage.setItem('musicVolume', String(musicVolume));
+  }, [musicVolume]);
+
   // Sync draftCase changes back to communityCases and localDrafts for UI consistency
   useEffect(() => {
     if (draftCase) {
@@ -1315,7 +1331,17 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <Layout screenState={gameState.currentScreen} isMuted={isMuted} onToggleMute={() => setIsMuted(!isMuted)} onNavigate={() => {}} isBooting>
+      <Layout
+        screenState={gameState.currentScreen}
+        isMuted={isMuted}
+        onToggleMute={() => setIsMuted(!isMuted)}
+        onNavigate={() => {}}
+        isBooting
+        musicEnabled={musicEnabled}
+        onToggleMusic={() => setMusicEnabled((m) => !m)}
+        musicVolume={musicVolume}
+        onMusicVolumeChange={setMusicVolume}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#0f0' }}>
           INITIALIZING SECURE CONNECTION...
         </div>
@@ -1325,7 +1351,17 @@ const App: React.FC = () => {
 
   if (!user) {
     return (
-      <Layout screenState={gameState.currentScreen} isMuted={isMuted} onToggleMute={() => setIsMuted(!isMuted)} onNavigate={() => {}} isBooting>
+      <Layout
+        screenState={gameState.currentScreen}
+        isMuted={isMuted}
+        onToggleMute={() => setIsMuted(!isMuted)}
+        onNavigate={() => {}}
+        isBooting
+        musicEnabled={musicEnabled}
+        onToggleMusic={() => setMusicEnabled((m) => !m)}
+        musicVolume={musicVolume}
+        onMusicVolumeChange={setMusicVolume}
+      >
         <Login />
       </Layout>
     );
@@ -1341,6 +1377,10 @@ const App: React.FC = () => {
       onToggleMute={() => setIsMuted(!isMuted)}
       volume={volume}
       onVolumeChange={setVolume}
+      musicEnabled={musicEnabled}
+      onToggleMusic={() => setMusicEnabled((m) => !m)}
+      musicVolume={musicVolume}
+      onMusicVolumeChange={setMusicVolume}
       onPublish={initiatePublish}
       canPublish={canPublish}
       isPublishing={isPublishing}

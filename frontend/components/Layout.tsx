@@ -9,7 +9,12 @@ import { cssTokens, media, type } from '../theme';
 
 import { useOnboarding } from '../contexts/OnboardingContext';
 import ExitCaseDialog from './ExitCaseDialog';
+import { ExternalLink } from 'lucide-react';
 import { OnboardingTour } from './OnboardingTour';
+import YouTubeBackgroundMusic, {
+  BACKGROUND_MUSIC_ATTRIBUTION_LABEL,
+  BACKGROUND_MUSIC_VIDEO_URL,
+} from './YouTubeBackgroundMusic';
 
 const GlobalStyle = createGlobalStyle`
   :root {
@@ -580,6 +585,41 @@ const VolumeValue = styled.span`
   text-align: right;
 `;
 
+const MusicControlsRow = styled.div`
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--space) * 0.75);
+  width: 100%;
+`;
+
+const MusicToggleButton = styled(AccentNavButton)`
+  flex: 1;
+  min-width: 0;
+`;
+
+const MusicAttributionLink = styled.a`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  align-self: stretch;
+  color: var(--color-accent-gold);
+  border: none;
+  background: transparent;
+  text-decoration: none;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--color-text-bright);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-gold);
+    outline-offset: 2px;
+  }
+`;
+
 const MenuDivider = styled.div`
   border-top: 1px solid var(--color-border-subtle);
   padding-top: calc(var(--space) * 1.25);
@@ -681,6 +721,11 @@ interface LayoutProps {
   onTestInvestigation?: () => void;
   volume?: number;
   onVolumeChange?: (v: number) => void;
+  /** Ambient YouTube BGM (separate from TTS/SFX volume). */
+  musicEnabled?: boolean;
+  onToggleMusic?: () => void;
+  musicVolume?: number;
+  onMusicVolumeChange?: (v: number) => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -706,7 +751,11 @@ const Layout: React.FC<LayoutProps> = ({
   onCheckConsistency,
   onTestInvestigation,
   volume = 0.7,
-  onVolumeChange
+  onVolumeChange,
+  musicEnabled = true,
+  onToggleMusic = () => {},
+  musicVolume = 0.35,
+  onMusicVolumeChange
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
@@ -817,6 +866,7 @@ const Layout: React.FC<LayoutProps> = ({
     <>
       <GlobalStyle />
       <MainContainer data-monitor>
+        <YouTubeBackgroundMusic enabled={musicEnabled} volume={musicVolume} />
         <Screen $powerState={powerState}>
           <CRTOverlay />
           <OnboardingTour />
@@ -968,6 +1018,42 @@ const Layout: React.FC<LayoutProps> = ({
                       />
                       <VolumeValue>
                         {Math.round(volume * 100)}%
+                      </VolumeValue>
+                    </VolumeRow>
+                  )}
+
+                  <MusicControlsRow>
+                    <MusicToggleButton
+                      type="button"
+                      onClick={onToggleMusic}
+                      $accentColor={musicEnabled ? 'var(--color-accent-gold)' : 'var(--color-text-dim)'}
+                    >
+                      {musicEnabled ? '[Music: ON]' : '[Music: OFF]'}
+                    </MusicToggleButton>
+                    <MusicAttributionLink
+                      href={BACKGROUND_MUSIC_VIDEO_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
+                      aria-label={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink size={20} strokeWidth={2} aria-hidden />
+                    </MusicAttributionLink>
+                  </MusicControlsRow>
+
+                  {musicEnabled && onMusicVolumeChange && (
+                    <VolumeRow>
+                      <VolumeLabel>BGM</VolumeLabel>
+                      <VolumeSlider
+                        type="range"
+                        min="0" max="1" step="0.05"
+                        value={musicVolume}
+                        onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
+                        data-cursor="pointer"
+                      />
+                      <VolumeValue>
+                        {Math.round(musicVolume * 100)}%
                       </VolumeValue>
                     </VolumeRow>
                   )}
