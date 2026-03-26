@@ -696,6 +696,60 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     toast.success('All variants regenerated.');
   };
 
+  const handleRegenerateOneVariantFromModal = async (neutralDataUrl: string, variantKey: string) => {
+    if (!userId) {
+      toast.error('Cannot regenerate: No user ID.');
+      return;
+    }
+    if (variantKey === Emotion.NEUTRAL) return;
+    const sid = selectedSuspectId;
+    if (!sid) return;
+    const currentDraft = latestDraftRef.current;
+    const char =
+      sid === 'officer'
+        ? currentDraft.officer
+        : sid === 'partner'
+          ? currentDraft.partner
+          : currentDraft.suspects?.find((s) => s.id === sid);
+    if (!char) return;
+
+    setImageLoadingStates((prev) => ({ ...prev, [sid]: 'generating' }));
+    try {
+      const { url } = await generateOnePortraitVariantFromBase(
+        neutralDataUrl,
+        variantKey,
+        char as any,
+        currentDraft.id,
+        userId,
+        currentDraft.type || 'Noir'
+      );
+      const fresh = latestDraftRef.current;
+      const charNow =
+        sid === 'officer'
+          ? fresh.officer
+          : sid === 'partner'
+            ? fresh.partner
+            : fresh.suspects?.find((s) => s.id === sid);
+      if (!charNow) return;
+      const portraits = { ...(charNow.portraits || {}), [variantKey]: url };
+      if (sid === 'officer') {
+        safeUpdateDraft({ ...fresh, officer: { ...fresh.officer, portraits } });
+      } else if (sid === 'partner') {
+        safeUpdateDraft({ ...fresh, partner: { ...fresh.partner, portraits } });
+      } else {
+        const newSuspects = fresh.suspects.map((s) => (s.id === sid ? { ...s, portraits } : s));
+        safeUpdateDraft({ ...fresh, suspects: newSuspects });
+      }
+      toast.success('Variant regenerated.');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Variant regeneration failed.');
+      throw err;
+    } finally {
+      setImageLoadingStates((prev) => ({ ...prev, [sid]: null }));
+    }
+  };
+
   const handleSaveHeroImage = async (
     newImageUrl: string,
     _onProgress?: (current: number, total: number) => void,
@@ -1082,13 +1136,14 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
               }
               return;
             }
-            if (meta?.regenerateAll) return;
+            if (meta?.regenerateAll || meta?.regenerateVariant || meta?.saving) return;
             if (selectedSuspectId) {
               setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: 'generating' }));
             }
           }}
           onSave={handleSaveEditedSuspect}
           onRegenerateAllVariants={handleRegenerateAllVariantsFromModal}
+          onRegenerateVariant={handleRegenerateOneVariantFromModal}
           onPasteFromClipboard={handlePasteFromClipboard}
           onRequestCamera={(onCaptured) => {
             suspectEditorCameraCaptureRef.current = onCaptured;

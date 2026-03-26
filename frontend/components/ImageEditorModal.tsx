@@ -368,7 +368,10 @@ export interface ImageEditorModalProps {
   /** When false, the modal is hidden but stays mounted so in-flight generation can finish. */
   visible?: boolean;
   /** Fires when generate/save/regenerate-all busy state changes (for parent loading UI + keep-alive). */
-  onBusyChange?: (busy: boolean, meta?: { regenerateAll?: boolean }) => void;
+  onBusyChange?: (
+    busy: boolean,
+    meta?: { regenerateAll?: boolean; regenerateVariant?: boolean; saving?: boolean }
+  ) => void;
   aspectRatio?: string;
   title?: string;
   /** Suspect/partner/officer: portrait variant carousel + per-key save */
@@ -376,6 +379,8 @@ export interface ImageEditorModalProps {
   portraitUrls?: Record<string, string | undefined>;
   /** When neutral + portrait mode, regenerate every variant from current neutral */
   onRegenerateAllVariants?: (neutralDataUrl: string, onProgress?: (current: number, total: number) => void) => Promise<void>;
+  /** When a non-neutral variant is selected, regenerate only that slot from the neutral portrait */
+  onRegenerateVariant?: (neutralDataUrl: string, variantKey: string) => Promise<void>;
   /** Paste from system clipboard into this variant */
   onPasteFromClipboard?: (callback: (dataUrl: string) => void) => void;
   /** Open camera capture; call onCaptured with captured still */
@@ -395,6 +400,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   portraitSlots,
   portraitUrls,
   onRegenerateAllVariants,
+  onRegenerateVariant,
   onPasteFromClipboard,
   onRequestCamera,
 }) => {
@@ -409,12 +415,14 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegeneratingAll, setIsRegeneratingAll] = useState(false);
+  const [isRegeneratingVariant, setIsRegeneratingVariant] = useState(false);
   const [savingProgress, setSavingProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const urlForSelectedVariant = portraitMode ? portraitUrls?.[selectedVariantKey] : initialImageUrl;
+  const neutralPortraitUrl = portraitMode ? portraitUrls?.[NEUTRAL_KEY] : undefined;
 
   const applyDataUrlToCanvas = useCallback((dataUrl: string) => {
     setHistory((prev) => [...prev, dataUrl]);
@@ -477,9 +485,13 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   }, [selectedVariantKey, portraitMode, urlForSelectedVariant, initialImageUrl, fetchRemoteAsDataUrl]);
 
   useEffect(() => {
-    const busy = isGenerating || isSaving || isRegeneratingAll;
-    onBusyChangeRef.current?.(busy, { regenerateAll: isRegeneratingAll });
-  }, [isGenerating, isSaving, isRegeneratingAll]);
+    const busy = isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant;
+    onBusyChangeRef.current?.(busy, {
+      regenerateAll: isRegeneratingAll,
+      regenerateVariant: isRegeneratingVariant,
+      saving: isSaving,
+    });
+  }, [isGenerating, isSaving, isRegeneratingAll, isRegeneratingVariant]);
 
   const handlePasteFromClipboard = async () => {
     if (!onPasteFromClipboard) {
@@ -557,7 +569,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleEdit = async () => {
-    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll) return;
+    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant) return;
     setError(null);
     setIsGenerating(true);
     try {
@@ -595,7 +607,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (isSaving || isGenerating || isRegeneratingAll) return;
+    if (isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant) return;
     if (!currentImageUrl) return;
     setIsSaving(true);
     try {
@@ -614,7 +626,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleRegenerateAll = async () => {
-    if (!onRegenerateAllVariants || selectedVariantKey !== NEUTRAL_KEY || !currentImageUrl || isRegeneratingAll || isSaving || isGenerating) return;
+    if (!onRegenerateAllVariants || selectedVariantKey !== NEUTRAL_KEY || !currentImageUrl || isRegeneratingAll || isRegeneratingVariant || isSaving || isGenerating) return;
     const base64 = getBase64FromImage();
     if (!base64) {
       toast.error('Could not read neutral image for regeneration.');
@@ -633,8 +645,42 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     }
   };
 
+  const handleRegenerateVariant = async () => {
+    if (
+      !onRegenerateVariant ||
+      selectedVariantKey === NEUTRAL_KEY ||
+      !neutralPortraitUrl ||
+      isRegeneratingVariant ||
+      isRegeneratingAll ||
+      isSaving ||
+      isGenerating
+    ) {
+      return;
+    }
+    setIsRegeneratingVariant(true);
+    setError(null);
+    try {
+      let neutralDataUrl: string;
+      if (neutralPortraitUrl.startsWith('data:')) {
+        neutralDataUrl = neutralPortraitUrl;
+      } else {
+        const prepared = await fetchRemoteAsDataUrl(neutralPortraitUrl);
+        if (!prepared) {
+          toast.error('Could not load the neutral portrait for regeneration.');
+          return;
+        }
+        neutralDataUrl = prepared;
+      }
+      await onRegenerateVariant(neutralDataUrl, selectedVariantKey);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsRegeneratingVariant(false);
+    }
+  };
+
   const handleUndo = () => {
-    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll) return;
+    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant) return;
     const newHistory = [...history];
     newHistory.pop();
     setHistory(newHistory);
@@ -644,7 +690,13 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const showRegenAll =
     portraitMode && onRegenerateAllVariants && selectedVariantKey === NEUTRAL_KEY && Boolean(currentImageUrl);
 
-  const busyOverlay = isGenerating || isSaving || isRegeneratingAll;
+  const showRegenVariant =
+    portraitMode &&
+    onRegenerateVariant &&
+    selectedVariantKey !== NEUTRAL_KEY &&
+    Boolean(neutralPortraitUrl);
+
+  const busyOverlay = isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant;
   const regenRemaining =
     isRegeneratingAll && savingProgress.total > 0 ? Math.max(0, savingProgress.total - savingProgress.current) : null;
 
@@ -711,17 +763,30 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     Regen all
                   </RegenAllOverlayButton>
                 )}
+                {showRegenVariant && (
+                  <RegenAllOverlayButton
+                    type="button"
+                    onClick={handleRegenerateVariant}
+                    disabled={busyOverlay}
+                    title="Regenerate only this variant from the neutral portrait"
+                  >
+                    <RefreshCw size={14} />
+                    Regen variant
+                  </RegenAllOverlayButton>
+                )}
                 {busyOverlay && (
                   <LoadingOverlay>
                     <Spinner $size={32} $color="#3b82f6" />
                     <span>
-                      {isRegeneratingAll
-                        ? regenRemaining !== null && regenRemaining > 0
-                          ? `Regenerating variants… ${regenRemaining} left`
-                          : 'Regenerating variants…'
-                        : isSaving
-                          ? 'Saving...'
-                          : 'Nano Banana is working...'}
+                      {isRegeneratingVariant
+                        ? 'Regenerating variant…'
+                        : isRegeneratingAll
+                          ? regenRemaining !== null && regenRemaining > 0
+                            ? `Regenerating variants… ${regenRemaining} left`
+                            : 'Regenerating variants…'
+                          : isSaving
+                            ? 'Saving...'
+                            : 'Nano Banana is working...'}
                     </span>
                     {savingProgress.total > 0 && (isSaving || isRegeneratingAll) && (
                       <>
@@ -774,6 +839,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 <PromptToolbar>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <Button
+                      type="button"
                       onClick={handleUndo}
                       disabled={busyOverlay || history.length <= 1}
                       style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
@@ -783,6 +849,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     </Button>
                   </div>
                   <Button
+                    type="button"
                     $variant="primary"
                     onClick={handleEdit}
                     disabled={busyOverlay || !prompt.trim()}
@@ -830,7 +897,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 <Button $variant="danger" onClick={onClose} type="button">
                   Cancel
                 </Button>
-                <Button $variant="primary" onClick={handleSave} disabled={busyOverlay || !currentImageUrl}>
+                <Button type="button" $variant="primary" onClick={handleSave} disabled={busyOverlay || !currentImageUrl}>
                   <Save size={16} />
                   Save Edit
                 </Button>
