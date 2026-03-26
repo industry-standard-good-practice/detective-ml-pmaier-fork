@@ -636,6 +636,8 @@ interface SuspectEditorPanelProps {
   selectedSuspectId: string | null;
   setSelectedSuspectId: (id: string | null) => void;
   loadingVisible: boolean;
+  /** True while the suspect image modal stays mounted for in-flight generate/save (user may have closed the overlay). */
+  suspectEditorKeepAlive: boolean;
   isPreviewingVoice: boolean;
   imageLoadingStates: Record<string, ImageLoadingState>;
   onSuspectChange: (id: string, field: string, value: any) => void;
@@ -660,6 +662,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
   selectedSuspectId,
   setSelectedSuspectId,
   loadingVisible,
+  suspectEditorKeepAlive,
   isPreviewingVoice,
   imageLoadingStates,
   onSuspectChange,
@@ -893,7 +896,10 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 </RandomizeButton>
                 <EditPortraitButton
                   onClick={onShowSuspectEditor}
-                  disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}
+                  disabled={
+                    loadingVisible ||
+                    (!!imageLoadingStates[selectedSuspectId || ''] && !suspectEditorKeepAlive)
+                  }
                 >
                   {activeSuspect.portraits?.[Emotion.NEUTRAL] ? 'EDIT' : 'CREATE'}
                 </EditPortraitButton>

@@ -1147,6 +1147,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         selectedSuspectId={selectedSuspectId}
         setSelectedSuspectId={setSelectedSuspectId}
         loadingVisible={loadingState.visible}
+        suspectEditorKeepAlive={suspectEditorKeepAlive}
         isPreviewingVoice={isPreviewingVoice}
         imageLoadingStates={imageLoadingStates}
         onSuspectChange={handleSuspectChange}
