@@ -218,8 +218,9 @@ const generateEmotionalVariants = async (
 };
 
 // --- FORENSIC VARIANTS (DECEASED) ---
+/** Applied whenever any part of the victim may appear; models often ignore a loose "negative" list — use mandatory rules. */
 const DECEASED_FORENSIC_NEGATIVE =
-  'NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.';
+  'MANDATORY IF VICTIM VISIBLE: eyes fully CLOSED, eyelids shut, lifeless; no pupils, no eye whites staring. FORBIDDEN: open eyes, wide eyes, staring upward, eye contact, alive or startled expression, standing, smiling, investigators, CSI techs, or living people as subjects. FORBIDDEN: text, UI.';
 
 /** Full edit prompt for one deceased examination view (theme used for ENVIRONMENT framing). */
 const buildDeceasedForensicEditPrompt = (view: string, theme: string): string => {
@@ -233,7 +234,7 @@ const buildDeceasedForensicEditPrompt = (view: string, theme: string): string =>
     case Emotion.LEGS:
       return `ZOOM IN: Close up of the victim's legs, pants, and shoes. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
     case Emotion.ENVIRONMENT:
-      return `PULL BACK — NOT a portrait crop: medium-wide crime scene shot matching the reference. Same victim and room; show floor, walls, door frame, and furniture with equal weight; victim smaller in frame — investigator overview. Theme: ${theme}. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `PULL BACK — NOT a portrait crop: medium-wide crime scene shot matching the reference. Same victim and room; show floor, walls, door frame, and furniture with equal weight; victim smaller in frame — investigator overview. If the victim's face appears: eyes CLOSED, lifeless. Theme: ${theme}. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
     default:
       return `ZOOM IN: Close up of the victim's torso and clothing. No face. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
   }
@@ -242,14 +243,20 @@ const buildDeceasedForensicEditPrompt = (view: string, theme: string): string =>
 /** One environmental clue → its own crime-scene framing (pregen / consistency). Must differ from NEUTRAL; respect environmentIncludesBody like generateEvidenceImage. */
 const buildEnvironmentScenePortraitPrompt = (ev: Evidence, theme: string): string => {
   const loc = (ev.location || '').trim();
-  const locBit = loc ? `Focal area / placement: ${loc}. ` : '';
+  const locBit = loc ? `Placement / anchor (must match this in frame): ${loc}. ` : '';
   const includeBody = ev.environmentIncludesBody === true;
 
   if (includeBody) {
-    return `PULL BACK — medium-wide crime scene shot (different framing from the neutral full-body reference: shift camera toward this area). ${locBit}Emphasize this beat: "${ev.title}" — ${ev.description}. Theme: ${theme}. Keep victim identity, clothing, and room consistent with the reference; the victim may appear smaller or at the edge of frame while the focal area stays readable. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    return `[ENVIRONMENT CLUE — PORTRAIT CARD] Shift camera from the neutral full-body reference toward the area of this beat; do NOT reuse the same floor-centered body composition. ${locBit}Hero subject: "${ev.title}" — ${ev.description}. Theme: ${theme}. The victim may appear only small, partial, or blurred at an edge; if any part of the victim's face is visible: eyes CLOSED, lifeless. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
   }
 
-  return `ZOOM IN — TIGHT forensic close-up or tight medium shot on the furniture, surface, or object (same storytelling focus as the evidence thumbnail for this clue). NOT a wide establishing shot and NOT the same composition as the neutral victim card — crop into the scene so the prop/location is the hero. ${locBit}Beat: "${ev.title}" — ${ev.description}. Theme: ${theme}. Match room materials and lighting from the reference; omit or crop out where the body lay. STRICT NEGATIVE: no dead body, no corpse, no human remains, no victim, no person, no limbs, no face in frame. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+  return `[ENVIRONMENT CLUE — PORTRAIT CARD — NO BODY IN FRAME] This image must match the investigator examining THIS clue (desk, drawer, shelf, surface, container) — NOT a body examination and NOT a floor crime scene overview.
+
+COMPOSITION: TIGHT forensic shot — top-down, angled-down, or over-the-shoulder into the furniture or container. Prioritize: open drawer with visible contents, open cabinet, desk surface with objects, or the exact surface named in the placement. The clue "${ev.title}" must be clearly shown or implied (e.g. journal, object, stain) as the readable hero, consistent with: ${ev.description}.
+
+Use the reference image for room materials and wood tones only — reframe the camera entirely away from the body-on-floor layout. Do NOT show the rug, floor body, or wide room establishing shot.
+
+STRICT: no victim, corpse, body, limbs, human face, investigators, CSI, police, magnifying glass over a person, or living people. No open eyes (no people at all). Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
 };
 
 function buildVictimExaminationImagePrompt(view: string, theme: string, hiddenEvidence: Evidence[] | undefined): string {
