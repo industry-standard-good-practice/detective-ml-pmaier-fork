@@ -123,7 +123,10 @@ interface InterrogationProps {
   mobileIntelOpen?: boolean;
   onCloseMobileIntel?: () => void;
   soundEnabled?: boolean;
+  /** Master SFX level for evidence UI sounds (0 when all sound muted). */
   volume?: number;
+  /** Effective TTS level (master × TTS fader; 0 when muted or TTS off). */
+  ttsPlaybackVolume?: number;
   isAdmin: boolean;
   userId?: string;
   unreadSuspectIds?: Map<string, number>;
@@ -155,6 +158,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
   onCloseMobileIntel,
   soundEnabled = true,
   volume = 0.7,
+  ttsPlaybackVolume = 0.7,
   isAdmin,
   userId,
   unreadSuspectIds = new Map(),
@@ -179,7 +183,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
   // TTS refs
   const audioRef = useRef<AudioPlayback | null>(null);
   const voiceRef = useRef<string | null>(null);
-  const volumeRef = useRef(volume);
+  const ttsPlaybackVolumeRef = useRef(ttsPlaybackVolume);
   const [lastPlayedAudioUrl, setLastPlayedAudioUrl] = useState<string | null>(null);
   const isMounted = useRef(true);
   const prevChatLengthRef = useRef(chatHistory.length);
@@ -228,16 +232,16 @@ const Interrogation: React.FC<InterrogationProps> = ({
 
   // --- TTS ---
   useEffect(() => {
-    volumeRef.current = volume;
-    if (audioRef.current) audioRef.current.setVolume(volume);
-  }, [volume]);
+    ttsPlaybackVolumeRef.current = ttsPlaybackVolume;
+    if (audioRef.current) audioRef.current.setVolume(ttsPlaybackVolume);
+  }, [ttsPlaybackVolume]);
 
   useEffect(() => {
-    if (!soundEnabled && audioRef.current) {
+    if (ttsPlaybackVolume <= 0 && audioRef.current) {
       audioRef.current.stop();
       audioRef.current = null;
     }
-  }, [soundEnabled]);
+  }, [ttsPlaybackVolume]);
 
   useEffect(() => {
     voiceRef.current = suspect.voice || null;
@@ -270,10 +274,10 @@ const Interrogation: React.FC<InterrogationProps> = ({
         audioRef.current = null;
       }
       const lastMsg = chatHistory[chatHistory.length - 1];
-      if ((lastMsg?.sender === 'suspect' || lastMsg?.sender === 'partner') && lastMsg?.audioUrl && soundEnabled && unreadSuspectIds.has(suspect.id)) {
+      if ((lastMsg?.sender === 'suspect' || lastMsg?.sender === 'partner') && lastMsg?.audioUrl && ttsPlaybackVolume > 0 && unreadSuspectIds.has(suspect.id)) {
         console.log("TTS Playing unread notification message", { text: lastMsg.text, audioUrl: lastMsg.audioUrl });
         setLastPlayedAudioUrl(lastMsg.audioUrl);
-        playAudioFromUrl(lastMsg.audioUrl, volumeRef.current)
+        playAudioFromUrl(lastMsg.audioUrl, ttsPlaybackVolumeRef.current)
           .then(playback => { audioRef.current = playback; })
           .catch(e => console.error("Audio playback failed", e));
         onClearUnread?.(suspect.id);
@@ -286,7 +290,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
 
     if (!chatGrew || chatHistory.length === 0) return;
     if (unreadSuspectIds.has(suspect.id)) onClearUnread?.(suspect.id);
-    if (!soundEnabled) return;
+    if (ttsPlaybackVolume <= 0) return;
 
     const lastMsg = chatHistory[chatHistory.length - 1];
     if ((lastMsg.sender === 'suspect' || lastMsg.sender === 'partner') && lastMsg.audioUrl && lastMsg.audioUrl !== lastPlayedAudioUrl) {
@@ -296,11 +300,11 @@ const Interrogation: React.FC<InterrogationProps> = ({
         audioRef.current.stop();
         audioRef.current = null;
       }
-      playAudioFromUrl(lastMsg.audioUrl, volumeRef.current)
+      playAudioFromUrl(lastMsg.audioUrl, ttsPlaybackVolumeRef.current)
         .then(playback => { audioRef.current = playback; })
         .catch(e => console.error("Audio playback failed", e));
     }
-  }, [chatHistory, soundEnabled, suspect.id, lastPlayedAudioUrl, unreadSuspectIds, onClearUnread]);
+  }, [chatHistory, ttsPlaybackVolume, suspect.id, lastPlayedAudioUrl, unreadSuspectIds, onClearUnread]);
 
   // Force Action type if Deceased
   useEffect(() => {

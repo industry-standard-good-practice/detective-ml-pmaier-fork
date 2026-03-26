@@ -196,14 +196,15 @@ interface CaseReviewProps {
   onCancel: () => void;
   userId?: string;
   userDisplayName?: string;
-  volume?: number;
+  /** Effective level for voice preview playback (0 when all sound or TTS off). */
+  voicePreviewVolume?: number;
   onRegisterSave?: (saveFn: () => Promise<void>) => void;
   onRegisterCheckConsistency?: (fn: () => void) => void;
   onRegisterClose?: (fn: () => void) => void;
   onHasUnsavedChanges?: (hasChanges: boolean) => void;
 }
 
-const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, volume = 0.7, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
+const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, voicePreviewVolume = 0.7, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
   const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(draftCase.suspects?.[0]?.id || 'officer');
   const [loadingState, setLoadingState] = useState<{ visible: boolean, message: string, step?: string, stepDetail?: string }>({ visible: false, message: '' });
   const [showCamera, setShowCamera] = useState(false);
@@ -1235,6 +1236,11 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     else currentChar = draftCase.suspects?.find(s => s.id === selectedSuspectId) as any;
     if (!currentChar || !currentChar.voice) return;
 
+    if (voicePreviewVolume <= 0) {
+      toast.error('Turn on All sound and TTS in the menu to preview voices.');
+      return;
+    }
+
     setIsPreviewingVoice(true);
     try {
       // Build a fresh style prompt so preview matches gameplay TTS (interrogation vs forensic victim)
@@ -1268,7 +1274,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       if (audioUrl) {
         if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
         setVoicePreviewUrl(audioUrl);
-        await playAudioFromUrl(audioUrl, volume);
+        await playAudioFromUrl(audioUrl, voicePreviewVolume);
       } else {
         toast.error('Voice preview failed: No audio was returned.');
       }

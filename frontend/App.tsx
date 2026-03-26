@@ -157,6 +157,24 @@ const App: React.FC = () => {
     localStorage.setItem('musicVolume', String(musicVolume));
   }, [musicVolume]);
 
+  const [ttsEnabled, setTtsEnabled] = useState(() => {
+    const saved = localStorage.getItem('ttsEnabled');
+    if (saved === null) return true;
+    return saved === 'true';
+  });
+  const [ttsVolume, setTtsVolume] = useState(() => {
+    const saved = localStorage.getItem('ttsVolume');
+    return saved !== null ? parseFloat(saved) : 1;
+  });
+  useEffect(() => {
+    localStorage.setItem('ttsEnabled', String(ttsEnabled));
+  }, [ttsEnabled]);
+  useEffect(() => {
+    localStorage.setItem('ttsVolume', String(ttsVolume));
+  }, [ttsVolume]);
+
+  const ttsPlaybackLevel = !isMuted && ttsEnabled ? volume * ttsVolume : 0;
+
   // Sync draftCase changes back to communityCases and localDrafts for UI consistency
   useEffect(() => {
     if (draftCase) {
@@ -434,7 +452,7 @@ const App: React.FC = () => {
           currentCase.partner?.voiceStyle,
           currentCase.partner?.voiceAccent
         );
-        if (!isMuted && partnerVoice && partnerVoice !== 'None') {
+        if (!isMuted && ttsEnabled && partnerVoice && partnerVoice !== 'None') {
             partnerAudioUrl = await generateTTS(partnerDialogue, partnerVoice, partnerVoiceStyle);
         }
 
@@ -477,7 +495,7 @@ const App: React.FC = () => {
             );
             
             let examAudioUrl: string | null = null;
-            if (!isMuted && suspect.voice && suspect.voice !== 'None') {
+            if (!isMuted && ttsEnabled && suspect.voice && suspect.voice !== 'None') {
                 examAudioUrl = await generateTTS(
                   examResponse.text,
                   suspect.voice,
@@ -536,7 +554,7 @@ const App: React.FC = () => {
         finalAgg = Math.max(0, Math.min(100, finalAgg));
         // Generate TTS Audio
         let audioUrl: string | null = null;
-        if (!isMuted && suspect.voice && suspect.voice !== 'None') {
+        if (!isMuted && ttsEnabled && suspect.voice && suspect.voice !== 'None') {
             audioUrl = await generateTTS(
               finalAgg >= 100 ? "That's it! I want my lawyer!" : response.text,
               suspect.voice,
@@ -726,7 +744,7 @@ const App: React.FC = () => {
 
       // Generate TTS Audio
       let audioUrl: string | null = null;
-      if (!isMuted && currentSuspect.voice && currentSuspect.voice !== 'None') {
+      if (!isMuted && ttsEnabled && currentSuspect.voice && currentSuspect.voice !== 'None') {
           audioUrl = await generateTTS(
             finalMsgText,
             currentSuspect.voice,
@@ -874,7 +892,7 @@ const App: React.FC = () => {
 
       const officer = currentCase.officer;
       let officerAudioUrl: string | null = null;
-      if (!isMuted && officer?.voice && officer.voice !== 'None') {
+      if (!isMuted && ttsEnabled && officer?.voice && officer.voice !== 'None') {
         officerAudioUrl = await generateTTS(
           responseText,
           officer.voice,
@@ -896,7 +914,7 @@ const App: React.FC = () => {
 
       if (officerAudioUrl) {
         try {
-          await playAudioFromUrl(officerAudioUrl, volume);
+          await playAudioFromUrl(officerAudioUrl, ttsPlaybackLevel);
         } catch (e) {
           console.warn('[Officer TTS] playback failed', e);
         }
@@ -1403,6 +1421,10 @@ const App: React.FC = () => {
         onToggleMusic={() => setMusicEnabled((m) => !m)}
         musicVolume={musicVolume}
         onMusicVolumeChange={setMusicVolume}
+        ttsEnabled={ttsEnabled}
+        onToggleTts={() => setTtsEnabled((t) => !t)}
+        ttsVolume={ttsVolume}
+        onTtsVolumeChange={setTtsVolume}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#0f0' }}>
           INITIALIZING SECURE CONNECTION...
@@ -1423,6 +1445,10 @@ const App: React.FC = () => {
         onToggleMusic={() => setMusicEnabled((m) => !m)}
         musicVolume={musicVolume}
         onMusicVolumeChange={setMusicVolume}
+        ttsEnabled={ttsEnabled}
+        onToggleTts={() => setTtsEnabled((t) => !t)}
+        ttsVolume={ttsVolume}
+        onTtsVolumeChange={setTtsVolume}
       >
         <Login />
       </Layout>
@@ -1443,6 +1469,10 @@ const App: React.FC = () => {
       onToggleMusic={() => setMusicEnabled((m) => !m)}
       musicVolume={musicVolume}
       onMusicVolumeChange={setMusicVolume}
+      ttsEnabled={ttsEnabled}
+      onToggleTts={() => setTtsEnabled((t) => !t)}
+      ttsVolume={ttsVolume}
+      onTtsVolumeChange={setTtsVolume}
       onPublish={initiatePublish}
       canPublish={canPublish}
       isPublishing={isPublishing}
@@ -1541,7 +1571,7 @@ const App: React.FC = () => {
                 }}
                 userId={user?.uid}
                 userDisplayName={formatAuthorName(user?.displayName)}
-                volume={volume}
+                voicePreviewVolume={ttsPlaybackLevel}
                 onRegisterSave={(fn) => { draftSaveFnRef.current = fn; }}
                 onRegisterCheckConsistency={(fn) => { draftCheckConsistencyFnRef.current = fn; }}
                 onRegisterClose={(fn) => { draftCloseFnRef.current = fn; }}
@@ -1608,7 +1638,8 @@ const App: React.FC = () => {
               partnerCharges={gameState.partnerCharges}
               gameTime={gameState.gameTime}
               soundEnabled={!isMuted}
-              volume={volume}
+              volume={isMuted ? 0 : volume}
+              ttsPlaybackVolume={ttsPlaybackLevel}
               onSendMessage={handleSendMessage}
               onCollectEvidence={collectEvidence}
               onSwitchSuspect={startInterrogation}

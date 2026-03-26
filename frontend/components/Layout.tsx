@@ -598,6 +598,8 @@ const MusicToggleButton = styled(AccentNavButton)`
   min-width: 0;
 `;
 
+const TtsToggleButton = styled(MusicToggleButton)``;
+
 const MusicAttributionLink = styled.a`
   display: flex;
   align-items: center;
@@ -727,6 +729,11 @@ interface LayoutProps {
   onToggleMusic?: () => void;
   musicVolume?: number;
   onMusicVolumeChange?: (v: number) => void;
+  /** Speech synthesis (separate fader from VOL; still gated by All sound). */
+  ttsEnabled?: boolean;
+  onToggleTts?: () => void;
+  ttsVolume?: number;
+  onTtsVolumeChange?: (v: number) => void;
   /** CRT boot intro YouTube SFX (video id tajDxBaPBBM); uses mute + SFX volume, not music. */
   bootIntroSfxActive?: boolean;
 }
@@ -759,6 +766,10 @@ const Layout: React.FC<LayoutProps> = ({
   onToggleMusic = () => {},
   musicVolume = 0.35,
   onMusicVolumeChange,
+  ttsEnabled = true,
+  onToggleTts = () => {},
+  ttsVolume = 1,
+  onTtsVolumeChange,
   bootIntroSfxActive = false
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -870,7 +881,7 @@ const Layout: React.FC<LayoutProps> = ({
     <>
       <GlobalStyle />
       <MainContainer data-monitor>
-        <YouTubeBackgroundMusic enabled={musicEnabled && !isBooting} volume={musicVolume} />
+        <YouTubeBackgroundMusic enabled={musicEnabled && !isBooting && !isMuted} volume={musicVolume} />
         <YouTubeBootIntroSfx
           enabled={bootIntroSfxActive && !isMuted}
           volume={volume}
@@ -1011,59 +1022,89 @@ const Layout: React.FC<LayoutProps> = ({
                   )}
 
                   <AccentNavButton onClick={onToggleMute} $accentColor={isMuted ? 'var(--color-text-dim)' : 'var(--color-accent-green)'}>
-                    {isMuted ? '[Sound: OFF]' : '[Sound: ON]'}
+                    {isMuted ? '[All sound: OFF]' : '[All sound: ON]'}
                   </AccentNavButton>
 
-                  {!isMuted && onVolumeChange && (
-                    <VolumeRow>
-                      <VolumeLabel>VOL</VolumeLabel>
-                      <VolumeSlider
-                        type="range"
-                        min="0" max="1" step="0.05"
-                        value={volume}
-                        onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                        data-cursor="pointer"
-                      />
-                      <VolumeValue>
-                        {Math.round(volume * 100)}%
-                      </VolumeValue>
-                    </VolumeRow>
-                  )}
+                  {!isMuted && (
+                    <>
+                      {onVolumeChange && (
+                        <VolumeRow>
+                          <VolumeLabel>VOL</VolumeLabel>
+                          <VolumeSlider
+                            type="range"
+                            min="0" max="1" step="0.05"
+                            value={volume}
+                            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                            data-cursor="pointer"
+                          />
+                          <VolumeValue>
+                            {Math.round(volume * 100)}%
+                          </VolumeValue>
+                        </VolumeRow>
+                      )}
 
-                  <MusicControlsRow>
-                    <MusicToggleButton
-                      type="button"
-                      onClick={onToggleMusic}
-                      $accentColor={musicEnabled ? 'var(--color-accent-gold)' : 'var(--color-text-dim)'}
-                    >
-                      {musicEnabled ? '[Music: ON]' : '[Music: OFF]'}
-                    </MusicToggleButton>
-                    <MusicAttributionLink
-                      href={BACKGROUND_MUSIC_VIDEO_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
-                      aria-label={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink size={20} strokeWidth={2} aria-hidden />
-                    </MusicAttributionLink>
-                  </MusicControlsRow>
+                      <MusicControlsRow>
+                        <MusicToggleButton
+                          type="button"
+                          onClick={onToggleMusic}
+                          $accentColor={musicEnabled ? 'var(--color-accent-gold)' : 'var(--color-text-dim)'}
+                        >
+                          {musicEnabled ? '[Music: ON]' : '[Music: OFF]'}
+                        </MusicToggleButton>
+                        <MusicAttributionLink
+                          href={BACKGROUND_MUSIC_VIDEO_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
+                          aria-label={BACKGROUND_MUSIC_ATTRIBUTION_LABEL}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink size={20} strokeWidth={2} aria-hidden />
+                        </MusicAttributionLink>
+                      </MusicControlsRow>
 
-                  {musicEnabled && onMusicVolumeChange && (
-                    <VolumeRow>
-                      <VolumeLabel>BGM</VolumeLabel>
-                      <VolumeSlider
-                        type="range"
-                        min="0" max="1" step="0.05"
-                        value={musicVolume}
-                        onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
-                        data-cursor="pointer"
-                      />
-                      <VolumeValue>
-                        {Math.round(musicVolume * 100)}%
-                      </VolumeValue>
-                    </VolumeRow>
+                      {musicEnabled && onMusicVolumeChange && (
+                        <VolumeRow>
+                          <VolumeLabel>BGM</VolumeLabel>
+                          <VolumeSlider
+                            type="range"
+                            min="0" max="1" step="0.05"
+                            value={musicVolume}
+                            onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
+                            data-cursor="pointer"
+                          />
+                          <VolumeValue>
+                            {Math.round(musicVolume * 100)}%
+                          </VolumeValue>
+                        </VolumeRow>
+                      )}
+
+                      <MusicControlsRow>
+                        <TtsToggleButton
+                          type="button"
+                          onClick={onToggleTts}
+                          $accentColor={ttsEnabled ? 'var(--color-accent-green)' : 'var(--color-text-dim)'}
+                        >
+                          {ttsEnabled ? '[TTS: ON]' : '[TTS: OFF]'}
+                        </TtsToggleButton>
+                      </MusicControlsRow>
+
+                      {ttsEnabled && onTtsVolumeChange && (
+                        <VolumeRow>
+                          <VolumeLabel>TTS</VolumeLabel>
+                          <VolumeSlider
+                            type="range"
+                            min="0" max="1" step="0.05"
+                            value={ttsVolume}
+                            onChange={(e) => onTtsVolumeChange(parseFloat(e.target.value))}
+                            data-cursor="pointer"
+                          />
+                          <VolumeValue>
+                            {Math.round(ttsVolume * 100)}%
+                          </VolumeValue>
+                        </VolumeRow>
+                      )}
+                    </>
                   )}
 
                   {screenState === ScreenState.CASE_HUB && (
