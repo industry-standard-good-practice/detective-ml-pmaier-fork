@@ -3,7 +3,7 @@
  * Function signatures are preserved for backward compatibility.
  */
 import { geminiPost } from './backendGemini';
-import { CaseData, Evidence, Suspect, ChatMessage } from '../types';
+import { CaseData, Evidence, Suspect, ChatMessage, TimelineStatement } from '../types';
 
 export const getSuspectResponse = async (
   suspect: Suspect,
@@ -62,21 +62,29 @@ export const getPartnerIntervention = async (
   suspect: Suspect,
   caseData: CaseData,
   history: ChatMessage[],
-  discoveredEvidence: Evidence[] = []
+  discoveredEvidence: Evidence[] = [],
+  timelineKnown: Pick<TimelineStatement, 'time' | 'statement' | 'day' | 'suspectName'>[] = []
 ): Promise<string> => {
   const result = await geminiPost<{ text: string }>('/chat/partner', {
-    type, suspect, caseData, history, discoveredEvidence
+    type,
+    suspect,
+    caseData,
+    history,
+    discoveredEvidence,
+    timelineKnown,
   });
   return result.text;
 };
 
 export const getBadCopHint = async (
   suspect: Suspect,
-  unrevealed: Evidence[],
+  discoveredEvidence: Evidence[],
   responseText: string
 ): Promise<string> => {
   const result = await geminiPost<{ text: string }>('/chat/badcop-hint', {
-    suspect, unrevealed, responseText
+    suspect,
+    discoveredEvidence,
+    responseText,
   });
   return result.text;
 };

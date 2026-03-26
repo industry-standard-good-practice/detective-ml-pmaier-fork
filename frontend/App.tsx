@@ -341,7 +341,7 @@ const App: React.FC = () => {
 
   const handlePartnerAction = async (action: 'goodCop' | 'badCop' | 'examine' | 'hint') => {
       console.log('[DEBUG] handlePartnerAction:', action);
-      const { currentSuspectId, partnerCharges, aggravationLevels, selectedCaseId, evidenceDiscovered, chatHistory, gameTime } = gameState;
+      const { currentSuspectId, partnerCharges, aggravationLevels, selectedCaseId, evidenceDiscovered, timelineStatementsDiscovered, chatHistory, gameTime } = gameState;
       if (!currentSuspectId || !selectedCaseId || partnerCharges <= 0) return;
 
       const currentCase = findCaseById(selectedCaseId)!;
@@ -361,11 +361,12 @@ const App: React.FC = () => {
 
       try {
         const partnerDialogue = await getPartnerIntervention(
-           action, 
+           action,
            suspect,
            currentCase,
            chatHistory[currentSuspectId] || [],
-           evidenceDiscovered
+           evidenceDiscovered,
+           timelineStatementsDiscovered
         );
 
         let newAgg = currentAgg;
@@ -504,20 +505,7 @@ const App: React.FC = () => {
 
         let finalWhisper = whisperComment;
         if (action === 'badCop') {
-            const unrevealed = suspect.hiddenEvidence.filter(hiddenEv => {
-                const cleanHiddenTitle = hiddenEv.title.toLowerCase();
-                
-                const isDiscovered = evidenceDiscovered.some(discoveredEv => 
-                    discoveredEv.title.toLowerCase().includes(cleanHiddenTitle)
-                );
-                
-                const isJustRevealed = response.revealedEvidence.length > 0
-                    ? response.revealedEvidence.some(re => re.toLowerCase().includes(cleanHiddenTitle))
-                    : false;
-
-                return !isDiscovered && !isJustRevealed;
-            });
-            finalWhisper = await getBadCopHint(suspect, unrevealed, response.text);
+            finalWhisper = await getBadCopHint(suspect, evidenceDiscovered, response.text);
         }
 
         setGameState(prev => {

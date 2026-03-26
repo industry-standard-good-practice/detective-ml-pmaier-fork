@@ -32,8 +32,15 @@ router.post('/chat/officer', async (req: Request, res: Response) => {
 
 router.post('/chat/partner', async (req: Request, res: Response) => {
   try {
-    const { type, suspect, caseData, history, discoveredEvidence } = req.body;
-    const result = await getPartnerIntervention(type, suspect, caseData, history, discoveredEvidence);
+    const { type, suspect, caseData, history, discoveredEvidence, timelineKnown } = req.body;
+    const result = await getPartnerIntervention(
+      type,
+      suspect,
+      caseData,
+      history,
+      discoveredEvidence,
+      Array.isArray(timelineKnown) ? timelineKnown : []
+    );
     res.json({ text: result });
   } catch (error: any) {
     console.error('[Gemini Route] chat/partner error:', error);
@@ -43,8 +50,8 @@ router.post('/chat/partner', async (req: Request, res: Response) => {
 
 router.post('/chat/badcop-hint', async (req: Request, res: Response) => {
   try {
-    const { suspect, unrevealed, responseText } = req.body;
-    const result = await getBadCopHint(suspect, unrevealed, responseText);
+    const { suspect, discoveredEvidence, responseText } = req.body;
+    const result = await getBadCopHint(suspect, Array.isArray(discoveredEvidence) ? discoveredEvidence : [], responseText);
     res.json({ text: result });
   } catch (error: any) {
     console.error('[Gemini Route] chat/badcop-hint error:', error);

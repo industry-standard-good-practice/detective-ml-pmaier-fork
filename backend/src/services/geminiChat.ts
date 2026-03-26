@@ -52,6 +52,39 @@ interface ChatMessage {
   isEvidenceCollected?: boolean[]; audioUrl?: string | null;
 }
 
+/** Timeline rows the player has confirmed — partner may treat as known facts only. */
+interface PartnerTimelineKnown {
+  time: string;
+  statement: string;
+  day: string;
+  suspectName?: string;
+}
+
+function formatPartnerKnownEvidence(ev: Evidence[]): string {
+  if (!ev || ev.length === 0) return 'None yet.';
+  return ev.map(e => `"${e.title}": ${(e.description || '').trim()}`).join('; ');
+}
+
+function formatPartnerKnownTimeline(rows: PartnerTimelineKnown[]): string {
+  if (!rows || rows.length === 0) return 'None yet.';
+  return rows
+    .map(
+      t =>
+        `[${(t.day || '?').trim()} ${(t.time || '').trim()}] ${(t.suspectName || 'Subject').trim()}: ${(t.statement || '').trim()}`
+    )
+    .join('\n');
+}
+
+/** The partner is not omniscient: only logged evidence + confirmed timeline + transcript + case blurb. */
+function partnerKnowledgeBoundary(discoveredEvidence: Evidence[], timelineKnown: PartnerTimelineKnown[]): string {
+  return `--- PARTNER KNOWLEDGE (ONLY FACTS YOU MAY TREAT AS CASE FACTS) ---
+Evidence the detective has logged: ${formatPartnerKnownEvidence(discoveredEvidence)}
+Timeline events the detective has confirmed:
+${formatPartnerKnownTimeline(timelineKnown)}
+--- END PARTNER KNOWLEDGE ---
+STRICT RULES: You do NOT know unrevealed clues, hidden evidence, suspect secrets, or timeline facts not listed in PARTNER KNOWLEDGE. Do NOT name, imply, allude to, or telegraph specific items, hiding places, titles, or story beats the detective has not already found. The case description and transcript are for tone and flow only — not a source of hidden facts. If you press or suggest, use only what is in PARTNER KNOWLEDGE plus generic tactics (contradiction, timing, demeanor) without inventing specifics.`;
+}
+
 function formatTranscriptLineForSuspect(msg: ChatMessage, suspectName: string): string {
   const t = msg.text ?? '';
   const q = (s: string) => JSON.stringify(s);
@@ -520,20 +553,23 @@ export const getPartnerIntervention = async (
   suspect: Suspect,
   caseData: CaseData,
   history: ChatMessage[],
-  discoveredEvidence: Evidence[] = []
+  discoveredEvidence: Evidence[] = [],
+  timelineKnown: PartnerTimelineKnown[] = []
 ): Promise<string> => {
   console.log(`[Gemini] getPartnerIntervention: ${type} on ${suspect.name}`);
-  const lastMsg = history[history.length - 1]?.text || "Hello.";
   const partnerName = caseData.partner?.name || "Partner";
   const partnerRole = caseData.partner?.role || "Detective";
   const partnerPersonality = caseData.partner?.personality || "Helpful";
 
+  const boundary = partnerKnowledgeBoundary(discoveredEvidence, timelineKnown);
+
   let prompt = "";
   if (type === 'examine') {
     const sceneNote = suspect.isDeceased
-      ? 'Describe the body and, if visible, a glance at the immediate surroundings — still observational only.'
+      ? 'Describe the body and, if visible, a glance at the immediate surroundings — still observational only. Do not reference evidence the detective has not logged.'
       : '';
     prompt = `
+        ${boundary}
         You are ${partnerName}, the ${partnerRole}.
         Action: Perform an initial visual examination${suspect.isDeceased ? ` of the crime scene and ${suspect.name}'s body` : ` of ${suspect.name}`}.
         Generate a 1-2 sentence observation describing ONLY what you physically see.
@@ -541,29 +577,17 @@ export const getPartnerIntervention = async (
         Tone: Professional, grim. Speak in first person.
       `;
   } else if (type === 'hint') {
-    const hiddenLoc = (suspect.hiddenEvidence || [])
-      .map(e => {
-        const loc = (e.location || '').trim();
-        const zone = e.discoveryContext === 'environment' ? 'scene' : 'body';
-        return loc ? `[${zone}] ${e.title} → ${loc}` : `[${zone}] ${e.title}`;
-      })
-      .join('; ');
     prompt = `
+        ${boundary}
         You are ${partnerName}, the ${partnerRole}.
-        Action: Suggest where the detective should look next${suspect.isDeceased ? ` — either on ${suspect.name}'s body or in the surrounding room, as appropriate` : ''}.
-        Unfound clues (use [body] vs [scene] and locations to nudge; do not name the object): ${hiddenLoc || 'None listed'}.
-        Generate a 1-sentence hint. Speak in first person. Do not spoil the exact item title.
+        Action: Suggest where the detective should look next${suspect.isDeceased ? ` — body or surrounding scene, in general terms` : ''}.
+        Do NOT use hidden clue locations or unfound evidence titles. Base the hint only on PARTNER KNOWLEDGE and the conversation — generic angles (e.g. clothing, pockets, documents, furniture, footprint of struggle) without naming objects the detective has not found.
+        Generate a 1-sentence hint. Speak in first person.
       `;
   } else {
-    const discoveredTitles = new Set(discoveredEvidence.map(e => e.title.toLowerCase()));
-    const discoveredEvidenceStr = discoveredEvidence.length > 0 
+    const discoveredEvidenceStr = discoveredEvidence.length > 0
       ? discoveredEvidence.map(e => `"${e.title}": ${e.description}`).join('; ')
       : 'None yet';
-
-    const unrevealedSecrets = (suspect.hiddenEvidence || []).filter(e => !discoveredTitles.has(e.title.toLowerCase()));
-    const secretHint = unrevealedSecrets.length > 0 
-      ? unrevealedSecrets[Math.floor(Math.random() * unrevealedSecrets.length)]
-      : null;
 
     const recentContext = history.slice(-6).map(m => {
       if (m.sender === 'player') return `Detective: "${(m.text || '').substring(0, 100)}"`;
@@ -574,31 +598,29 @@ export const getPartnerIntervention = async (
 
     if (type === 'goodCop') {
       prompt = `
+        ${boundary}
         You are ${partnerName}, the ${partnerRole}.
         Personality: ${partnerPersonality}.
         You are playing GOOD COP — sympathetic, understanding, building rapport.
         Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
-        Case: ${caseData.description}
-        Evidence found so far: ${discoveredEvidenceStr}
+        Case (setting only; do not treat as facts beyond PARTNER KNOWLEDGE): ${caseData.description}
+        Evidence found so far (same as PARTNER KNOWLEDGE): ${discoveredEvidenceStr}
         Recent conversation:
         ${recentContext || 'The interrogation just started.'}
-        ${secretHint ? `--- INTERNAL COMPASS (DO NOT reference in dialogue) ---
-        The suspect may have hidden knowledge in the area of: "${secretHint.title}".` : ''}
         Generate a 1-2 sentence sympathetic intervention addressed TO the suspect.
         Speak in FIRST PERSON ("I"). Do NOT narrate actions. JUST DIALOGUE.
       `;
     } else {
       prompt = `
+        ${boundary}
         You are ${partnerName}, the ${partnerRole}.
         Personality: ${partnerPersonality}.
         You are playing BAD COP — firm, confrontational, pressing on inconsistencies.
         Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
-        Case: ${caseData.description}
-        Evidence found so far: ${discoveredEvidenceStr}
+        Case (setting only; do not treat as facts beyond PARTNER KNOWLEDGE): ${caseData.description}
+        Evidence found so far (same as PARTNER KNOWLEDGE): ${discoveredEvidenceStr}
         Recent conversation:
         ${recentContext || 'The interrogation just started.'}
-        ${secretHint ? `--- INTERNAL COMPASS (DO NOT reference in dialogue) ---
-        The suspect may be hiding something in the area of: "${secretHint.title}".` : ''}
         Generate a 1-2 sentence confrontational intervention addressed TO the suspect.
         Speak in FIRST PERSON ("I"). Do NOT narrate actions. JUST DIALOGUE.
       `;
@@ -613,19 +635,24 @@ export const getPartnerIntervention = async (
   return res.text || "...";
 };
 
-export const getBadCopHint = async (suspect: Suspect, unrevealed: Evidence[], responseText: string): Promise<string> => {
+export const getBadCopHint = async (
+  suspect: Suspect,
+  discoveredEvidence: Evidence[],
+  responseText: string
+): Promise<string> => {
+  const knownTitles = (discoveredEvidence || []).map(e => e.title).filter(Boolean);
+  const knownBlock =
+    knownTitles.length > 0
+      ? knownTitles.join(', ')
+      : 'None — the detective has not logged physical evidence yet.';
   const prompt = `
-    You are the partner.
+    You are the partner standing beside the detective.
     Suspect: ${suspect.name}.
-    Unrevealed Items they have: ${(unrevealed || []).map(e => e.title).join(', ')}.
-    
+    Evidence the detective has already found (you ONLY know these): ${knownBlock}
     Suspect just said: "${responseText}".
-    
-    Did the suspect mention or allude to any of the unrevealed items? 
-    If yes, whisper a hint: "Did you hear that? He mentioned [Item]! Press him on it!"
-    If no, just say: "He's tough. We need to find a weak spot."
-    
-    Keep it very short.
+    If their statement contradicts known evidence, seems evasive, or opens a line worth pressing — give one very short whisper to the detective. Do NOT name or imply evidence the detective has not found. Do NOT reference hidden clues.
+    If nothing stands out, say something like: He's tough. We need another angle.
+    Keep it under 25 words.
   `;
   const res = await generateWithTextModel(
     GEMINI_MODELS.CHAT,
