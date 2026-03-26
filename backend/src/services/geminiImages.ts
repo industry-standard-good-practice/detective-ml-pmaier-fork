@@ -239,11 +239,17 @@ const buildDeceasedForensicEditPrompt = (view: string, theme: string): string =>
   }
 };
 
-/** One environmental clue → its own crime-scene framing (pregen / consistency). */
+/** One environmental clue → its own crime-scene framing (pregen / consistency). Must differ from NEUTRAL; respect environmentIncludesBody like generateEvidenceImage. */
 const buildEnvironmentScenePortraitPrompt = (ev: Evidence, theme: string): string => {
   const loc = (ev.location || '').trim();
   const locBit = loc ? `Focal area / placement: ${loc}. ` : '';
-  return `PULL BACK — medium-wide crime scene shot matching the reference victim and room. ${locBit}Camera and composition emphasize this beat: "${ev.title}" — ${ev.description} Theme: ${theme}. Keep the same victim identity, pose, and clothing as the reference; shift viewpoint toward this area of the scene. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+  const includeBody = ev.environmentIncludesBody === true;
+
+  if (includeBody) {
+    return `PULL BACK — medium-wide crime scene shot (different framing from the neutral full-body reference: shift camera toward this area). ${locBit}Emphasize this beat: "${ev.title}" — ${ev.description}. Theme: ${theme}. Keep victim identity, clothing, and room consistent with the reference; the victim may appear smaller or at the edge of frame while the focal area stays readable. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+  }
+
+  return `ZOOM IN — TIGHT forensic close-up or tight medium shot on the furniture, surface, or object (same storytelling focus as the evidence thumbnail for this clue). NOT a wide establishing shot and NOT the same composition as the neutral victim card — crop into the scene so the prop/location is the hero. ${locBit}Beat: "${ev.title}" — ${ev.description}. Theme: ${theme}. Match room materials and lighting from the reference; omit or crop out where the body lay. STRICT NEGATIVE: no dead body, no corpse, no human remains, no victim, no person, no limbs, no face in frame. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
 };
 
 function buildVictimExaminationImagePrompt(view: string, theme: string, hiddenEvidence: Evidence[] | undefined): string {
