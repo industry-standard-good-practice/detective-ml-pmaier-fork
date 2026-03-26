@@ -400,6 +400,8 @@ const App: React.FC = () => {
         // Partner clears suggestions for now, as context changes
         setCurrentSuggestions([]);
 
+        const historyWithPartner = [...(chatHistory[currentSuspectId] || []), partnerMsg];
+
         setGameState(prev => ({
           ...prev,
           partnerCharges: prev.partnerCharges - 1,
@@ -422,7 +424,7 @@ const App: React.FC = () => {
             
             const examResponse = await getSuspectResponse(
               suspect, currentCase, examPrompt, 'action', null, 0, false, evidenceDiscovered, newGameTime,
-              chatHistory[currentSuspectId] || []
+              historyWithPartner
             );
             
             let examAudioUrl: string | null = null;
@@ -467,7 +469,7 @@ const App: React.FC = () => {
           false,
           evidenceDiscovered, // Pass discovered evidence
           newGameTime, // Pass current game time
-          chatHistory[currentSuspectId] || [] // Pass conversation history
+          historyWithPartner
         );
 
         let finalAgg = newAgg + response.aggravationDelta;
@@ -635,6 +637,8 @@ const App: React.FC = () => {
       timestamp: formatTime(newGameTime) 
     };
 
+    const historyForModel = [...suspectHistory, userMsg];
+
     setGameState(prev => ({
       ...prev,
       gameTime: newGameTime,
@@ -656,7 +660,7 @@ const App: React.FC = () => {
         isFirstTurn,
         evidenceDiscovered, // Pass discovered evidence
         newGameTime, // Pass current game time
-        suspectHistory // Pass conversation history
+        historyForModel
       );
 
       let newAgg = (aggravationLevels[currentSuspectId] || 0) + response.aggravationDelta;

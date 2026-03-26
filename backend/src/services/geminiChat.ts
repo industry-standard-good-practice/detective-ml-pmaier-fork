@@ -41,6 +41,20 @@ interface ChatMessage {
   isEvidenceCollected?: boolean[]; audioUrl?: string | null;
 }
 
+function formatTranscriptLineForSuspect(msg: ChatMessage, suspectName: string): string {
+  const t = msg.text ?? '';
+  const q = (s: string) => JSON.stringify(s);
+  if (msg.sender === 'player') {
+    const ev = msg.attachment ? ` [showing evidence: ${q(msg.attachment)}]` : '';
+    return `DETECTIVE${ev}: ${q(t)}`;
+  }
+  if (msg.sender === 'suspect') return `YOU (${suspectName}): ${q(t)}`;
+  if (msg.sender === 'partner') return `PARTNER: ${q(t)}`;
+  if (msg.sender === 'officer') return `OFFICER (briefing, if relevant): ${q(t)}`;
+  if (msg.sender === 'system') return `[SYSTEM NOTE: ${q(t)}]`;
+  return '';
+}
+
 export const getSuspectResponse = async (
   suspect: Suspect,
   caseData: CaseData,
@@ -140,16 +154,16 @@ export const getSuspectResponse = async (
     const isGuilty = suspect.isGuilty;
     const dispositionStr = isGuilty
       ? `You ARE guilty. You committed the crime or were directly involved. You need to protect yourself.
-        You don't know if the detective suspects you specifically — as far as you know, they're talking to everyone involved. Your goal is to seem cooperative and normal while avoiding anything that could point suspicion at you.
+        You don't know if the detective suspects you specifically — as far as you know, they're talking to everyone involved. Your goal is to seem like a plausible, law-aware person in a serious investigation: mostly civil and believable, not a cartoon villain arguing with a cop.
         
         **CONFESSION RULE (ABSOLUTE):** You must NEVER confess. NEVER say "I did it", "It was me", "I killed them", or anything equivalent.
-        - Even when confronted with overwhelming evidence, you DENY, RATIONALIZE, DEFLECT, or GO SILENT.
+        - Even when confronted with overwhelming evidence, you DENY, RATIONALIZE, DEFLECT, or GO SILENT — in a way that fits your personality (some people go quiet, some get tearful, some stay icy and brief).
         - The ONLY exception is if your aggravation is at absolute maximum (95+) AND multiple pieces of irrefutable physical evidence have been presented — even then, the most you give is a CRACK: a bitter, ambiguous line that IMPLIES guilt without being a clean confession.
         
-        Your personality (${suspect.personality}) determines HOW you hide the truth.`
+        Your personality (${suspect.personality}) determines HOW you hide the truth and how much pushback you show.`
       : `You are INNOCENT. You did NOT commit this crime and you know it.
         Your personality (${suspect.personality}) determines how you handle being questioned.
-        Regardless of personality, you have NO reason to lie about the facts of the case.`;
+        Regardless of personality, you have NO reason to lie about the facts of the case. Many innocents are willing to answer clearly when asked something direct; others are shy, formal, or shaken — let the profile decide, not a default attitude of suspicion toward the detective.`;
 
     let interrogationContextStr = '';
     if (caseData.startTime) {
@@ -173,6 +187,7 @@ export const getSuspectResponse = async (
           A detective ("Detective Mel") has come to speak with you about a crime. You may address them by name.
           The conversation began on ${formattedDate} at ${formattedTime}.
           The current time is now ${currentFormattedTime} on ${currentFormattedDate}. You have been talking for approximately ${elapsedStr}.
+          You understand this is an official investigation: your reputation, livelihood, relationships, and possibly legal exposure are on the line. Treat the detective with the respect and realism that implies unless your personality and current aggravation clearly justify friction.
           --- YOUR DISPOSITION ---
           ${dispositionStr}
         `;
@@ -181,6 +196,7 @@ export const getSuspectResponse = async (
           --- SITUATION ---
           A detective ("Detective Mel") has come to speak with you about a crime. You may address them by name.
           The investigation started: ${caseData.startTime}.
+          You understand this is an official investigation: your reputation, livelihood, relationships, and possibly legal exposure are on the line. Treat the detective with the respect and realism that implies unless your personality and current aggravation clearly justify friction.
           --- YOUR DISPOSITION ---
           ${dispositionStr}
         `;
@@ -189,6 +205,7 @@ export const getSuspectResponse = async (
       interrogationContextStr = `
         --- SITUATION ---
         A detective ("Detective Mel") has come to speak with you about a crime. You may address them by name.
+        You understand this is an official investigation: your reputation, livelihood, relationships, and possibly legal exposure are on the line. Treat the detective with the respect and realism that implies unless your personality and current aggravation clearly justify friction.
         --- YOUR DISPOSITION ---
         ${dispositionStr}
       `;
@@ -223,31 +240,36 @@ export const getSuspectResponse = async (
         (CRITICAL RULE: NEVER use a full first and last name in casual dialogue. Use just their FIRST NAME if you are their friend/spouse, or use titles like "my husband" / "Mr. [Last Name]".)
         
         Current Aggravation: ${currentAggravation}/100.
-        ${currentAggravation > 80 ? "You are furious and near breaking point." : "You are composed but guarded."}
+        ${currentAggravation > 80
+          ? "You are furious and near breaking point — short, sharp, or explosive reactions fit; still stay in character."
+          : currentAggravation > 50
+            ? "You are noticeably stressed or defensive; tone follows your personality (some go cold, some ramble, some get clipped)."
+            : "You are relatively steady; default to natural conversational answers rather than hostility or interrogating the detective."}
         
         ${isFirstTurn ? `
         **CONVERSATION STATE: THIS IS THE VERY FIRST EXCHANGE.**
         The detective has JUST sat down in front of you. Do NOT reference any prior conversation.
         ` : `
         **CONVERSATION STATE: CONTINUATION of an ongoing interrogation.**
-        --- CONVERSATION TRANSCRIPT ---
-        ${conversationHistory.map(msg => {
-      if (msg.sender === 'player') return 'DETECTIVE: "' + msg.text + '"';
-      if (msg.sender === 'suspect') return 'YOU (' + suspect.name + '): "' + msg.text + '"';
-      if (msg.sender === 'partner') return 'PARTNER: "' + msg.text + '"';
-      if (msg.sender === 'system') return '[SYSTEM NOTE: ' + msg.text + ']';
-      return '';
-    }).filter(Boolean).join('\n        ')}
+        --- CONVERSATION TRANSCRIPT (COMPLETE THREAD — CHRONOLOGICAL ORDER) ---
+        This is everything said in this room with you so far, in order. There are ${conversationHistory.length} line(s) below; treat them as your memory of the conversation.
+        ${conversationHistory.map(msg => formatTranscriptLineForSuspect(msg, suspect.name)).filter(Boolean).join('\n        ')}
         --- END TRANSCRIPT ---
+        **CONTINUITY (CRITICAL):** Honor the transcript. Anything YOU (${suspect.name}) already said is established; do not contradict it as if it never happened (no "amnesia"). If you must change your story — e.g. guilty suspect under pressure, or correcting a slip — make that shift intentional in-character (nervous backtrack, "I misspoke", caught in a lie), not a random rewrite. Answer in light of what the detective (and partner, if any) already asked or showed, including evidence tags in the transcript.
         `}
         
         User Input: "${userInput}" (Type: ${type})
         Evidence Shown: ${evidenceAttachment || "None"}
 
         INSTRUCTIONS:
-        1. Reply in character. Vary response length and tone. Make the detective WORK for info.
+        1. Reply in character. **LENGTH:** Match the moment. Simple greetings, yes/no, or narrow follow-ups → one or two sentences. Routine answers → brief. Save a short paragraph (3–5 sentences max) for when the detective asks for explanation, timeline, alibi detail, emotional weight, or you are cornered — not every line should be a speech. **TONE:** Let Personality, relationship to the case, and Current Aggravation drive behavior. Do NOT default to being combative, lecturing the detective, or constantly turning questions back on them ("What makes you think that?") unless that fits this specific character at this aggravation level. Guilty suspects can still sound cooperative on the surface while omitting or shading the truth; innocent ones often sound forthcoming. The detective should still have to probe for *hidden* secrets, but that does not mean every reply is long or adversarial.
         2. Do NOT invent new locations, people, time events, or facts. ONLY refer to your Knowledge Base.
-        3. CALCULATE 'aggravationDelta' (Change in anger, from -100 to +100).
+        3. **CALCULATE 'aggravationDelta' (-100 to +100)** — this is the change to the interrogation's hostility meter based on what the **detective (or partner intervention) just did**, NOT how cold, busy, superior, or sarcastic your *reply* sounds.
+           - **Decouple voice from delta:** A haughty, impatient, or dismissive character can still speak in character while **lowering or holding steady** aggravation if the detective was respectful, sympathetic, professional, or de-escalating. Do **not** raise aggravation just because you chose sharp dialogue — raise it when the *player's move* was provocative, accusatory, demeaning, threatening, or trap-setting.
+           - **Typical decreases (negative delta):** Polite openings, apologies, acknowledging inconvenience, calm tone, fair questions, giving room to talk, good-cop style rapport → often **-3 to -12**; stronger de-escalation after tension → **-5 to -20**. At **high** Current Aggravation, a genuinely civil turn should **usually** shave something off, not tick upward.
+           - **Typical increases (positive delta):** Insults, yelling, bad-cop pressure, blatant accusations without tact, humiliation, catching them in a lie with proof, aggressive evidence presentation, or repeating after they asked to stop → scale with severity (**+3 to +25+**).
+           - **Neutral / small swings:** Routine factual questions with neutral delivery → **about -4 to +4** unless the topic is inherently explosive for this character (then justify a bit more in your head, still tied to *content*, not NPC attitude).
+           - **Partner [BAD COP] user input:** Expect a **meaningful increase** unless the narrative explicitly softens it; **[GOOD COP]** should **reduce** tension alongside supportive dialogue.
         4. Choose Emotion from: NEUTRAL, ANGRY, SAD, NERVOUS, HAPPY, SURPRISED, SLY, CONTENT, DEFENSIVE, ARROGANT. Must match text tone.
         5. TIMELINE REVEAL: ONLY populate revealedTimelineStatements when detective SPECIFICALLY asks about your whereabouts/timing.
         6. Hints: Provide 3 short suggested follow-up questions.

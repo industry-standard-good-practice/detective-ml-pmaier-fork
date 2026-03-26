@@ -276,6 +276,8 @@ export const useGameActions = ({
 
         setCurrentSuggestions([]);
 
+        const historyWithPartner = [...(chatHistory[currentSuspectId] || []), partnerMsg];
+
         setGameState(prev => ({
           ...prev,
           partnerCharges: prev.partnerCharges - 1,
@@ -295,7 +297,7 @@ export const useGameActions = ({
             
             const examResponse = await getSuspectResponse(
               suspect, currentCase, examPrompt, 'action', null, 0, false, evidenceDiscovered, newGameTime,
-              chatHistory[currentSuspectId] || []
+              historyWithPartner
             );
             
             let examAudioUrl: string | null = null;
@@ -340,7 +342,7 @@ export const useGameActions = ({
           false,
           evidenceDiscovered,
           newGameTime,
-          chatHistory[currentSuspectId] || []
+          historyWithPartner
         );
 
         let finalAgg = newAgg + response.aggravationDelta;
@@ -468,6 +470,8 @@ export const useGameActions = ({
       timestamp: formatTime(newGameTime) 
     };
 
+    const historyForModel = [...suspectHistory, userMsg];
+
     setGameState(prev => ({
       ...prev,
       gameTime: newGameTime,
@@ -488,7 +492,7 @@ export const useGameActions = ({
         isFirstTurn,
         evidenceDiscovered,
         newGameTime,
-        suspectHistory
+        historyForModel
       );
 
       let newAgg = (aggravationLevels[currentSuspectId] || 0) + response.aggravationDelta;
