@@ -1215,13 +1215,14 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
   The timeline SHOULD span multiple days when relevant — include events from days before that establish motive or opportunity.
 - PROFESSIONAL BACKGROUND: A valid job or skill set.
 - WITNESS OBSERVATIONS: Something specific they saw or heard.
-- hiddenEvidence: Items they have that prove guilt or secrets. Each item MUST include non-empty 'location' (where it is concealed). The guilty party MUST have damning hidden evidence.`,
+- hiddenEvidence: **At least 2 items** for each **living** suspect — items they have that prove guilt or secrets. Each item MUST include non-empty 'location' (where it is concealed). The guilty party MUST have damning hidden evidence.`,
 
     /** Data completeness requirement — used in all three */
     DATA_COMPLETENESS: `**DATA COMPLETENESS (CRITICAL):**
 - You MUST populate 'alibi', 'motive', 'relationships', 'knownFacts', 'timeline', 'professionalBackground', and 'witnessObservations' for EVERY suspect.
 - Do NOT return null or empty strings for required fields.
 - Do NOT return empty arrays [] for timeline, relationships, or knownFacts — generate real content.
+- **initialEvidence** MUST list **at least 3** items (see EVIDENCE COUNTS). Every living suspect MUST have **at least 2** \`hiddenEvidence\` items (victim: 2–5 per VICTIM GENERATION).
 - Every evidence item in 'initialEvidence' and every 'hiddenEvidence' entry MUST include a non-empty 'location' string (see EVIDENCE LOCATION rules).
 - For the **victim** (isDeceased), every 'hiddenEvidence' item MUST include 'discoveryContext' ("body" or "environment") and, when "environment", a boolean 'environmentIncludesBody' for image generation (see EVIDENCE LOCATION rules).`,
 
@@ -1292,6 +1293,14 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
 - WRONG (robotic): "Robert Chen claims Robert Chen was at Robert Chen's apartment during the time of the murder."
 - CORRECT (natural): "Robert Chen claims he was at his apartment during the time of the murder."
 - If fixing existing text that overuses full names, rewrite it to sound natural by replacing repeated names with appropriate pronouns.`,
+
+    /** Minimum evidence volumes — used in case generation (generateCaseFromPrompt) */
+    EVIDENCE_COUNTS: `**EVIDENCE COUNTS (MANDATORY — CASE GENERATION):**
+- **initialEvidence:** The array MUST contain **at least 3** distinct items. These are facts or objects documented at the scene or collected before interrogation begins (patrol photos, bagged items, logged documents, scene observations).
+- **hiddenEvidence (every suspect):** Each suspect object MUST include **at least 2** entries in its \`hiddenEvidence\` array.
+  - **Living suspects** (\`isDeceased: false\`): At least **2** concealed or discoverable items each (documents, devices, clothing traces, etc.). The guilty party MUST still carry damning hidden evidence per existing guilt rules.
+  - **Victim** (\`isDeceased: true\`): Use **2–5** examination clues as in VICTIM GENERATION (body vs environment mix). The minimum of 2 is satisfied by that rule.
+- When the story supports it, **prefer more** than these floors (e.g. 3–5+ hidden items per living suspect) so investigations feel substantiated.`,
 
     /** Evidence placement — used in generation, consistency, and edit */
     EVIDENCE_LOCATION: `**EVIDENCE 'location' FIELD (CRITICAL — GAMEPLAY):**
@@ -2465,6 +2474,8 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     
     ${PROMPT_RULES.DATA_COMPLETENESS}
     
+    ${PROMPT_RULES.EVIDENCE_COUNTS}
+    
     ${PROMPT_RULES.BIO_SPOILER_PROTECTION}
     
     ${PROMPT_RULES.VOICE_ACCENT}
@@ -2476,7 +2487,7 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     
     ${PROMPT_RULES.EVIDENCE_LOCATION}
     
-    Output JSON structure matching CaseData interface.
+    Output JSON structure matching CaseData interface. Respect EVIDENCE COUNTS: initialEvidence length ≥ 3; each suspect's hiddenEvidence length ≥ 2.
   `;
 
     const res = await ai.models.generateContent({
