@@ -163,6 +163,20 @@ export const generateSuspectFromUpload = async (
     });
 };
 
+export const generateNeutralPortraitForSuspect = async (
+    suspect: Suspect | SupportCharacter,
+    caseId: string,
+    userId: string,
+    theme: string = 'Noir'
+): Promise<{ neutralUrl: string; neutralBase64: string }> => {
+    return geminiPost<{ neutralUrl: string; neutralBase64: string }>('/image/regenerate-neutral', {
+        suspect,
+        caseId,
+        userId,
+        theme,
+    });
+};
+
 export const regenerateSingleSuspect = async (
     suspect: Suspect | SupportCharacter,
     caseId: string,

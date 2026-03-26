@@ -636,14 +636,14 @@ export const generateSuspectFromUpload = async (
   return { ...suspect, portraits: uploadedPortraits };
 };
 
-export const regenerateSingleSuspect = async (
+/** Generate and upload only the NEUTRAL base (used for progressive case-review reroll). */
+export const generateNeutralPortraitForSuspect = async (
   suspect: Suspect | SupportCharacter,
   caseId: string,
   userId: string,
   theme: string = "Noir"
-): Promise<Suspect | SupportCharacter> => {
-  if (!userId) throw new Error('[CRITICAL] regenerateSingleSuspect: userId is required');
-  console.log(`[Gemini] regenerateSingleSuspect: Starting for ${suspect.name} (Theme: ${theme})`);
+): Promise<{ neutralUrl: string; neutralBase64: string }> => {
+  if (!userId) throw new Error('[CRITICAL] generateNeutralPortraitForSuspect: userId is required');
   const colorDesc = getSuspectColorDescription(suspect.avatarSeed);
   const isSuspect = (suspect as any).isGuilty !== undefined;
   const folder = isSuspect ? 'suspects' : 'support';
@@ -669,6 +669,20 @@ export const regenerateSingleSuspect = async (
 
   const neutralBase64 = `data:image/png;base64,${neutralRaw}`;
   const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/neutral.png`);
+  return { neutralUrl, neutralBase64 };
+};
+
+export const regenerateSingleSuspect = async (
+  suspect: Suspect | SupportCharacter,
+  caseId: string,
+  userId: string,
+  theme: string = "Noir"
+): Promise<Suspect | SupportCharacter> => {
+  if (!userId) throw new Error('[CRITICAL] regenerateSingleSuspect: userId is required');
+  console.log(`[Gemini] regenerateSingleSuspect: Starting for ${suspect.name} (Theme: ${theme})`);
+  const { neutralUrl, neutralBase64 } = await generateNeutralPortraitForSuspect(suspect, caseId, userId, theme);
+  const isSuspect = (suspect as any).isGuilty !== undefined;
+  const folder = isSuspect ? 'suspects' : 'support';
 
   let emotionPortraits: Record<string, string> = {};
   if (isSuspect && (suspect as Suspect).isDeceased) {

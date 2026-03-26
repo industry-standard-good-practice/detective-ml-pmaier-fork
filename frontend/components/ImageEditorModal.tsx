@@ -9,6 +9,7 @@ import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiIm
 import Spinner from './Spinner';
 import { HorizontalScrollStrip } from './HorizontalScrollStrip';
 import type { PortraitVariantSlot } from '../utils/portraitVariantSlots';
+import type { ImageLoadingState } from './SuspectPortrait';
 
 const Overlay = styled(motion.div)`
   position: absolute;
@@ -135,20 +136,46 @@ const RegenAllOverlayButton = styled.button`
   }
 `;
 
-const VariantThumb = styled.button<{ $active: boolean }>`
+const VariantThumb = styled.button<{ $active: boolean; $slotStatus?: 'idle' | 'loading' | 'done' }>`
   flex-shrink: 0;
   width: 64px;
   height: 64px;
   padding: 0;
-  border: 2px solid ${(p) => (p.$active ? '#3b82f6' : 'rgba(255,255,255,0.12)')};
+  border: 2px solid
+    ${(p) =>
+      p.$slotStatus === 'loading'
+        ? '#3b82f6'
+        : p.$slotStatus === 'done'
+          ? 'rgba(34, 197, 94, 0.55)'
+          : p.$active
+            ? '#3b82f6'
+            : 'rgba(255,255,255,0.12)'};
   background: #0a0a0a;
   cursor: pointer;
   overflow: hidden;
   position: relative;
   border-radius: 2px;
+  opacity: ${(p) => (p.$slotStatus === 'idle' ? 0.5 : 1)};
   &:hover {
-    border-color: ${(p) => (p.$active ? '#3b82f6' : 'rgba(255,255,255,0.35)')};
+    border-color: ${(p) =>
+      p.$slotStatus === 'loading'
+        ? '#60a5fa'
+        : p.$slotStatus === 'done'
+          ? 'rgba(34, 197, 94, 0.75)'
+          : p.$active
+            ? '#3b82f6'
+            : 'rgba(255,255,255,0.35)'};
   }
+`;
+
+const VariantThumbSpinnerWrap = styled.div`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
 `;
 
 const VariantThumbImg = styled.img`
@@ -385,6 +412,10 @@ export interface ImageEditorModalProps {
   onPasteFromClipboard?: (callback: (dataUrl: string) => void) => void;
   /** Open camera capture; call onCaptured with captured still */
   onRequestCamera?: (onCaptured: (dataUrl: string) => void) => void;
+  /** Parent-driven portrait work (reroll, background gen) — show progress and lock edits until cleared. */
+  externalPortraitLoading?: ImageLoadingState | null;
+  /** Per carousel slot during progressive reroll (from parent). */
+  variantSlotStatus?: Record<string, 'idle' | 'loading' | 'done'> | null;
 }
 
 const NEUTRAL_KEY = 'NEUTRAL';
@@ -403,6 +434,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   onRegenerateVariant,
   onPasteFromClipboard,
   onRequestCamera,
+  externalPortraitLoading = null,
+  variantSlotStatus = null,
 }) => {
   const onBusyChangeRef = useRef(onBusyChange);
   onBusyChangeRef.current = onBusyChange;
@@ -569,7 +602,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleEdit = async () => {
-    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant) return;
+    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading)
+      return;
     setError(null);
     setIsGenerating(true);
     try {
@@ -607,7 +641,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant) return;
+    if (isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading) return;
     if (!currentImageUrl) return;
     setIsSaving(true);
     try {
@@ -626,7 +660,17 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleRegenerateAll = async () => {
-    if (!onRegenerateAllVariants || selectedVariantKey !== NEUTRAL_KEY || !currentImageUrl || isRegeneratingAll || isRegeneratingVariant || isSaving || isGenerating) return;
+    if (
+      !onRegenerateAllVariants ||
+      selectedVariantKey !== NEUTRAL_KEY ||
+      !currentImageUrl ||
+      isRegeneratingAll ||
+      isRegeneratingVariant ||
+      isSaving ||
+      isGenerating ||
+      externalPortraitLoading
+    )
+      return;
     const base64 = getBase64FromImage();
     if (!base64) {
       toast.error('Could not read neutral image for regeneration.');
@@ -653,7 +697,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       isRegeneratingVariant ||
       isRegeneratingAll ||
       isSaving ||
-      isGenerating
+      isGenerating ||
+      externalPortraitLoading
     ) {
       return;
     }
@@ -680,7 +725,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleUndo = () => {
-    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant) return;
+    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading)
+      return;
     const newHistory = [...history];
     newHistory.pop();
     setHistory(newHistory);
@@ -697,8 +743,25 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     Boolean(neutralPortraitUrl);
 
   const busyOverlay = isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant;
+  const extPipelineBusy = Boolean(externalPortraitLoading);
+  const pipelineLocked = busyOverlay || extPipelineBusy;
   const regenRemaining =
     isRegeneratingAll && savingProgress.total > 0 ? Math.max(0, savingProgress.total - savingProgress.current) : null;
+
+  const externalPipelineMessage =
+    busyOverlay || !externalPortraitLoading
+      ? null
+      : externalPortraitLoading === 'waiting'
+        ? 'Waiting in queue…'
+        : externalPortraitLoading === 'generating'
+          ? 'Regenerating portrait…'
+          : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'variants'
+            ? externalPortraitLoading.total > 0
+              ? `Regenerating variants… ${externalPortraitLoading.total - externalPortraitLoading.remaining} / ${externalPortraitLoading.total}`
+              : 'Regenerating variants…'
+            : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'reroll'
+              ? externalPortraitLoading.statusMessage
+              : 'Working…';
 
   return (
     <AnimatePresence>
@@ -756,7 +819,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <RegenAllOverlayButton
                     type="button"
                     onClick={handleRegenerateAll}
-                    disabled={busyOverlay}
+                    disabled={pipelineLocked}
                     title="Regenerate all emotional / examination variants from this neutral image"
                   >
                     <RefreshCw size={14} />
@@ -767,26 +830,28 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <RegenAllOverlayButton
                     type="button"
                     onClick={handleRegenerateVariant}
-                    disabled={busyOverlay}
+                    disabled={pipelineLocked}
                     title="Regenerate only this variant from the neutral portrait"
                   >
                     <RefreshCw size={14} />
                     Regen variant
                   </RegenAllOverlayButton>
                 )}
-                {busyOverlay && (
+                {pipelineLocked && (
                   <LoadingOverlay>
                     <Spinner $size={32} $color="#3b82f6" />
                     <span>
-                      {isRegeneratingVariant
-                        ? 'Regenerating variant…'
-                        : isRegeneratingAll
-                          ? regenRemaining !== null && regenRemaining > 0
-                            ? `Regenerating variants… ${regenRemaining} left`
-                            : 'Regenerating variants…'
-                          : isSaving
-                            ? 'Saving...'
-                            : 'Nano Banana is working...'}
+                      {busyOverlay
+                        ? isRegeneratingVariant
+                          ? 'Regenerating variant…'
+                          : isRegeneratingAll
+                            ? regenRemaining !== null && regenRemaining > 0
+                              ? `Regenerating variants… ${regenRemaining} left`
+                              : 'Regenerating variants…'
+                            : isSaving
+                              ? 'Saving...'
+                              : 'Nano Banana is working...'
+                        : externalPipelineMessage}
                     </span>
                     {savingProgress.total > 0 && (isSaving || isRegeneratingAll) && (
                       <>
@@ -810,10 +875,22 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   {portraitSlots.map((slot) => {
                     const u = portraitUrls?.[slot.key];
                     const active = slot.key === selectedVariantKey;
+                    const slotStatus = variantSlotStatus?.[slot.key];
                     return (
                       <VariantThumbWrap key={slot.key}>
-                        <VariantThumb type="button" $active={active} onClick={() => setSelectedVariantKey(slot.key)} title={slot.label}>
+                        <VariantThumb
+                          type="button"
+                          $active={active}
+                          $slotStatus={slotStatus}
+                          onClick={() => setSelectedVariantKey(slot.key)}
+                          title={slot.label}
+                        >
                           {u ? <VariantThumbImg src={u} alt="" /> : <VariantPlaceholder>?</VariantPlaceholder>}
+                          {slotStatus === 'loading' && (
+                            <VariantThumbSpinnerWrap>
+                              <Spinner $size={22} $color="#3b82f6" />
+                            </VariantThumbSpinnerWrap>
+                          )}
                         </VariantThumb>
                         <VariantThumbLabel>{slot.label}</VariantThumbLabel>
                       </VariantThumbWrap>
@@ -834,14 +911,14 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   }
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  disabled={busyOverlay}
+                  disabled={pipelineLocked}
                 />
                 <PromptToolbar>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <Button
                       type="button"
                       onClick={handleUndo}
-                      disabled={busyOverlay || history.length <= 1}
+                      disabled={pipelineLocked || history.length <= 1}
                       style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
                     >
                       <Undo size={14} />
@@ -852,7 +929,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     type="button"
                     $variant="primary"
                     onClick={handleEdit}
-                    disabled={busyOverlay || !prompt.trim()}
+                    disabled={pipelineLocked || !prompt.trim()}
                     style={{ flex: 'none', width: '48px', height: '40px', padding: 0 }}
                     title="Generate"
                   >
@@ -862,15 +939,15 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               </InputGroup>
 
               <SourceRow>
-                <SourceButton type="button" onClick={() => fileInputRef.current?.click()} disabled={busyOverlay}>
+                <SourceButton type="button" onClick={() => fileInputRef.current?.click()} disabled={pipelineLocked}>
                   <Upload size={14} />
                   Upload
                 </SourceButton>
-                <SourceButton type="button" onClick={handlePasteFromClipboard} disabled={busyOverlay}>
+                <SourceButton type="button" onClick={handlePasteFromClipboard} disabled={pipelineLocked}>
                   <ClipboardPaste size={14} />
                   Paste
                 </SourceButton>
-                <SourceButton type="button" onClick={handleTakePhoto} disabled={busyOverlay || !onRequestCamera}>
+                <SourceButton type="button" onClick={handleTakePhoto} disabled={pipelineLocked || !onRequestCamera}>
                   <Camera size={14} />
                   Photo
                 </SourceButton>
@@ -897,7 +974,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 <Button $variant="danger" onClick={onClose} type="button">
                   Cancel
                 </Button>
-                <Button type="button" $variant="primary" onClick={handleSave} disabled={busyOverlay || !currentImageUrl}>
+                <Button type="button" $variant="primary" onClick={handleSave} disabled={pipelineLocked || !currentImageUrl}>
                   <Save size={16} />
                   Save Edit
                 </Button>

@@ -4,11 +4,21 @@ import styled, { keyframes } from 'styled-components';
 import { Suspect, Emotion } from '../types';
 import { getSuspectPortrait } from '../services/geminiService';
 
+/** Progressive case-review reroll: updates as each slot finishes. */
+export type RerollImageLoadingState = {
+  kind: 'reroll';
+  activeSlotKey: string | null;
+  completedSlotKeys: string[];
+  phase: 'portraits' | 'evidence';
+  statusMessage: string;
+};
+
 /** `variants` = multi-slot portrait regen (case-review editor). */
 export type ImageLoadingState =
   | 'waiting'
   | 'generating'
   | { kind: 'variants'; remaining: number; total: number }
+  | RerollImageLoadingState
   | null;
 
 const Container = styled.div<{ $size?: number; $fillHeight?: boolean }>`
@@ -181,6 +191,13 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
                 <LoadingLabel>
                   {imageLoadingState.remaining} variant{imageLoadingState.remaining === 1 ? '' : 's'} left
                 </LoadingLabel>
+              )}
+            </>
+          ) : typeof imageLoadingState === 'object' && imageLoadingState.kind === 'reroll' ? (
+            <>
+              <SpinnerRing />
+              {!isCompact && (
+                <LoadingLabel>{imageLoadingState.statusMessage || 'REGENERATING'}</LoadingLabel>
               )}
             </>
           ) : (

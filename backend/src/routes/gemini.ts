@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getSuspectResponse, generateCaseSummary, getOfficerChatResponse, getPartnerIntervention, getBadCopHint } from '../services/geminiChat.js';
 import { generateCaseFromPrompt, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, applyConsistencyImagePipeline } from '../services/geminiCase.js';
-import { generateImageRaw, generateEvidenceImage, generateEmotionalVariantsFromBase, generateOnePortraitVariantFromBase, generateSuspectFromUpload, regenerateSingleSuspect, pregenerateCaseImages, createImageFromPrompt, editImageWithPrompt } from '../services/geminiImages.js';
+import { generateImageRaw, generateEvidenceImage, generateEmotionalVariantsFromBase, generateOnePortraitVariantFromBase, generateSuspectFromUpload, generateNeutralPortraitForSuspect, regenerateSingleSuspect, pregenerateCaseImages, createImageFromPrompt, editImageWithPrompt } from '../services/geminiImages.js';
 import { generateTTS } from '../services/geminiTTS.js';
 
 const router = Router();
@@ -209,6 +209,17 @@ router.post('/image/regenerate', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[Gemini Route] image/regenerate error:', error);
     res.status(500).json({ error: error.message || 'Failed to regenerate suspect' });
+  }
+});
+
+router.post('/image/regenerate-neutral', async (req: Request, res: Response) => {
+  try {
+    const { suspect, caseId, userId, theme } = req.body;
+    const result = await generateNeutralPortraitForSuspect(suspect, caseId, userId, theme);
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Gemini Route] image/regenerate-neutral error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate neutral portrait' });
   }
 });
 

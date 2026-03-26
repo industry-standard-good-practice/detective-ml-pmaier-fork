@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { type } from '../../theme';
 import styled from 'styled-components';
 import toast from 'react-hot-toast';
@@ -7,8 +7,8 @@ import { CaseData, Suspect, Emotion, Evidence } from '../../types';
 import { TTS_VOICES, getRandomVoice } from '../../constants';
 import { generateTTS } from '../../services/geminiTTS';
 import { playAudioFromUrl } from '../../services/audioPlayer';
-import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateOnePortraitVariantFromBase } from '../../services/geminiService';
-import { type ImageLoadingState } from '@/components/SuspectPortrait';
+import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateOnePortraitVariantFromBase, generateNeutralPortraitForSuspect } from '../../services/geminiService';
+import { type ImageLoadingState, type RerollImageLoadingState } from '@/components/SuspectPortrait';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
 import ImageEditorModal from '@/components/ImageEditorModal';
@@ -217,6 +217,10 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const [mobileTab, setMobileTab] = useState<'case' | 'suspects'>('case');
   const videoRef = useRef<HTMLVideoElement>(null);
   const suspectEditorCameraCaptureRef = useRef<((dataUrl: string) => void) | null>(null);
+  /** True only when the modal's own busy state set the parent's portrait loading — avoids clearing reroll/bg-gen on mount. */
+  const modalPortraitLoadingSyncRef = useRef(false);
+  /** Reroll / upload / other non-modal portrait pipelines still running (don't clear loading when modal idles). */
+  const nonModalPortraitPipelineRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // --- PER-CHARACTER IMAGE LOADING STATES ---
@@ -419,6 +423,26 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     selectedSuspectId === 'partner' ? draftCase.partner :
       draftCase.suspects?.find(s => s.id === selectedSuspectId);
   const isSupportChar = selectedSuspectId === 'officer' || selectedSuspectId === 'partner';
+
+  const portraitRerollSlotStatus = useMemo(() => {
+    if (!selectedSuspectId || !activeSuspect) return null;
+    const st = imageLoadingStates[selectedSuspectId];
+    if (!st || typeof st !== 'object' || st.kind !== 'reroll') return null;
+    const slots = getPortraitVariantSlots(activeSuspect as any);
+    const out: Record<string, 'idle' | 'loading' | 'done'> = {};
+    for (const s of slots) {
+      if (st.phase === 'evidence') {
+        out[s.key] = 'done';
+      } else if (st.activeSlotKey === s.key) {
+        out[s.key] = 'loading';
+      } else if (st.completedSlotKeys.includes(s.key)) {
+        out[s.key] = 'done';
+      } else {
+        out[s.key] = 'idle';
+      }
+    }
+    return out;
+  }, [imageLoadingStates, selectedSuspectId, activeSuspect]);
 
   // --- HANDLERS ---
 
@@ -770,37 +794,141 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   };
 
   const handleRerollPortrait = async () => {
-    if (!activeSuspect) return;
+    if (!activeSuspect || !userId) return;
     const charId = selectedSuspectId!;
-    setImageLoadingStates(prev => ({ ...prev, [charId]: 'generating' }));
-    try {
-      const { regenerateSingleSuspect } = await import('../../services/geminiImages');
-      const updatedChar = await regenerateSingleSuspect(
-        activeSuspect as any, draftCase.id, userId!, draftCase.type
-      );
-      // Read latest draft AFTER the await to avoid overwriting concurrent edits
-      const currentDraft = latestDraftRef.current;
-      if (selectedSuspectId === 'officer') {
-        safeUpdateDraft({ ...currentDraft, officer: updatedChar as any });
-      } else if (selectedSuspectId === 'partner') {
-        safeUpdateDraft({ ...currentDraft, partner: updatedChar as any });
+    nonModalPortraitPipelineRef.current += 1;
+    const completed: string[] = [];
+    const theme = draftCase.type || 'Noir';
+
+    const setRerollProgress = (patch: Omit<RerollImageLoadingState, 'kind'>) => {
+      setImageLoadingStates((prev) => ({
+        ...prev,
+        [charId]: { kind: 'reroll', ...patch },
+      }));
+    };
+
+    const mergePortraits = (portraitPatch: Record<string, string>) => {
+      const fresh = latestDraftRef.current;
+      if (charId === 'officer') {
+        const o = fresh.officer;
+        safeUpdateDraft({
+          ...fresh,
+          officer: { ...o, portraits: { ...(o.portraits || {}), ...portraitPatch } },
+        });
+      } else if (charId === 'partner') {
+        const p = fresh.partner;
+        safeUpdateDraft({
+          ...fresh,
+          partner: { ...p, portraits: { ...(p.portraits || {}), ...portraitPatch } },
+        });
       } else {
-        const newSuspects = currentDraft.suspects.map(s => s.id === updatedChar.id ? updatedChar as any : s);
-        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
+        safeUpdateDraft({
+          ...fresh,
+          suspects: fresh.suspects.map((s) =>
+            s.id === charId ? { ...s, portraits: { ...(s.portraits || {}), ...portraitPatch } } : s
+          ),
+        });
       }
+    };
+
+    try {
+      const slots = getPortraitVariantSlots(activeSuspect as any);
+
+      setRerollProgress({
+        activeSlotKey: Emotion.NEUTRAL,
+        completedSlotKeys: [],
+        phase: 'portraits',
+        statusMessage: 'Generating neutral…',
+      });
+
+      const { neutralUrl, neutralBase64 } = await generateNeutralPortraitForSuspect(
+        activeSuspect as any,
+        draftCase.id,
+        userId,
+        theme
+      );
+      completed.push(Emotion.NEUTRAL);
+      mergePortraits({ [Emotion.NEUTRAL]: neutralUrl });
+
+      for (const slot of slots) {
+        if (slot.key === Emotion.NEUTRAL) continue;
+        setRerollProgress({
+          activeSlotKey: slot.key,
+          completedSlotKeys: [...completed],
+          phase: 'portraits',
+          statusMessage: `Generating ${slot.label}…`,
+        });
+        const freshChar =
+          charId === 'officer'
+            ? latestDraftRef.current.officer
+            : charId === 'partner'
+              ? latestDraftRef.current.partner
+              : latestDraftRef.current.suspects?.find((s) => s.id === charId);
+        if (!freshChar) break;
+        const { url } = await generateOnePortraitVariantFromBase(
+          neutralBase64,
+          slot.key,
+          freshChar as any,
+          draftCase.id,
+          userId,
+          theme
+        );
+        completed.push(slot.key);
+        mergePortraits({ [slot.key]: url });
+      }
+
+      const victimAfter = latestDraftRef.current.suspects?.find((s) => s.id === charId) as Suspect | undefined;
+      if (victimAfter?.isDeceased && victimAfter.hiddenEvidence?.length) {
+        setRerollProgress({
+          activeSlotKey: null,
+          completedSlotKeys: [...completed],
+          phase: 'evidence',
+          statusMessage: 'Regenerating evidence images…',
+        });
+        const nEv = victimAfter.hiddenEvidence.length;
+        for (let i = 0; i < nEv; i++) {
+          const fresh = latestDraftRef.current;
+          const victim = fresh.suspects?.find((s) => s.id === charId) as Suspect | undefined;
+          if (!victim?.hiddenEvidence?.[i]) continue;
+          const ev = victim.hiddenEvidence[i];
+          setRerollProgress({
+            activeSlotKey: null,
+            completedSlotKeys: [...completed],
+            phase: 'evidence',
+            statusMessage: `Evidence: ${ev.title.length > 28 ? `${ev.title.slice(0, 26)}…` : ev.title}`,
+          });
+          const evUrl = await generateEvidenceImage(ev, draftCase.id, userId, neutralBase64, {
+            forDeceasedVictim: true,
+            caseTheme: theme,
+          });
+          const fresh2 = latestDraftRef.current;
+          const victim2 = fresh2.suspects?.find((s) => s.id === charId);
+          if (!victim2?.hiddenEvidence) continue;
+          const hiddenEvidence = victim2.hiddenEvidence.map((h, j) =>
+            j === i ? { ...h, imageUrl: evUrl } : h
+          );
+          safeUpdateDraft({
+            ...fresh2,
+            suspects: fresh2.suspects.map((s) => (s.id === charId ? { ...s, hiddenEvidence } : s)),
+          });
+        }
+      }
+
       toast.success(`Portrait regenerated for ${activeSuspect.name}!`);
     } catch (e: any) {
-      console.error("Single Reroll Failed", e);
+      console.error('Single Reroll Failed', e);
       toast.error(`Portrait generation failed: ${e?.message || 'Unknown error'}`);
       handleSuspectChange(activeSuspect.id, 'avatarSeed', Math.floor(Math.random() * 999999));
     } finally {
-      setImageLoadingStates(prev => ({ ...prev, [charId]: null }));
+      nonModalPortraitPipelineRef.current = Math.max(0, nonModalPortraitPipelineRef.current - 1);
+      setImageLoadingStates((prev) => ({ ...prev, [charId]: null }));
     }
   };
 
   const processSuspectImage = async (base64: string) => {
     if (!activeSuspect) return;
     const charId = selectedSuspectId!;
+    nonModalPortraitPipelineRef.current += 1;
     setImageLoadingStates(prev => ({ ...prev, [charId]: 'generating' }));
     try {
       const { generateSuspectFromUpload } = await import('../../services/geminiImages');
@@ -823,6 +951,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       console.error(err);
       toast.error(`Image upload failed: ${err?.message || 'Unknown error'}`);
     } finally {
+      nonModalPortraitPipelineRef.current = Math.max(0, nonModalPortraitPipelineRef.current - 1);
       setImageLoadingStates(prev => ({ ...prev, [charId]: null }));
     }
   };
@@ -1131,13 +1260,18 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           onBusyChange={(busy, meta) => {
             setSuspectEditorKeepAlive(busy);
             if (!busy) {
-              if (selectedSuspectId) {
-                setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: null }));
+              if (selectedSuspectId && modalPortraitLoadingSyncRef.current) {
+                setImageLoadingStates((prev) => {
+                  if (nonModalPortraitPipelineRef.current > 0) return prev;
+                  return { ...prev, [selectedSuspectId]: null };
+                });
+                modalPortraitLoadingSyncRef.current = false;
               }
               return;
             }
             if (meta?.regenerateAll || meta?.regenerateVariant || meta?.saving) return;
             if (selectedSuspectId) {
+              modalPortraitLoadingSyncRef.current = true;
               setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: 'generating' }));
             }
           }}
@@ -1150,6 +1284,8 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             startCamera();
           }}
           aspectRatio="3:4"
+          externalPortraitLoading={selectedSuspectId ? imageLoadingStates[selectedSuspectId] ?? null : null}
+          variantSlotStatus={portraitRerollSlotStatus}
         />
       )}
 

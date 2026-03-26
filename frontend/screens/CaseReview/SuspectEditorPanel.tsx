@@ -896,10 +896,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 </RandomizeButton>
                 <EditPortraitButton
                   onClick={onShowSuspectEditor}
-                  disabled={
-                    loadingVisible ||
-                    (!!imageLoadingStates[selectedSuspectId || ''] && !suspectEditorKeepAlive)
-                  }
+                  disabled={loadingVisible}
                 >
                   {activeSuspect.portraits?.[Emotion.NEUTRAL] ? 'EDIT' : 'CREATE'}
                 </EditPortraitButton>
