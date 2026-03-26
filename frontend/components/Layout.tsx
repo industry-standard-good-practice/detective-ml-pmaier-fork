@@ -15,6 +15,7 @@ import YouTubeBackgroundMusic, {
   BACKGROUND_MUSIC_ATTRIBUTION_LABEL,
   BACKGROUND_MUSIC_VIDEO_URL,
 } from './YouTubeBackgroundMusic';
+import YouTubeBootIntroSfx from './YouTubeBootIntroSfx';
 
 const GlobalStyle = createGlobalStyle`
   :root {
@@ -726,6 +727,8 @@ interface LayoutProps {
   onToggleMusic?: () => void;
   musicVolume?: number;
   onMusicVolumeChange?: (v: number) => void;
+  /** CRT boot intro YouTube SFX (video id tajDxBaPBBM); uses mute + SFX volume, not music. */
+  bootIntroSfxActive?: boolean;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -755,7 +758,8 @@ const Layout: React.FC<LayoutProps> = ({
   musicEnabled = true,
   onToggleMusic = () => {},
   musicVolume = 0.35,
-  onMusicVolumeChange
+  onMusicVolumeChange,
+  bootIntroSfxActive = false
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
@@ -866,7 +870,11 @@ const Layout: React.FC<LayoutProps> = ({
     <>
       <GlobalStyle />
       <MainContainer data-monitor>
-        <YouTubeBackgroundMusic enabled={musicEnabled} volume={musicVolume} />
+        <YouTubeBackgroundMusic enabled={musicEnabled && !isBooting} volume={musicVolume} />
+        <YouTubeBootIntroSfx
+          enabled={bootIntroSfxActive && !isMuted}
+          volume={volume}
+        />
         <Screen $powerState={powerState}>
           <CRTOverlay />
           <OnboardingTour />

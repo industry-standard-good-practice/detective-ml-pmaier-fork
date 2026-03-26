@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import toast from 'react-hot-toast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
-import { getSuspectResponse, getOfficerChatResponse, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
+import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
 import { generateTTS } from './services/geminiTTS';
-import { playAudioFromUrl } from './services/audioPlayer';
+import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx } from './services/audioPlayer';
 import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft } from './services/persistence';
 import { CaseStats } from './types';
 import { auth, logout } from './services/firebase';
@@ -17,6 +17,7 @@ import { formatTime, formatAuthorName, TIME_INCREMENT_MS, WAIT_THRESHOLD_MS, INI
 import { normalizeTimeString, matchNormalizedTimeToTimeline, textHasAnyTimeReference, extractTimelineFromText } from './utils/timelineExtraction';
 import { parseRevealedEvidenceForCollection } from './utils/evidenceRevealParsing';
 import { resolveVictimExaminationPortraitKey } from './utils/victimPortraitKeys';
+import { mergeVoiceAccentIntoStyle } from './utils/ttsVoiceStyle';
 
 // Import Modular Components
 import Layout from './components/Layout';
@@ -157,13 +158,18 @@ const App: React.FC = () => {
 
   // Handle Boot Sequence Completion
   const handleBootComplete = () => {
+    // Prime Web Audio in this user gesture so the delayed boot SFX can play (mobile autoplay policy)
+    primeSfxAudioContext();
     // 1. Start turning off (collapse screen)
     setPowerState('turning-off');
-    
+
     // 2. Wait for collapse (500ms), then switch to game mode and turn on again
     setTimeout(() => {
-       setHasBooted(true);
-       setPowerState('turning-on');
+      setHasBooted(true);
+      setPowerState('turning-on');
+      if (!isMuted) {
+        playCrtBootSfx(volume);
+      }
     }, 600);
   };
 
@@ -404,7 +410,10 @@ const App: React.FC = () => {
         // Generate TTS for the PARTNER's dialogue
         let partnerAudioUrl: string | null = null;
         const partnerVoice = currentCase.partner?.voice;
-        const partnerVoiceStyle = currentCase.partner?.voiceStyle;
+        const partnerVoiceStyle = mergeVoiceAccentIntoStyle(
+          currentCase.partner?.voiceStyle,
+          currentCase.partner?.voiceAccent
+        );
         if (!isMuted && partnerVoice && partnerVoice !== 'None') {
             partnerAudioUrl = await generateTTS(partnerDialogue, partnerVoice, partnerVoiceStyle);
         }
@@ -449,7 +458,11 @@ const App: React.FC = () => {
             
             let examAudioUrl: string | null = null;
             if (!isMuted && suspect.voice && suspect.voice !== 'None') {
-                examAudioUrl = await generateTTS(examResponse.text, suspect.voice, suspect.voiceStyle);
+                examAudioUrl = await generateTTS(
+                  examResponse.text,
+                  suspect.voice,
+                  mergeVoiceAccentIntoStyle(suspect.voiceStyle, suspect.voiceAccent)
+                );
             }
             
             const narratorMsg: ChatMessage = {
@@ -507,7 +520,7 @@ const App: React.FC = () => {
             audioUrl = await generateTTS(
               finalAgg >= 100 ? "That's it! I want my lawyer!" : response.text,
               suspect.voice,
-              suspect.voiceStyle
+              mergeVoiceAccentIntoStyle(suspect.voiceStyle, suspect.voiceAccent)
             );
         }
 
@@ -694,7 +707,11 @@ const App: React.FC = () => {
       // Generate TTS Audio
       let audioUrl: string | null = null;
       if (!isMuted && currentSuspect.voice && currentSuspect.voice !== 'None') {
-          audioUrl = await generateTTS(finalMsgText, currentSuspect.voice, currentSuspect.voiceStyle);
+          audioUrl = await generateTTS(
+            finalMsgText,
+            currentSuspect.voice,
+            mergeVoiceAccentIntoStyle(currentSuspect.voiceStyle, currentSuspect.voiceAccent)
+          );
       }
       
       const suspectMsg: ChatMessage = { 
@@ -823,19 +840,26 @@ const App: React.FC = () => {
     
     try {
       const currentCase = findCaseById(gameState.selectedCaseId)!;
-      
+      const officerThreadForModel = [...gameState.officerHistory, userMsg];
+
       const responseText = await getOfficerChatResponse(
-        currentCase, 
-        text, 
-        gameState.evidenceDiscovered, 
+        currentCase,
+        text,
+        gameState.evidenceDiscovered,
         gameState.notes,
-        gameState.chatHistory 
+        gameState.chatHistory,
+        mapTimelineForOfficerChat(gameState.timelineStatementsDiscovered),
+        officerThreadForModel
       );
 
       const officer = currentCase.officer;
       let officerAudioUrl: string | null = null;
       if (!isMuted && officer?.voice && officer.voice !== 'None') {
-        officerAudioUrl = await generateTTS(responseText, officer.voice, officer.voiceStyle);
+        officerAudioUrl = await generateTTS(
+          responseText,
+          officer.voice,
+          mergeVoiceAccentIntoStyle(officer.voiceStyle, officer.voiceAccent)
+        );
       }
 
       const officerMsg: ChatMessage = {
@@ -1428,6 +1452,7 @@ const App: React.FC = () => {
         draftCheckConsistencyFnRef.current?.();
       } : undefined}
       onTestInvestigation={gameState.currentScreen === ScreenState.CASE_REVIEW ? handleTestInvestigation : undefined}
+      bootIntroSfxActive={!hasBooted}
     >
       {!hasBooted ? (
         <BootSequence onComplete={handleBootComplete} />

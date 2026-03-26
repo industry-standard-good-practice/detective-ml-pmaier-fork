@@ -75,14 +75,77 @@ function formatPartnerKnownTimeline(rows: PartnerTimelineKnown[]): string {
     .join('\n');
 }
 
-/** The partner is not omniscient: only logged evidence + confirmed timeline + transcript + case blurb. */
-function partnerKnowledgeBoundary(discoveredEvidence: Evidence[], timelineKnown: PartnerTimelineKnown[]): string {
-  return `--- PARTNER KNOWLEDGE (ONLY FACTS YOU MAY TREAT AS CASE FACTS) ---
+/** Partner and Chief hints: only logged evidence + confirmed timeline (same boundary as gameplay). */
+function investigationKnowledgeBoundary(
+  discoveredEvidence: Evidence[],
+  timelineKnown: PartnerTimelineKnown[]
+): string {
+  return `--- CONFIRMED INVESTIGATION FACTS (ONLY THESE MAY BE TREATED AS ESTABLISHED CASE FACTS) ---
 Evidence the detective has logged: ${formatPartnerKnownEvidence(discoveredEvidence)}
 Timeline events the detective has confirmed:
 ${formatPartnerKnownTimeline(timelineKnown)}
---- END PARTNER KNOWLEDGE ---
-STRICT RULES: You do NOT know unrevealed clues, hidden evidence, suspect secrets, or timeline facts not listed in PARTNER KNOWLEDGE. Do NOT name, imply, allude to, or telegraph specific items, hiding places, titles, or story beats the detective has not already found. The case description and transcript are for tone and flow only — not a source of hidden facts. If you press or suggest, use only what is in PARTNER KNOWLEDGE plus generic tactics (contradiction, timing, demeanor) without inventing specifics.`;
+--- END CONFIRMED FACTS ---
+STRICT RULES: You do NOT know unrevealed clues, hidden evidence, suspect secrets, or timeline facts not listed above. Do NOT name, imply, allude to, or telegraph specific items, hiding places, titles, or story beats the detective has not already found. The case description and interrogation excerpts are for tone and context only — not a source of hidden facts. If you press or suggest, use only CONFIRMED FACTS plus generic tactics (contradiction, timing, demeanor) without inventing specifics.`;
+}
+
+function formatDetectiveNotesForChief(notes: Record<string, string[]>, suspects: Suspect[]): string {
+  const byId = new Map((suspects || []).map(s => [s.id, s.name] as const));
+  const lines: string[] = [];
+  for (const [sid, list] of Object.entries(notes || {})) {
+    if (!list?.length) continue;
+    const label = byId.get(sid) || sid;
+    const text = list.map(n => String(n).trim()).filter(Boolean).join(' | ');
+    if (text) lines.push(`- ${label}: ${text}`);
+  }
+  return lines.length > 0 ? lines.join('\n') : '(No notes yet.)';
+}
+
+function formatInterrogationDigestForChief(
+  chatHistory: Record<string, ChatMessage[]>,
+  suspects: Suspect[]
+): string {
+  const blocks: string[] = [];
+  for (const s of suspects || []) {
+    const msgs = chatHistory[s.id];
+    if (!msgs?.length) continue;
+    const tail = msgs.slice(-8);
+    const lines = tail.map(m => {
+      let label: string;
+      if (m.sender === 'player') label = 'Detective';
+      else if (m.sender === 'suspect') label = s.name;
+      else if (m.sender === 'partner') label = 'Partner';
+      else if (m.sender === 'officer') label = 'Chief';
+      else if (m.sender === 'system') label = 'System';
+      else label = m.sender;
+      const att = m.attachment ? ` [evidence shown: ${m.attachment}]` : '';
+      return `${label}: ${(m.text || '').slice(0, 320)}${att}`;
+    });
+    blocks.push(`[${s.name} — last ${tail.length} messages]\n${lines.join('\n')}`);
+  }
+  return blocks.length > 0 ? blocks.join('\n\n') : '(No suspect interviews yet.)';
+}
+
+function formatOfficerThreadForChief(thread: ChatMessage[]): string {
+  if (!thread?.length) return '(Start of conversation.)';
+  return thread
+    .map(m => {
+      const t = (m.text || '').slice(0, 600);
+      if (m.sender === 'player') return `Detective: "${t}"`;
+      if (m.sender === 'officer') return `Chief: "${t}"`;
+      if (m.sender === 'system') return `[System]: "${t}"`;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Chief has read the sealed file — knows who is guilty; must never spoil it to the player. */
+function formatGuiltyPartiesForChief(suspects: Suspect[]): string {
+  const guilty = (suspects || []).filter((s) => s.isGuilty);
+  if (guilty.length === 0) {
+    return '(No suspect is flagged guilty in the case data — steer only from CONFIRMED FACTS and general instinct.)';
+  }
+  return guilty.map((s) => `${s.name} (${s.role})`).join('; ');
 }
 
 function formatTranscriptLineForSuspect(msg: ChatMessage, suspectName: string): string {
@@ -521,23 +584,50 @@ export const getOfficerChatResponse = async (
   userMessage: string,
   evidenceFound: Evidence[],
   notes: Record<string, string[]>,
-  chatHistory: Record<string, ChatMessage[]>
+  chatHistory: Record<string, ChatMessage[]>,
+  timelineKnown: PartnerTimelineKnown[] = [],
+  officerThread: ChatMessage[] = []
 ): Promise<string> => {
   console.log(`[Gemini] getOfficerChatResponse: "${userMessage}"`);
   const officerName = caseData.officer?.name || "Chief";
   const officerRole = caseData.officer?.role || "Police Chief";
   const officerPersona = caseData.officer?.personality || "Gruff";
 
+  const boundary = investigationKnowledgeBoundary(evidenceFound || [], timelineKnown || []);
+  const notesStr = formatDetectiveNotesForChief(notes || {}, caseData.suspects || []);
+  const digestStr = formatInterrogationDigestForChief(chatHistory || {}, caseData.suspects || []);
+  const threadStr = formatOfficerThreadForChief(officerThread || []);
+  const guiltyPartiesStr = formatGuiltyPartiesForChief(caseData.suspects || []);
+
   const prompt = `
-    You are ${officerName}, the ${officerRole}.
-    Personality: ${officerPersona}.
-    Case: ${caseData.title}.
-    Description: ${caseData.description}.
-    Evidence Found: ${(evidenceFound || []).map(e => e.title).join(', ')}.
-    User asks: "${userMessage}".
-    
-    Provide a helpful hint, but stay in character. If they are stuck, suggest a suspect to talk to or evidence to look for.
-    Keep it under 30 words.
+${boundary}
+
+--- CHIEF'S SEALED CASE FILE (YOU KNOW THIS — THE DETECTIVE DOES NOT) ---
+Truth of the investigation (who actually committed the crime, per the full file): ${guiltyPartiesStr}
+You must NEVER spoil this: do not name anyone as the killer, say "X is guilty," confirm an accusation, reveal the twist, or cite facts the detective has not established in CONFIRMED FACTS.
+Use this knowledge ONLY to steer subtly—who might still need pressure, what angles tend to matter in cases like this, vague encouragement when they're on a productive thread, or a nudge to look at timing/motive/alibi without giving answers. Sound like a senior supervisor who's seen it all, not a walkthrough.
+If the detective is chasing a dead end, you may gently redirect without saying why you know.
+--- END SEALED FILE ---
+
+You are ${officerName}, the ${officerRole}, on the "Ask for help" secure line with your detective.
+Personality: ${officerPersona}.
+
+Case title: ${caseData.title}.
+Case briefing (tone and setting only — NOT a source of facts beyond CONFIRMED FACTS above):
+${caseData.description}
+
+Detective's notebook (what they wrote down):
+${notesStr}
+
+Recent interrogation excerpts (last lines per suspect — context only; do not treat unrevealed story beats in the transcript as confirmed unless they appear in CONFIRMED FACTS):
+${digestStr}
+
+This Ask for help conversation so far:
+${threadStr}
+
+The detective's latest message: "${userMessage}"
+
+Reply in character. Publicly, only reference evidence and timeline facts that appear in CONFIRMED FACTS (do not invent discovered items). The sealed file is for your tone and priors only—stay subtle. Keep answers concise (under 45 words) unless a longer reply is clearly needed.
   `;
 
   const res = await generateWithTextModel(
@@ -561,7 +651,7 @@ export const getPartnerIntervention = async (
   const partnerRole = caseData.partner?.role || "Detective";
   const partnerPersonality = caseData.partner?.personality || "Helpful";
 
-  const boundary = partnerKnowledgeBoundary(discoveredEvidence, timelineKnown);
+  const boundary = investigationKnowledgeBoundary(discoveredEvidence, timelineKnown);
 
   let prompt = "";
   if (type === 'examine') {
@@ -581,7 +671,7 @@ export const getPartnerIntervention = async (
         ${boundary}
         You are ${partnerName}, the ${partnerRole}.
         Action: Suggest where the detective should look next${suspect.isDeceased ? ` — body or surrounding scene, in general terms` : ''}.
-        Do NOT use hidden clue locations or unfound evidence titles. Base the hint only on PARTNER KNOWLEDGE and the conversation — generic angles (e.g. clothing, pockets, documents, furniture, footprint of struggle) without naming objects the detective has not found.
+        Do NOT use hidden clue locations or unfound evidence titles. Base the hint only on CONFIRMED FACTS and the conversation — generic angles (e.g. clothing, pockets, documents, furniture, footprint of struggle) without naming objects the detective has not found.
         Generate a 1-sentence hint. Speak in first person.
       `;
   } else {
@@ -603,8 +693,8 @@ export const getPartnerIntervention = async (
         Personality: ${partnerPersonality}.
         You are playing GOOD COP — sympathetic, understanding, building rapport.
         Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
-        Case (setting only; do not treat as facts beyond PARTNER KNOWLEDGE): ${caseData.description}
-        Evidence found so far (same as PARTNER KNOWLEDGE): ${discoveredEvidenceStr}
+        Case (setting only; do not treat as facts beyond CONFIRMED FACTS): ${caseData.description}
+        Evidence found so far (same as CONFIRMED FACTS): ${discoveredEvidenceStr}
         Recent conversation:
         ${recentContext || 'The interrogation just started.'}
         Generate a 1-2 sentence sympathetic intervention addressed TO the suspect.
@@ -617,8 +707,8 @@ export const getPartnerIntervention = async (
         Personality: ${partnerPersonality}.
         You are playing BAD COP — firm, confrontational, pressing on inconsistencies.
         Suspect: ${suspect.name} (${suspect.personality}, ${suspect.role}).
-        Case (setting only; do not treat as facts beyond PARTNER KNOWLEDGE): ${caseData.description}
-        Evidence found so far (same as PARTNER KNOWLEDGE): ${discoveredEvidenceStr}
+        Case (setting only; do not treat as facts beyond CONFIRMED FACTS): ${caseData.description}
+        Evidence found so far (same as CONFIRMED FACTS): ${discoveredEvidenceStr}
         Recent conversation:
         ${recentContext || 'The interrogation just started.'}
         Generate a 1-2 sentence confrontational intervention addressed TO the suspect.

@@ -2,12 +2,13 @@
 import { useState, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from '../types';
-import { getSuspectResponse, getOfficerChatResponse, getBadCopHint, getPartnerIntervention } from '../services/geminiService';
+import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, getBadCopHint, getPartnerIntervention } from '../services/geminiService';
 import { generateTTS } from '../services/geminiTTS';
 import { formatTime, TIME_INCREMENT_MS, WAIT_THRESHOLD_MS, DEFAULT_SUGGESTIONS } from '../utils/timeUtils';
 import { normalizeTimeString, matchNormalizedTimeToTimeline, textHasAnyTimeReference, extractTimelineFromText } from '../utils/timelineExtraction';
 import { parseRevealedEvidenceForCollection } from '../utils/evidenceRevealParsing';
 import { resolveVictimExaminationPortraitKey } from '../utils/victimPortraitKeys';
+import { mergeVoiceAccentIntoStyle } from '../utils/ttsVoiceStyle';
 
 interface UseGameActionsParams {
   gameState: GameState;
@@ -264,7 +265,10 @@ export const useGameActions = ({
         // Generate TTS for the PARTNER's dialogue
         let partnerAudioUrl: string | null = null;
         const partnerVoice = currentCase.partner?.voice;
-        const partnerVoiceStyle = currentCase.partner?.voiceStyle;
+        const partnerVoiceStyle = mergeVoiceAccentIntoStyle(
+          currentCase.partner?.voiceStyle,
+          currentCase.partner?.voiceAccent
+        );
         if (!isMuted && partnerVoice && partnerVoice !== 'None') {
             partnerAudioUrl = await generateTTS(partnerDialogue, partnerVoice, partnerVoiceStyle);
         }
@@ -305,7 +309,11 @@ export const useGameActions = ({
             
             let examAudioUrl: string | null = null;
             if (!isMuted && suspect.voice && suspect.voice !== 'None') {
-                examAudioUrl = await generateTTS(examResponse.text, suspect.voice, suspect.voiceStyle);
+                examAudioUrl = await generateTTS(
+                  examResponse.text,
+                  suspect.voice,
+                  mergeVoiceAccentIntoStyle(suspect.voiceStyle, suspect.voiceAccent)
+                );
             }
             
             const narratorMsg: ChatMessage = {
@@ -363,7 +371,7 @@ export const useGameActions = ({
             audioUrl = await generateTTS(
               finalAgg >= 100 ? "That's it! I want my lawyer!" : response.text,
               suspect.voice,
-              suspect.voiceStyle
+              mergeVoiceAccentIntoStyle(suspect.voiceStyle, suspect.voiceAccent)
             );
         }
 
@@ -509,7 +517,11 @@ export const useGameActions = ({
       // Generate TTS Audio
       let audioUrl: string | null = null;
       if (!isMuted && currentSuspect.voice && currentSuspect.voice !== 'None') {
-          audioUrl = await generateTTS(finalMsgText, currentSuspect.voice, currentSuspect.voiceStyle);
+          audioUrl = await generateTTS(
+            finalMsgText,
+            currentSuspect.voice,
+            mergeVoiceAccentIntoStyle(currentSuspect.voiceStyle, currentSuspect.voiceAccent)
+          );
       }
       
       const suspectMsg: ChatMessage = { 
@@ -587,13 +599,16 @@ export const useGameActions = ({
     
     try {
       const currentCase = findCaseById(gameState.selectedCaseId)!;
-      
+      const officerThreadForModel = [...gameState.officerHistory, userMsg];
+
       const responseText = await getOfficerChatResponse(
-        currentCase, 
-        text, 
-        gameState.evidenceDiscovered, 
+        currentCase,
+        text,
+        gameState.evidenceDiscovered,
         gameState.notes,
-        gameState.chatHistory 
+        gameState.chatHistory,
+        mapTimelineForOfficerChat(gameState.timelineStatementsDiscovered),
+        officerThreadForModel
       );
       
       const officerMsg: ChatMessage = { sender: 'officer', text: responseText, timestamp: formatTime(newGameTime) };

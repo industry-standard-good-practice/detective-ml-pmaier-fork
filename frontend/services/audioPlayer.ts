@@ -121,6 +121,121 @@ function pcmToWavDataUrl(pcmInt16: Int16Array, sampleRate: number): string {
   return 'data:audio/wav;base64,' + btoa(binary);
 }
 
+// ---- Short UI SFX (Web Audio; prime context in same gesture as delayed playback) ----
+
+let sfxAudioContext: AudioContext | null = null;
+
+/** Call synchronously from a user gesture before a delayed SFX (e.g. boot → setTimeout). */
+export function primeSfxAudioContext(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return;
+    if (!sfxAudioContext || sfxAudioContext.state === 'closed') {
+      sfxAudioContext = new Ctor();
+    }
+    void sfxAudioContext.resume();
+  } catch {
+    /* ignore */
+  }
+}
+
+function getSfxContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!sfxAudioContext || sfxAudioContext.state === 'closed') {
+      sfxAudioContext = new Ctor();
+    }
+    return sfxAudioContext;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CRT / retro PC power-on: oscillator-only (no noise whoosh).
+ * Mains hum + internal-speaker-style square chirps + soft "ready" triangle.
+ * `volume` is 0–1 (maps to global SFX slider).
+ */
+export function playCrtBootSfx(volume: number = 0.5): void {
+  const v = Math.max(0, Math.min(1, volume));
+  if (v <= 0) return;
+
+  const ctx = getSfxContext();
+  if (!ctx) return;
+  void ctx.resume();
+
+  const now = ctx.currentTime;
+  const p = v * 0.3;
+  const out = ctx.destination;
+
+  // 1) Subtle mains / transformer hum (CRT era)
+  const hum = ctx.createOscillator();
+  const gHum = ctx.createGain();
+  hum.type = 'sine';
+  hum.frequency.value = 118;
+  gHum.gain.setValueAtTime(0, now);
+  gHum.gain.linearRampToValueAtTime(p * 0.2, now + 0.035);
+  gHum.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+  hum.connect(gHum);
+  gHum.connect(out);
+  hum.start(now);
+  hum.stop(now + 0.42);
+
+  // 2) Short square "POST" blips — old PC / terminal speaker
+  const blips: { at: number; hz: number; ms: number }[] = [
+    { at: 0.01, hz: 392, ms: 65 },
+    { at: 0.095, hz: 523, ms: 65 },
+    { at: 0.185, hz: 659, ms: 85 },
+  ];
+  for (const b of blips) {
+    const t0 = now + b.at;
+    const sec = b.ms / 1000;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.value = b.hz;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(p * 0.85, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + sec);
+    o.connect(g);
+    g.connect(out);
+    o.start(t0);
+    o.stop(t0 + sec + 0.015);
+  }
+
+  // 3) Quick sine sweep between blips and "ready" — hardware self-test, not noise
+  const tPing = now + 0.275;
+  const ping = ctx.createOscillator();
+  const gPing = ctx.createGain();
+  ping.type = 'sine';
+  ping.frequency.setValueAtTime(200, tPing);
+  ping.frequency.exponentialRampToValueAtTime(720, tPing + 0.045);
+  gPing.gain.setValueAtTime(0, tPing);
+  gPing.gain.linearRampToValueAtTime(p * 0.18, tPing + 0.008);
+  gPing.gain.exponentialRampToValueAtTime(0.001, tPing + 0.07);
+  ping.connect(gPing);
+  gPing.connect(out);
+  ping.start(tPing);
+  ping.stop(tPing + 0.08);
+
+  // 4) Softer triangle "system ready" tail — game/console handshake
+  const tri = ctx.createOscillator();
+  const gTri = ctx.createGain();
+  tri.type = 'triangle';
+  tri.frequency.value = 440;
+  const tReady = now + 0.33;
+  gTri.gain.setValueAtTime(0, tReady);
+  gTri.gain.linearRampToValueAtTime(p * 0.45, tReady + 0.018);
+  gTri.gain.exponentialRampToValueAtTime(0.001, tReady + 0.36);
+  tri.connect(gTri);
+  gTri.connect(out);
+  tri.start(tReady);
+  tri.stop(tReady + 0.4);
+}
+
 // ---- Playback ----
 
 export interface AudioPlayback {

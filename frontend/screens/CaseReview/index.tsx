@@ -1107,7 +1107,14 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
       // Regenerate voiceStyle for all characters to reflect latest accent/personality edits
       const buildStyle = (char: any, caseDesc: string) => {
-        if (char.isDeceased) return '# AUDIO PROFILE: Forensic Narrator\n## Scene: A dimly lit examination room at the police station.\n### DIRECTOR\'S NOTES\nStyle: Clinical, detached, documentary-style narration.\nPacing: Slow and deliberate, with pauses between observations.';
+        if (char.isDeceased) {
+          const forensic =
+            '# AUDIO PROFILE: Forensic Narrator\n## Scene: A dimly lit examination room at the police station.\n### DIRECTOR\'S NOTES\nStyle: Clinical, detached, documentary-style narration.\nPacing: Slow and deliberate, with pauses between observations.';
+          if (char.voiceAccent && char.voiceAccent.trim()) {
+            return `${forensic}\n\nAccent: Speak with a ${char.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`;
+          }
+          return forensic;
+        }
         const lines: string[] = [];
         const ageDesc = char.age ? `${char.age}-year-old` : '';
         const genderDesc = char.gender || '';
@@ -1230,21 +1237,31 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
     setIsPreviewingVoice(true);
     try {
-      // Build a fresh style prompt so preview reflects latest accent/personality edits
-      const lines: string[] = [];
-      lines.push(`# AUDIO PROFILE: ${currentChar.name}`);
-      lines.push(`## "${currentChar.role}"`);
-      lines.push('');
-      lines.push(`## THE SCENE: Police interrogation room`);
-      lines.push(`${currentChar.name} is being questioned by a detective.`);
-      lines.push('');
-      lines.push(`### DIRECTOR'S NOTES`);
-      const personality = currentChar.personality || 'guarded';
-      lines.push(`Style: Speak as ${currentChar.role?.toLowerCase() || 'a person'} being questioned by police. ${personality}.`);
-      if (currentChar.voiceAccent && currentChar.voiceAccent.trim()) {
-        lines.push(`Accent: Speak with a ${currentChar.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+      // Build a fresh style prompt so preview matches gameplay TTS (interrogation vs forensic victim)
+      let freshStyle: string;
+      if (currentChar.isDeceased) {
+        const forensic =
+          '# AUDIO PROFILE: Forensic Narrator\n## Scene: A dimly lit examination room at the police station.\n### DIRECTOR\'S NOTES\nStyle: Clinical, detached, documentary-style narration.\nPacing: Slow and deliberate, with pauses between observations.';
+        freshStyle =
+          currentChar.voiceAccent && currentChar.voiceAccent.trim()
+            ? `${forensic}\n\nAccent: Speak with a ${currentChar.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`
+            : forensic;
+      } else {
+        const lines: string[] = [];
+        lines.push(`# AUDIO PROFILE: ${currentChar.name}`);
+        lines.push(`## "${currentChar.role}"`);
+        lines.push('');
+        lines.push(`## THE SCENE: Police interrogation room`);
+        lines.push(`${currentChar.name} is being questioned by a detective.`);
+        lines.push('');
+        lines.push(`### DIRECTOR'S NOTES`);
+        const personality = currentChar.personality || 'guarded';
+        lines.push(`Style: Speak as ${currentChar.role?.toLowerCase() || 'a person'} being questioned by police. ${personality}.`);
+        if (currentChar.voiceAccent && currentChar.voiceAccent.trim()) {
+          lines.push(`Accent: Speak with a ${currentChar.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`);
+        }
+        freshStyle = lines.join('\n');
       }
-      const freshStyle = lines.join('\n');
 
       const previewText = `My name is ${currentChar.name}. My role is ${currentChar.role}.`;
       const audioUrl = await generateTTS(previewText, currentChar.voice, freshStyle);

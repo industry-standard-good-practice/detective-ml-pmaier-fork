@@ -44,13 +44,17 @@ export const generateVoiceStyle = (
     character: { name: string; gender?: string; age?: number; personality: string; role: string; bio?: string; physicalDescription?: string; isDeceased?: boolean; voiceAccent?: string },
     caseDescription: string
 ): string => {
-    // For deceased characters, use a forensic narrator style
+    // For deceased characters, use a forensic narrator style (accent still applies to TTS delivery)
     if (character.isDeceased) {
-        return `# AUDIO PROFILE: Forensic Narrator
+        const forensic = `# AUDIO PROFILE: Forensic Narrator
 ## Scene: A dimly lit examination room at the police station.
 ### DIRECTOR'S NOTES
 Style: Clinical, detached, documentary-style narration. Speak as a forensic examiner describing findings during a body examination. Calm, professional, and measured.
 Pacing: Slow and deliberate, with pauses between observations.`;
+        if (character.voiceAccent && character.voiceAccent.trim().length > 0) {
+            return `${forensic}\n\nAccent: Speak with a ${character.voiceAccent.trim()} accent. This should be consistent and natural throughout the entire delivery.`;
+        }
+        return forensic;
     }
 
     // Build a rich style prompt from character data

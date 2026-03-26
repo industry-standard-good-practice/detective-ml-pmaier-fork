@@ -21,8 +21,16 @@ router.post('/chat/suspect', async (req: Request, res: Response) => {
 
 router.post('/chat/officer', async (req: Request, res: Response) => {
   try {
-    const { caseData, userMessage, evidenceFound, notes, chatHistory } = req.body;
-    const result = await getOfficerChatResponse(caseData, userMessage, evidenceFound, notes, chatHistory);
+    const { caseData, userMessage, evidenceFound, notes, chatHistory, timelineKnown, officerThread } = req.body;
+    const result = await getOfficerChatResponse(
+      caseData,
+      userMessage,
+      evidenceFound,
+      notes,
+      chatHistory,
+      Array.isArray(timelineKnown) ? timelineKnown : [],
+      Array.isArray(officerThread) ? officerThread : []
+    );
     res.json({ text: result });
   } catch (error: any) {
     console.error('[Gemini Route] chat/officer error:', error);

@@ -44,15 +44,38 @@ export const generateCaseSummary = async (
   return result.text;
 };
 
+/** Timeline rows the player has confirmed (same shape as partner). */
+export type OfficerChatTimelineRow = Pick<
+  TimelineStatement,
+  'time' | 'statement' | 'day' | 'suspectName'
+>;
+
+export function mapTimelineForOfficerChat(discovered: TimelineStatement[]): OfficerChatTimelineRow[] {
+  return (discovered || []).map((t) => ({
+    time: t.time,
+    statement: t.statement,
+    day: t.day,
+    suspectName: t.suspectName,
+  }));
+}
+
 export const getOfficerChatResponse = async (
   caseData: CaseData,
   userMessage: string,
   evidenceFound: Evidence[],
   notes: Record<string, string[]>,
-  chatHistory: Record<string, ChatMessage[]>
+  chatHistory: Record<string, ChatMessage[]>,
+  timelineKnown: OfficerChatTimelineRow[] = [],
+  officerThread: ChatMessage[] = []
 ): Promise<string> => {
   const result = await geminiPost<{ text: string }>('/chat/officer', {
-    caseData, userMessage, evidenceFound, notes, chatHistory
+    caseData,
+    userMessage,
+    evidenceFound,
+    notes,
+    chatHistory,
+    timelineKnown,
+    officerThread,
   });
   return result.text;
 };
