@@ -11,11 +11,17 @@ export const INSTRUCTION_NEW_CHAR = "[STRICT INSTRUCTION]: Use the provided refe
 
 export const INSTRUCTION_PRESERVE_CHAR = "[STRICT INSTRUCTION]: The provided image is the REFERENCE CHARACTER. You MUST generate THIS EXACT CHARACTER. Keep facial features, hair, clothing, accessories, and colors EXACTLY the same. Only change the facial expression as requested. Do not change the art style or background color.";
 
-export const INSTRUCTION_RELATED_EVIDENCE = "[STRICT INSTRUCTION]: The provided reference image is the SUBJECT (e.g., the victim). You are generating a CLOSE-UP or DETAIL of a specific piece of evidence RELATED to this subject. Maintain consistency with the subject's skin tone, clothing colors, and materials shown in the reference. The evidence should look like it belongs to or was found on the subject.";
+/** Suspect/partner emotional portrait variants: expression + pose; still one coherent mugshot frame. */
+export const INSTRUCTION_EDIT_EMOTION_POSE = "[STRICT INSTRUCTION]: The provided image is the REFERENCE CHARACTER. You MUST generate THIS EXACT SAME PERSON (same face structure, hair, outfit, accessories, and colors). Keep the solid background color unchanged. Apply BOTH a clear facial expression AND matching body language (shoulders, arms, hands, stance, weight shift) as described in the prompt. Do not change the pixel art style. FORBIDDEN: collage, split screen, multiple poses in one image, inset panels, or picture-in-picture.";
 
-/** Evidence *card* image (inventory thumbnail): the physical clue must fill the frame — not a wide room establishing shot. */
+/** Victim forensic reframes: same identity and scene, new camera — not expression-only edits. */
+export const INSTRUCTION_EDIT_REFRAME = "[STRICT INSTRUCTION]: The provided image is the REFERENCE crime scene and victim. Preserve the SAME deceased victim identity, clothing, and room materials. You MAY and MUST change camera distance, angle, height, and crop exactly as the prompt requires. Output exactly ONE unified image from a single viewpoint. FORBIDDEN: multiple viewpoints, inset frames, overlaid regions at mismatched scale, split panels, or any composite layout. FORBIDDEN: reviving the victim or open eyes. Do not add text or UI.";
+
+export const INSTRUCTION_RELATED_EVIDENCE = "[STRICT INSTRUCTION]: The provided reference image is the SUBJECT associated with the evidence. You are generating a CLOSE-UP or DETAIL of a specific piece of evidence RELATED to this subject. Maintain consistency with the subject's skin tone, clothing colors, and materials shown in the reference. The evidence must read as belonging to or recovered from that subject.";
+
+/** Evidence *card* image (inventory thumbnail): evidence dominates frame area and readability. */
 export const EVIDENCE_CARD_CLOSEUP_FRAMING =
-  "COMPOSITION (evidence card image): TIGHT forensic close-up or tight medium shot — the physical evidence object is the clear hero, large and readable in frame. Do NOT use a wide establishing shot, panoramic room view, or tiny prop lost in empty space. Any room, rug, furniture, or body may appear only at the edges, cropped, or heavily out of focus — never the main subject.";
+  "COMPOSITION (evidence card image): TIGHT forensic close-up or tight medium shot. The physical evidence object is the primary subject: high fractional frame coverage, readable at a glance. FORBIDDEN: wide field of view dominated by environment; FORBIDDEN: evidence below minimum readable size relative to frame. Context (room, rug, furniture, body) permitted only at edges, cropped, or heavily de-emphasized — never co-primary with the evidence.";
 
 let _styleRefCache: string | null = null;
 

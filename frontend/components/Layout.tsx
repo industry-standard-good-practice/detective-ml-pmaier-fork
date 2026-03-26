@@ -76,18 +76,35 @@ const GlobalStyle = createGlobalStyle`
   button, input, textarea, select {
   }
   
-  /* Scrollbar styling */
+  /* Scrollbar styling — WebKit: width = vertical bar thickness, height = horizontal bar thickness */
   ::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: none !important;
   }
   ::-webkit-scrollbar-track {
-    background: var(--color-surface-raised); 
+    background: var(--color-surface-raised);
+    border-radius: 0;
+    cursor: none !important;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-border); 
+    background: var(--color-border);
+    border-radius: 0;
+    cursor: none !important;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-strong); 
+    background: var(--color-border-strong);
+  }
+  /* Remove arrow buttons (Windows classic / legacy WebKit horizontal bar) */
+  ::-webkit-scrollbar-button {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+  ::-webkit-scrollbar-corner {
+    background: var(--color-surface-raised);
   }
   
   * {

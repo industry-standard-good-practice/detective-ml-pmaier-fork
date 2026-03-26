@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getSuspectResponse, generateCaseSummary, getOfficerChatResponse, getPartnerIntervention, getBadCopHint } from '../services/geminiChat.js';
 import { generateCaseFromPrompt, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, applyConsistencyImagePipeline } from '../services/geminiCase.js';
-import { generateImageRaw, generateEvidenceImage, generateEmotionalVariantsFromBase, generateSuspectFromUpload, regenerateSingleSuspect, pregenerateCaseImages, createImageFromPrompt, editImageWithPrompt } from '../services/geminiImages.js';
+import { generateImageRaw, generateEvidenceImage, generateEmotionalVariantsFromBase, generateOnePortraitVariantFromBase, generateSuspectFromUpload, regenerateSingleSuspect, pregenerateCaseImages, createImageFromPrompt, editImageWithPrompt } from '../services/geminiImages.js';
 import { generateTTS } from '../services/geminiTTS.js';
 
 const router = Router();
@@ -155,12 +155,31 @@ router.post('/image/evidence', async (req: Request, res: Response) => {
 
 router.post('/image/variants', async (req: Request, res: Response) => {
   try {
-    const { neutralBase64, suspect, caseId, userId } = req.body;
-    const result = await generateEmotionalVariantsFromBase(neutralBase64, suspect, caseId, userId);
+    const { neutralBase64, suspect, caseId, userId, caseTheme } = req.body;
+    const result = await generateEmotionalVariantsFromBase(neutralBase64, suspect, caseId, userId, {
+      caseTheme: typeof caseTheme === 'string' ? caseTheme : undefined,
+    });
     res.json(result);
   } catch (error: any) {
     console.error('[Gemini Route] image/variants error:', error);
     res.status(500).json({ error: error.message || 'Failed to generate emotional variants' });
+  }
+});
+
+router.post('/image/variant-one', async (req: Request, res: Response) => {
+  try {
+    const { neutralBase64, variantKey, suspect, caseId, userId, caseTheme } = req.body;
+    if (!variantKey || typeof variantKey !== 'string') {
+      res.status(400).json({ error: 'variantKey is required' });
+      return;
+    }
+    const result = await generateOnePortraitVariantFromBase(neutralBase64, variantKey, suspect, caseId, userId, {
+      caseTheme: typeof caseTheme === 'string' ? caseTheme : undefined,
+    });
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Gemini Route] image/variant-one error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate portrait variant' });
   }
 });
 

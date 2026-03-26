@@ -1,12 +1,14 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { type } from '../theme';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wand2, Save, Undo, AlertCircle, ImagePlus, ClipboardPaste } from 'lucide-react';
+import { X, Wand2, Save, Undo, AlertCircle, ImagePlus, ClipboardPaste, Upload, Camera, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiImages';
 import Spinner from './Spinner';
+import { HorizontalScrollStrip } from './HorizontalScrollStrip';
+import type { PortraitVariantSlot } from '../utils/portraitVariantSlots';
 
 const Overlay = styled(motion.div)`
   position: absolute;
@@ -80,6 +82,13 @@ const Content = styled.div`
   }
 `;
 
+const LeftColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+  min-width: 0;
+`;
+
 const ImageContainer = styled.div`
   background: #000;
   overflow: hidden;
@@ -96,6 +105,87 @@ const PreviewImage = styled.img`
   height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
+`;
+
+const RegenAllOverlayButton = styled.button`
+  position: absolute;
+  bottom: calc(var(--space) * 2);
+  right: calc(var(--space) * 2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: var(--type-small);
+  font-weight: 600;
+  z-index: 5;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  &:hover:not(:disabled) {
+    background: #2563eb;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const VariantThumb = styled.button<{ $active: boolean }>`
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid ${(p) => (p.$active ? '#3b82f6' : 'rgba(255,255,255,0.12)')};
+  background: #0a0a0a;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  border-radius: 2px;
+  &:hover {
+    border-color: ${(p) => (p.$active ? '#3b82f6' : 'rgba(255,255,255,0.35)')};
+  }
+`;
+
+const VariantThumbImg = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+`;
+
+const VariantThumbLabel = styled.span`
+  display: block;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  margin-top: 4px;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const VariantThumbWrap = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+`;
+
+const VariantPlaceholder = styled.div`
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+  text-transform: uppercase;
 `;
 
 const Controls = styled.div`
@@ -145,6 +235,49 @@ const TextArea = styled.textarea`
   }
 `;
 
+const PromptToolbar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space);
+  margin-top: calc(var(--space) * -1);
+  padding-top: var(--space);
+`;
+
+const SourceRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space) * 1.5);
+`;
+
+const SourceButton = styled.button`
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--type-small);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.2s;
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+`;
+
 const ButtonGroup = styled.div`
   display: flex;
   gap: calc(var(--space) * 2);
@@ -165,15 +298,20 @@ const Button = styled.button<{ $variant?: 'primary' | 'secondary' | 'danger' }>`
   border: 1px solid transparent;
   white-space: nowrap;
 
-  ${props => props.$variant === 'primary' ? `
+  ${(props) =>
+    props.$variant === 'primary'
+      ? `
     background: #3b82f6;
     color: white;
     &:hover:not(:disabled) { background: #2563eb; }
-  ` : props.$variant === 'danger' ? `
+  `
+      : props.$variant === 'danger'
+        ? `
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
     &:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
-  ` : `
+  `
+        : `
     background: rgba(255, 255, 255, 0.05);
     color: white;
     &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
@@ -215,137 +353,236 @@ const ProgressFill = styled(motion.div)`
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 `;
 
-interface ImageEditorModalProps {
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+export interface ImageEditorModalProps {
   initialImageUrl?: string;
-  onSave: (newImageUrl: string, onProgress?: (current: number, total: number) => void) => Promise<void>;
+  onSave: (
+    newImageUrl: string,
+    onProgress?: (current: number, total: number) => void,
+    meta?: { variantKey?: string }
+  ) => Promise<void>;
   onClose: () => void;
+  /** When false, the modal is hidden but stays mounted so in-flight generation can finish. */
+  visible?: boolean;
+  /** Fires when generate/save/regenerate-all busy state changes (for parent loading UI + keep-alive). */
+  onBusyChange?: (busy: boolean, meta?: { regenerateAll?: boolean }) => void;
   aspectRatio?: string;
   title?: string;
+  /** Suspect/partner/officer: portrait variant carousel + per-key save */
+  portraitSlots?: PortraitVariantSlot[];
+  portraitUrls?: Record<string, string | undefined>;
+  /** When neutral + portrait mode, regenerate every variant from current neutral */
+  onRegenerateAllVariants?: (neutralDataUrl: string, onProgress?: (current: number, total: number) => void) => Promise<void>;
+  /** Paste from system clipboard into this variant */
+  onPasteFromClipboard?: (callback: (dataUrl: string) => void) => void;
+  /** Open camera capture; call onCaptured with captured still */
+  onRequestCamera?: (onCaptured: (dataUrl: string) => void) => void;
 }
+
+const NEUTRAL_KEY = 'NEUTRAL';
 
 const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   initialImageUrl,
   onSave,
   onClose,
+  visible = true,
+  onBusyChange,
   aspectRatio = '3:4',
-  title = "Edit Image"
+  title = 'Edit Image',
+  portraitSlots,
+  portraitUrls,
+  onRegenerateAllVariants,
+  onPasteFromClipboard,
+  onRequestCamera,
 }) => {
-  const isCreateMode = !initialImageUrl;
-  const [currentImageUrl, setCurrentImageUrl] = useState(initialImageUrl || '');
-  const [history, setHistory] = useState<string[]>(initialImageUrl ? [initialImageUrl] : []);
+  const onBusyChangeRef = useRef(onBusyChange);
+  onBusyChangeRef.current = onBusyChange;
+  const portraitMode = Boolean(portraitSlots?.length);
+  const [selectedVariantKey, setSelectedVariantKey] = useState(() => portraitSlots?.[0]?.key ?? NEUTRAL_KEY);
+
+  const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRegeneratingAll, setIsRegeneratingAll] = useState(false);
   const [savingProgress, setSavingProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePasteFromClipboard = async () => {
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find(t => t.startsWith('image/'));
-        if (imageType) {
-          const blob = await item.getType(imageType);
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const base64 = e.target?.result as string;
-            if (base64) {
-              setHistory(prev => [...prev, base64]);
-              setCurrentImageUrl(base64);
-              setError(null);
-              toast.success('Image pasted from clipboard!');
-            }
-          };
-          reader.readAsDataURL(blob);
-          return;
+  const urlForSelectedVariant = portraitMode ? portraitUrls?.[selectedVariantKey] : initialImageUrl;
+
+  const applyDataUrlToCanvas = useCallback((dataUrl: string) => {
+    setHistory((prev) => [...prev, dataUrl]);
+    setCurrentImageUrl(dataUrl);
+    setError(null);
+  }, []);
+
+  const fetchRemoteAsDataUrl = useCallback(async (url: string): Promise<string | null> => {
+    if (url.startsWith('data:')) return url;
+    if (url.startsWith('http')) {
+      try {
+        const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.base64) return data.base64 as string;
         }
-      }
-      toast.error('No image found on clipboard.');
-    } catch (err: any) {
-      console.error('Clipboard paste failed:', err);
-      if (err?.name === 'NotAllowedError') {
-        toast.error('Clipboard access denied. Please allow clipboard permissions.');
-      } else {
-        toast.error('Could not read clipboard. Try copying an image first.');
+      } catch (err) {
+        console.warn('Could not proxy image for CORS-safe editing', err);
       }
     }
-  };
+    return null;
+  }, []);
 
+  // Load image when variant changes or source URL updates (hero or portrait)
   useEffect(() => {
-    // If the initial image is a remote URL, try to fetch it and convert to base64
-    // to avoid CORS issues during editing.
-    if (!initialImageUrl) return;
-    const prepareImage = async () => {
-      if (initialImageUrl.startsWith('http')) {
-        try {
-          const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(initialImageUrl)}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.base64) {
-              setCurrentImageUrl(data.base64);
-              setHistory([data.base64]);
-            }
-          }
-        } catch (err) {
-          console.warn("Could not proxy image for CORS-safe editing", err);
+    let cancelled = false;
+    const run = async () => {
+      const src = portraitMode ? urlForSelectedVariant : initialImageUrl;
+      if (!src) {
+        if (!cancelled) {
+          setCurrentImageUrl('');
+          setHistory([]);
+        }
+        return;
+      }
+      if (src.startsWith('data:')) {
+        if (!cancelled) {
+          setCurrentImageUrl(src);
+          setHistory([src]);
+        }
+        return;
+      }
+      const prepared = await fetchRemoteAsDataUrl(src);
+      if (!cancelled) {
+        if (prepared) {
+          setCurrentImageUrl(prepared);
+          setHistory([prepared]);
+        } else {
+          setCurrentImageUrl(src);
+          setHistory([src]);
         }
       }
     };
-    prepareImage();
-  }, [initialImageUrl]);
+    run();
+    setPrompt('');
+    setError(null);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVariantKey, portraitMode, urlForSelectedVariant, initialImageUrl, fetchRemoteAsDataUrl]);
+
+  useEffect(() => {
+    const busy = isGenerating || isSaving || isRegeneratingAll;
+    onBusyChangeRef.current?.(busy, { regenerateAll: isRegeneratingAll });
+  }, [isGenerating, isSaving, isRegeneratingAll]);
+
+  const handlePasteFromClipboard = async () => {
+    if (!onPasteFromClipboard) {
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const base64 = e.target?.result as string;
+              if (base64) {
+                applyDataUrlToCanvas(base64);
+                toast.success('Image pasted from clipboard!');
+              }
+            };
+            reader.readAsDataURL(blob);
+            return;
+          }
+        }
+        toast.error('No image found on clipboard.');
+      } catch (err: any) {
+        console.error('Clipboard paste failed:', err);
+        toast.error(err?.name === 'NotAllowedError' ? 'Clipboard access denied.' : 'Could not read clipboard.');
+      }
+      return;
+    }
+    onPasteFromClipboard((dataUrl) => {
+      applyDataUrlToCanvas(dataUrl);
+      toast.success('Image pasted from clipboard!');
+    });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const r = ev.target?.result as string;
+      if (r) {
+        applyDataUrlToCanvas(r);
+        toast.success('Image loaded.');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleTakePhoto = () => {
+    if (!onRequestCamera) {
+      toast.error('Camera is not available in this context.');
+      return;
+    }
+    onRequestCamera((dataUrl) => {
+      applyDataUrlToCanvas(dataUrl);
+      toast.success('Photo captured.');
+    });
+  };
 
   const getBase64FromImage = (): string | null => {
     if (!imageRef.current) return null;
-
-    // If it's already a data URL, return it
     if (currentImageUrl.startsWith('data:')) return currentImageUrl;
-
     try {
       const canvas = document.createElement('canvas');
       canvas.width = imageRef.current.naturalWidth;
       canvas.height = imageRef.current.naturalHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
-
       ctx.drawImage(imageRef.current, 0, 0);
-      // This might still fail if the image was loaded from a remote source without CORS
       return canvas.toDataURL('image/png');
-    } catch (err) {
-      // Silent failure for canvas extraction to avoid UI error badges.
-      // The background pre-fetch usually handles this.
+    } catch {
       return null;
     }
   };
 
   const handleEdit = async () => {
-    if (!prompt.trim() || isGenerating || isSaving) return;
+    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll) return;
     setError(null);
-
     setIsGenerating(true);
     try {
       let result: string | null = null;
-
       if (!currentImageUrl) {
-        // Create mode: generate from scratch
         result = await createImageFromPrompt(prompt, aspectRatio);
       } else {
-        // Edit mode: modify existing image
         const base64 = getBase64FromImage();
         if (!base64) {
-          setError("Could not process image for editing. This might be a cross-origin issue.");
+          setError('Could not process image for editing. This might be a cross-origin issue.');
           setIsGenerating(false);
           return;
         }
         result = await editImageWithPrompt(base64, prompt, aspectRatio);
       }
-
       if (result) {
-        setHistory(prev => [...prev, result!]);
+        setHistory((prev) => [...prev, result!]);
         setCurrentImageUrl(result);
         setPrompt('');
       } else {
-        setError(isCreateMode && !currentImageUrl ? "Failed to generate image. Try a different description." : "Failed to edit image. The AI might have had trouble with your prompt.");
+        setError(
+          !currentImageUrl
+            ? 'Failed to generate image. Try a different description.'
+            : 'Failed to edit image. The AI might have had trouble with your prompt.'
+        );
       }
     } catch (err: any) {
       console.error(err);
@@ -358,27 +595,58 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (isSaving || isGenerating) return;
+    if (isSaving || isGenerating || isRegeneratingAll) return;
+    if (!currentImageUrl) return;
     setIsSaving(true);
     try {
-      await onSave(currentImageUrl, (current, total) => {
-        setSavingProgress({ current, total });
-      });
+      await onSave(
+        currentImageUrl,
+        (current, total) => setSavingProgress({ current, total }),
+        portraitMode ? { variantKey: selectedVariantKey } : undefined
+      );
     } catch (err: any) {
       console.error(err);
       const errorMsg = err?.message || 'Failed to save changes.';
       toast.error(`Save failed: ${errorMsg}`);
+    } finally {
       setIsSaving(false);
     }
   };
 
+  const handleRegenerateAll = async () => {
+    if (!onRegenerateAllVariants || selectedVariantKey !== NEUTRAL_KEY || !currentImageUrl || isRegeneratingAll || isSaving || isGenerating) return;
+    const base64 = getBase64FromImage();
+    if (!base64) {
+      toast.error('Could not read neutral image for regeneration.');
+      return;
+    }
+    setIsRegeneratingAll(true);
+    setSavingProgress({ current: 0, total: 0 });
+    setError(null);
+    try {
+      await onRegenerateAllVariants(base64, (current, total) => setSavingProgress({ current, total }));
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Regeneration failed.');
+    } finally {
+      setIsRegeneratingAll(false);
+    }
+  };
+
   const handleUndo = () => {
-    if (history.length <= 1 || isSaving || isGenerating) return;
+    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll) return;
     const newHistory = [...history];
     newHistory.pop();
     setHistory(newHistory);
     setCurrentImageUrl(newHistory[newHistory.length - 1]);
   };
+
+  const showRegenAll =
+    portraitMode && onRegenerateAllVariants && selectedVariantKey === NEUTRAL_KEY && Boolean(currentImageUrl);
+
+  const busyOverlay = isGenerating || isSaving || isRegeneratingAll;
+  const regenRemaining =
+    isRegeneratingAll && savingProgress.total > 0 ? Math.max(0, savingProgress.total - savingProgress.current) : null;
 
   return (
     <AnimatePresence>
@@ -386,7 +654,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={isSaving ? undefined : onClose}
+        onClick={onClose}
+        style={!visible ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
         <Modal
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -395,129 +664,173 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           <Header>
-            <Title>{title}</Title>
-            <CloseButton onClick={onClose} disabled={isSaving}>
+            <Title>
+              {portraitMode
+                ? `${title} — ${portraitSlots!.find((s) => s.key === selectedVariantKey)?.label ?? selectedVariantKey}`
+                : title}
+            </Title>
+            <CloseButton onClick={onClose} type="button">
               <X size={20} />
             </CloseButton>
           </Header>
 
           <Content>
-            <ImageContainer style={{ aspectRatio }}>
-              {currentImageUrl ? (
-                <PreviewImage
-                  ref={imageRef}
-                  src={currentImageUrl}
-                  alt="Preview"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'calc(var(--space) * 2)', color: 'rgba(255,255,255,0.3)', padding: 'calc(var(--space) * 5)', textAlign: 'center' }}>
-                  <ImagePlus size={48} />
-                  <span style={{ fontSize: 'var(--type-small)' }}>Describe your character below to generate a portrait</span>
-                  <button
-                    onClick={handlePasteFromClipboard}
-                    disabled={isGenerating || isSaving}
+            <LeftColumn>
+              <ImageContainer style={{ aspectRatio }}>
+                {currentImageUrl ? (
+                  <PreviewImage ref={imageRef} src={currentImageUrl} alt="Preview" referrerPolicy="no-referrer" />
+                ) : (
+                  <div
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '6px',
-                      padding: '8px 16px', background: 'rgba(255,255,255,0.08)',
-                      border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.5)',
-                      cursor: 'pointer', fontSize: 'var(--type-small)', transition: 'all 0.2s',
-                      marginTop: 'var(--space)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 'calc(var(--space) * 2)',
+                      color: 'rgba(255,255,255,0.3)',
+                      padding: 'calc(var(--space) * 5)',
+                      textAlign: 'center',
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                    title="Paste image from clipboard"
                   >
-                    <ClipboardPaste size={14} />
-                    Paste from Clipboard
-                  </button>
-                </div>
+                    <ImagePlus size={48} />
+                    <span style={{ fontSize: 'var(--type-small)' }}>
+                      {!portraitMode && !initialImageUrl
+                        ? 'Describe the image below or add a source image.'
+                        : 'No image for this variant yet — use Upload, Paste, or Photo.'}
+                    </span>
+                  </div>
+                )}
+                {showRegenAll && (
+                  <RegenAllOverlayButton
+                    type="button"
+                    onClick={handleRegenerateAll}
+                    disabled={busyOverlay}
+                    title="Regenerate all emotional / examination variants from this neutral image"
+                  >
+                    <RefreshCw size={14} />
+                    Regen all
+                  </RegenAllOverlayButton>
+                )}
+                {busyOverlay && (
+                  <LoadingOverlay>
+                    <Spinner $size={32} $color="#3b82f6" />
+                    <span>
+                      {isRegeneratingAll
+                        ? regenRemaining !== null && regenRemaining > 0
+                          ? `Regenerating variants… ${regenRemaining} left`
+                          : 'Regenerating variants…'
+                        : isSaving
+                          ? 'Saving...'
+                          : 'Nano Banana is working...'}
+                    </span>
+                    {savingProgress.total > 0 && (isSaving || isRegeneratingAll) && (
+                      <>
+                        <span style={{ fontSize: 'var(--type-small)', opacity: 0.8 }}>
+                          {savingProgress.current} / {savingProgress.total}
+                        </span>
+                        <ProgressBar>
+                          <ProgressFill
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(savingProgress.current / savingProgress.total) * 100}%` }}
+                          />
+                        </ProgressBar>
+                      </>
+                    )}
+                  </LoadingOverlay>
+                )}
+              </ImageContainer>
+
+              {portraitMode && portraitSlots && (
+                <HorizontalScrollStrip>
+                  {portraitSlots.map((slot) => {
+                    const u = portraitUrls?.[slot.key];
+                    const active = slot.key === selectedVariantKey;
+                    return (
+                      <VariantThumbWrap key={slot.key}>
+                        <VariantThumb type="button" $active={active} onClick={() => setSelectedVariantKey(slot.key)} title={slot.label}>
+                          {u ? <VariantThumbImg src={u} alt="" /> : <VariantPlaceholder>?</VariantPlaceholder>}
+                        </VariantThumb>
+                        <VariantThumbLabel>{slot.label}</VariantThumbLabel>
+                      </VariantThumbWrap>
+                    );
+                  })}
+                </HorizontalScrollStrip>
               )}
-              {isGenerating && (
-                <LoadingOverlay>
-                  <Spinner $size={32} $color="#3b82f6" />
-                  <span>Nano Banana is working...</span>
-                </LoadingOverlay>
-              )}
-              {isSaving && (
-                <LoadingOverlay>
-                  <Spinner $size={32} $color="#3b82f6" />
-                  <span>Generating Emotion Alternates...</span>
-                  {savingProgress.total > 0 && (
-                    <>
-                      <span style={{ fontSize: 'var(--type-small)', opacity: 0.8 }}>
-                        {savingProgress.current} / {savingProgress.total}
-                      </span>
-                      <ProgressBar>
-                        <ProgressFill
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(savingProgress.current / savingProgress.total) * 100}%` }}
-                        />
-                      </ProgressBar>
-                    </>
-                  )}
-                </LoadingOverlay>
-              )}
-            </ImageContainer>
+            </LeftColumn>
 
             <Controls>
               <InputGroup>
-                <Label>{currentImageUrl ? 'What would you like to change?' : 'Describe the character to generate'}</Label>
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                  <TextArea
-                    placeholder={currentImageUrl ? "e.g., 'Change his hair to red', 'Add a scar over his left eye', 'Make her wear a detective hat'..." : "e.g., 'A stern female detective with short gray hair, wearing a trench coat'..."}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    disabled={isGenerating || isSaving}
-                    style={{ paddingBottom: 'calc(var(--space) * 9)' }}
-                  />
-                  <div style={{
-                    position: 'absolute', bottom: '1px', left: '1px', right: '1px',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '6px 8px',
-                    }}>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <Button
-                        onClick={handleUndo}
-                        disabled={isGenerating || isSaving || history.length <= 1}
-                        style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
-                      >
-                        <Undo size={14} />
-                        Undo
-                      </Button>
-                      <Button
-                        onClick={handlePasteFromClipboard}
-                        disabled={isGenerating || isSaving}
-                        style={{ flex: 'none', width: '36px', height: '36px', padding: 0 }}
-                        title="Paste image from clipboard"
-                      >
-                        <ClipboardPaste size={14} />
-                      </Button>
-                    </div>
+                <Label>{currentImageUrl ? 'What would you like to change?' : 'Describe the image to generate'}</Label>
+                <TextArea
+                  placeholder={
+                    currentImageUrl
+                      ? "e.g., 'Change his hair to red', 'Add a scar over his left eye', 'Make her wear a detective hat'..."
+                      : "e.g., 'A stern female detective with short gray hair, wearing a trench coat'..."
+                  }
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={busyOverlay}
+                />
+                <PromptToolbar>
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <Button
-                      $variant="primary"
-                      onClick={handleEdit}
-                      disabled={isGenerating || isSaving || !prompt.trim()}
-                      style={{ flex: 'none', width: '36px', height: '36px', padding: 0, }}
-                      title="Generate Edit"
+                      onClick={handleUndo}
+                      disabled={busyOverlay || history.length <= 1}
+                      style={{ flex: 'none', padding: '8px 14px', fontSize: 'var(--type-small)' }}
                     >
-                      <Wand2 size={16} />
+                      <Undo size={14} />
+                      Undo
                     </Button>
                   </div>
-                </div>
-                {error && (
-                  <div style={{ color: '#ef4444', fontSize: 'var(--type-small)', display: 'flex', alignItems: 'center', gap: 'var(--space)', marginTop: 'var(--space)' }}>
-                    <AlertCircle size={14} />
-                    {error}
-                  </div>
-                )}
+                  <Button
+                    $variant="primary"
+                    onClick={handleEdit}
+                    disabled={busyOverlay || !prompt.trim()}
+                    style={{ flex: 'none', width: '48px', height: '40px', padding: 0 }}
+                    title="Generate"
+                  >
+                    <Wand2 size={16} />
+                  </Button>
+                </PromptToolbar>
               </InputGroup>
 
+              <SourceRow>
+                <SourceButton type="button" onClick={() => fileInputRef.current?.click()} disabled={busyOverlay}>
+                  <Upload size={14} />
+                  Upload
+                </SourceButton>
+                <SourceButton type="button" onClick={handlePasteFromClipboard} disabled={busyOverlay}>
+                  <ClipboardPaste size={14} />
+                  Paste
+                </SourceButton>
+                <SourceButton type="button" onClick={handleTakePhoto} disabled={busyOverlay || !onRequestCamera}>
+                  <Camera size={14} />
+                  Photo
+                </SourceButton>
+              </SourceRow>
+
+              <HiddenFileInput ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} />
+
+              {error && (
+                <div
+                  style={{
+                    color: '#ef4444',
+                    fontSize: 'var(--type-small)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space)',
+                  }}
+                >
+                  <AlertCircle size={14} />
+                  {error}
+                </div>
+              )}
+
               <ButtonGroup>
-                <Button $variant="danger" onClick={onClose} disabled={isGenerating || isSaving}>
+                <Button $variant="danger" onClick={onClose} type="button">
                   Cancel
                 </Button>
-                <Button $variant="primary" onClick={handleSave} disabled={isGenerating || isSaving || !currentImageUrl}>
+                <Button $variant="primary" onClick={handleSave} disabled={busyOverlay || !currentImageUrl}>
                   <Save size={16} />
                   Save Edit
                 </Button>

@@ -40,11 +40,19 @@ const initPatch = () => {
   const instance = AnimeCursor.instance;
   if (!instance || !instance._onMouseMove) return;
   
-  // Remove original handler
+  // Remove original handler (library uses mousemove)
   document.removeEventListener('mousemove', instance._onMouseMove);
-  
+
+  // Use pointermove so the custom cursor keeps tracking during native scrollbar drags
+  // (some browsers stop firing mousemove while the scrollbar thumb is captured).
+  const existingPointer = (instance as unknown as { _onPointerMove?: (e: PointerEvent) => void })
+    ._onPointerMove;
+  if (existingPointer) {
+    document.removeEventListener('pointermove', existingPointer);
+  }
+
   // Create patched handler that walks up the DOM
-  const patchedHandler = (e: MouseEvent) => {
+  const patchedHandler = (e: MouseEvent | PointerEvent) => {
     if (instance.disabled) return;
     
     const x = e.clientX;
@@ -108,9 +116,10 @@ const initPatch = () => {
       instance.lastCursorType = nextCursorType;
     }
   };
-  
+
   instance._onMouseMove = patchedHandler;
-  document.addEventListener('mousemove', patchedHandler);
+  (instance as unknown as { _onPointerMove: typeof patchedHandler })._onPointerMove = patchedHandler;
+  document.addEventListener('pointermove', patchedHandler as EventListener, { passive: true });
 };
 
 // Also refresh bindings when React updates the DOM

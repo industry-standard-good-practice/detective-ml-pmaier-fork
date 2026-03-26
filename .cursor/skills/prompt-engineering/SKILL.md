@@ -18,9 +18,19 @@ When model behavior is wrong (tone, length, contradictions, game mechanics like 
 - **Prefer:** Clear rules and definitions in system/user prompt text, response schemas, ordering and separation of context blocks, and what the client sends (full history, attachments, flags). Tighten *what a field means* and *what must not be conflated* rather than illustrating with sample dialogues.
 - **Avoid:** **Few-shot or worked examples** in prompts as the main fix — they bloat context, overfit to the sample, and rarely correct systematic mistakes. Also avoid patching a single scenario in the UI, hard-coding string replacements of model output, or special cases that duplicate what explicit rules should solve.
 
+## Image and multimodal prompts (mandatory)
+
+Applies to `backend/src/services/geminiImages.ts`, `backend/src/services/geminiStyles.ts`, and any image-generation prompt strings elsewhere.
+
+- **Do not** embed illustrative failure descriptions, narrative hypotheticals, similes, or “do not produce X where X is a story about the bad output” (those train on the failure surface).
+- **Do not** use `e.g.` / `for example` / sample lists to teach the model what to draw or avoid.
+- **Do** state **invariants**: allowed geometry (single viewpoint, single scale), camera relations (“closer than reference”, “wide field of view relative to reference”), and **constraint classes** (FORBIDDEN: composite layout, dual scale, inset frames).
+- **Do** encode emotion or behavior as **abstract axes** (valence, arousal, tension, openness, approach) or **minimum change requirements** (multiple independent channels must differ from neutral) — not scripted poses or stock gestures.
+- **Exception:** Dynamic data from the case (`evidence.title`, `description`, placement) is not an “example”; it is the task specification.
+
 ## Workflow
 
-1. **Locate the source** — Suspect chat: `backend/src/services/geminiChat.ts` (`getSuspectResponse`, partner/officer helpers). Case generation and profile rules: `backend/src/services/geminiCase.ts` (`PROMPT_RULES`, `generateCaseFromPrompt`). Models: `backend/src/services/geminiModels.ts`.
+1. **Locate the source** — Suspect chat: `backend/src/services/geminiChat.ts` (`getSuspectResponse`, partner/officer helpers). Case generation and profile rules: `backend/src/services/geminiCase.ts` (`PROMPT_RULES`, `generateCaseFromPrompt`). Models: `backend/src/services/geminiModels.ts`. Image pipeline: `backend/src/services/geminiImages.ts`, `backend/src/services/geminiStyles.ts`.
 2. **Name the failure mode** — e.g. "delta confuses character voice with detective provocation", "model forgets transcript", "schema allows invalid emotion".
 3. **Adjust the rule** — Add explicit definitions, decouple concepts the model conflates, give numeric anchors when the game uses numbers, and state prohibitions or invariants in plain language (not sample Q/A or fake transcripts).
 4. **Keep one source of truth** — Frontend delegates chat to the backend; do not duplicate prompt logic in the frontend.

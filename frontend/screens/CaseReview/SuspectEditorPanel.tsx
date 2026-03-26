@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { type } from '../../theme';
 import styled from 'styled-components';
 import { CaseData, Suspect, Emotion, Evidence, Relationship, TimelineEvent } from '../../types';
@@ -159,40 +159,89 @@ const SuspectRow = styled.div<{ $selected: boolean }>`
 `;
 
 const SuspectEditorRow = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 33%) minmax(0, 1fr);
   gap: var(--space);
-  @media (max-width: 1080px) { flex-direction: column; }
+  align-items: stretch;
+  min-height: 0;
+  @media (max-width: 1080px) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 0 0 auto;
+    min-height: unset;
+  }
+`;
+
+/** Fills space above REROLL/EDIT; flex-basis 0 lets height shrink so rail bottom aligns with InputsCol. */
+const PortraitImageWrap = styled.div`
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+  @media (max-width: 1080px) {
+    flex: 0 0 auto;
+    aspect-ratio: 1;
+    max-width: min(100%, 280px);
+    align-self: center;
+    overflow: visible;
+  }
 `;
 
 const PortraitCol = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space);
-  width: 160px;
-  flex-shrink: 0;
-  @media (max-width: 1080px) { width: 100%; }
+  min-width: 0;
+  align-self: stretch;
+  min-height: 0;
+  @media (max-width: 1080px) {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 100%;
+    align-self: stretch;
+  }
 `;
 
 const PortraitBtnGrid = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space);
+  flex-shrink: 0;
   @media (max-width: 1080px) {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space);
-    & > *:first-child { grid-column: 1 / -1; }
+    flex-direction: row;
+    align-items: stretch;
+    & > button {
+      flex: 1 1 0%;
+      min-width: 0;
+      width: auto;
+    }
   }
 `;
 
+/** Content-only wrapper — height is not inflated by grid stretch (used for desktop rail sync). */
+const SuspectFieldsMeasure = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  min-width: 0;
+  width: 100%;
+`;
+
 const InputsCol = styled.div`
-  flex: 1;
   min-width: 0;
   max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space);
   overflow: hidden;
+  @media (max-width: 1080px) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
 `;
 
 const UtilityButton = styled.button<{ $danger?: boolean }>`
@@ -251,48 +300,6 @@ const RandomizeButton = styled.button`
   width: 100%;
   transition: all 0.2s;
   &:hover { background: var(--color-border-strong); }
-  &:disabled { opacity: 0.5; cursor: wait; }
-`;
-
-const UploadButton = styled.button`
-  background: #234;
-  color: #adf;
-  border: 1px solid #456;
-  cursor: pointer;
-  padding: var(--space) calc(var(--space) * 2);
-  font-family: inherit;
-  ${type.small}
-  width: 100%;
-  transition: all 0.2s;
-  &:hover { background: #345; }
-  &:disabled { opacity: 0.5; cursor: wait; }
-`;
-
-const PasteButton = styled.button`
-  background: #324;
-  color: #daf;
-  border: 1px solid #546;
-  cursor: pointer;
-  padding: var(--space) calc(var(--space) * 2);
-  font-family: inherit;
-  ${type.small}
-  width: 100%;
-  transition: all 0.2s;
-  &:hover { background: #435; }
-  &:disabled { opacity: 0.5; cursor: wait; }
-`;
-
-const CameraButton = styled.button`
-  background: #422;
-  color: #fa0;
-  border: 1px solid #633;
-  cursor: pointer;
-  padding: var(--space) calc(var(--space) * 2);
-  font-family: inherit;
-  ${type.small}
-  width: 100%;
-  transition: all 0.2s;
-  &:hover { background: #533; }
   &:disabled { opacity: 0.5; cursor: wait; }
 `;
 
@@ -638,10 +645,6 @@ interface SuspectEditorPanelProps {
   onRetryAI: () => void;
   onRerollPortrait: () => void;
   onShowSuspectEditor: () => void;
-  onTriggerUpload: () => void;
-  onPasteFromClipboard: (callback: (base64: string) => void) => void;
-  onProcessSuspectImage: (base64: string) => void;
-  onStartCamera: () => void;
   onPreviewVoice: () => void;
   onRerollEvidence: (ev: Evidence, source: 'initial' | 'hidden', suspectId?: string) => void;
   onTransferEvidence: (evidence: Evidence, fromOwner: string, toOwner: string) => void;
@@ -666,10 +669,6 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
   onRetryAI,
   onRerollPortrait,
   onShowSuspectEditor,
-  onTriggerUpload,
-  onPasteFromClipboard,
-  onProcessSuspectImage,
-  onStartCamera,
   onPreviewVoice,
   onRerollEvidence,
   onTransferEvidence,
@@ -682,6 +681,47 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
     selectedSuspectId === 'partner' ? draftCase.partner :
       draftCase.suspects?.find(s => s.id === selectedSuspectId);
   const isSupportChar = selectedSuspectId === 'officer' || selectedSuspectId === 'partner';
+
+  /** Desktop: portrait rail + fields block share one measured height so EDIT aligns with TTS row (grid stretch was inflating the form column). */
+  const suspectFieldsMeasureRef = useRef<HTMLDivElement>(null);
+  const [pairedRailHeightPx, setPairedRailHeightPx] = useState<number | null>(null);
+  const DESKTOP_RAIL_MIN_PX = 1081;
+
+  useLayoutEffect(() => {
+    const el = suspectFieldsMeasureRef.current;
+    if (!el) return;
+
+    const mq = window.matchMedia(`(min-width: ${DESKTOP_RAIL_MIN_PX}px)`);
+    let rafId = 0;
+
+    const sync = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (!mq.matches) {
+          setPairedRailHeightPx(null);
+          return;
+        }
+        const h = el.getBoundingClientRect().height;
+        if (h > 0) setPairedRailHeightPx(Math.round(h * 100) / 100);
+      });
+    };
+
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    mq.addEventListener('change', sync);
+    sync();
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+      mq.removeEventListener('change', sync);
+    };
+  }, [activeSuspect?.id, selectedSuspectId, isSupportChar]);
+
+  const pairedRailStyle =
+    pairedRailHeightPx != null
+      ? { height: pairedRailHeightPx, maxHeight: pairedRailHeightPx, minHeight: 0 as const }
+      : undefined;
 
   const deceasedSuspect = draftCase.suspects?.find(s => s.isDeceased);
   const otherSuspects = draftCase.suspects?.filter(s => s.id !== activeSuspect?.id) || [];
@@ -838,12 +878,15 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
           </EditorHeader>
 
           <SuspectEditorRow>
-            <PortraitCol>
-              <SuspectPortrait
-                suspect={activeSuspect as any}
-                style={{ width: '100%', height: 'auto', aspectRatio: '1' }}
-                imageLoadingState={imageLoadingStates[selectedSuspectId || '']}
-              />
+            <PortraitCol style={pairedRailStyle}>
+              <PortraitImageWrap>
+                <SuspectPortrait
+                  fillHeight
+                  suspect={activeSuspect as any}
+                  style={{ width: '100%', height: '100%' }}
+                  imageLoadingState={imageLoadingStates[selectedSuspectId || '']}
+                />
+              </PortraitImageWrap>
               <PortraitBtnGrid>
                 <RandomizeButton onClick={onRerollPortrait} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
                   REROLL
@@ -854,90 +897,83 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 >
                   {activeSuspect.portraits?.[Emotion.NEUTRAL] ? 'EDIT' : 'CREATE'}
                 </EditPortraitButton>
-                <UploadButton onClick={onTriggerUpload} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
-                  UPLOAD REF
-                </UploadButton>
-                <PasteButton onClick={() => onPasteFromClipboard(onProcessSuspectImage)} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
-                  PASTE
-                </PasteButton>
-                <CameraButton onClick={onStartCamera} disabled={loadingVisible || !!imageLoadingStates[selectedSuspectId || '']}>
-                  TAKE PHOTO
-                </CameraButton>
               </PortraitBtnGrid>
             </PortraitCol>
 
-            <InputsCol>
-              <FlexRow>
-                <FlexInputGroup>
-                  <label>Name</label>
-                  <input
-                    value={activeSuspect.name}
-                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'name', e.target.value)}
-                  />
-                </FlexInputGroup>
-                {!isSupportChar && (
-                  <NarrowInputGroup>
-                    <label>Age</label>
+            <InputsCol style={pairedRailStyle}>
+              <SuspectFieldsMeasure ref={suspectFieldsMeasureRef}>
+                <FlexRow>
+                  <FlexInputGroup>
+                    <label>Name</label>
                     <input
-                      type="number"
-                      value={(activeSuspect as Suspect).age}
-                      onChange={(e) => onSuspectChange(selectedSuspectId!, 'age', parseInt(e.target.value))}
+                      value={activeSuspect.name}
+                      onChange={(e) => onSuspectChange(selectedSuspectId!, 'name', e.target.value)}
                     />
-                  </NarrowInputGroup>
-                )}
-              </FlexRow>
-              <InputGroup>
-                <label>Role</label>
-                <input
-                  value={activeSuspect.role}
-                  onChange={(e) => onSuspectChange(selectedSuspectId!, 'role', e.target.value)}
-                />
-              </InputGroup>
-              {!isSupportChar && (
+                  </FlexInputGroup>
+                  {!isSupportChar && (
+                    <NarrowInputGroup>
+                      <label>Age</label>
+                      <input
+                        type="number"
+                        value={(activeSuspect as Suspect).age}
+                        onChange={(e) => onSuspectChange(selectedSuspectId!, 'age', parseInt(e.target.value))}
+                      />
+                    </NarrowInputGroup>
+                  )}
+                </FlexRow>
                 <InputGroup>
-                  <label>Status</label>
+                  <label>Role</label>
                   <input
-                    value={(activeSuspect as Suspect).status || ''}
-                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'status', e.target.value)}
-                    placeholder="e.g. Cooperative, Guarded, Tense, Hostile"
+                    value={activeSuspect.role}
+                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'role', e.target.value)}
                   />
                 </InputGroup>
-              )}
-              <InputGroup>
-                <label>Gender</label>
-                <input
-                  value={activeSuspect.gender}
-                  onChange={(e) => onSuspectChange(selectedSuspectId!, 'gender', e.target.value)}
-                />
-              </InputGroup>
-              <InputGroup>
-                <label>Personality</label>
-                <textarea
-                  value={activeSuspect.personality}
-                  onChange={(e) => onSuspectChange(selectedSuspectId!, 'personality', e.target.value)}
-                />
-              </InputGroup>
-              <InputGroup>
-                <label>TTS Voice</label>
-                <FlexRow>
-                  <VoiceDropdown
-                    value={activeSuspect.voice || 'None'}
-                    onChange={(v) => onSuspectChange(selectedSuspectId!, 'voice', v)}
+                {!isSupportChar && (
+                  <InputGroup>
+                    <label>Status</label>
+                    <input
+                      value={(activeSuspect as Suspect).status || ''}
+                      onChange={(e) => onSuspectChange(selectedSuspectId!, 'status', e.target.value)}
+                      placeholder="e.g. Cooperative, Guarded, Tense, Hostile"
+                    />
+                  </InputGroup>
+                )}
+                <InputGroup>
+                  <label>Gender</label>
+                  <input
+                    value={activeSuspect.gender}
+                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'gender', e.target.value)}
                   />
-                  <AccentInput
-                    type="text"
-                    value={activeSuspect.voiceAccent || ''}
-                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'voiceAccent', e.target.value)}
-                    placeholder="Accent..."
+                </InputGroup>
+                <InputGroup>
+                  <label>Personality</label>
+                  <textarea
+                    value={activeSuspect.personality}
+                    onChange={(e) => onSuspectChange(selectedSuspectId!, 'personality', e.target.value)}
                   />
-                  <PreviewButton
-                    onClick={onPreviewVoice}
-                    disabled={!activeSuspect.voice || activeSuspect.voice === 'None' || isPreviewingVoice}
-                  >
-                    {isPreviewingVoice ? '...' : 'Preview'}
-                  </PreviewButton>
-                </FlexRow>
-              </InputGroup>
+                </InputGroup>
+                <InputGroup>
+                  <label>TTS Voice</label>
+                  <FlexRow>
+                    <VoiceDropdown
+                      value={activeSuspect.voice || 'None'}
+                      onChange={(v) => onSuspectChange(selectedSuspectId!, 'voice', v)}
+                    />
+                    <AccentInput
+                      type="text"
+                      value={activeSuspect.voiceAccent || ''}
+                      onChange={(e) => onSuspectChange(selectedSuspectId!, 'voiceAccent', e.target.value)}
+                      placeholder="Accent..."
+                    />
+                    <PreviewButton
+                      onClick={onPreviewVoice}
+                      disabled={!activeSuspect.voice || activeSuspect.voice === 'None' || isPreviewingVoice}
+                    >
+                      {isPreviewingVoice ? '...' : 'Preview'}
+                    </PreviewButton>
+                  </FlexRow>
+                </InputGroup>
+              </SuspectFieldsMeasure>
             </InputsCol>
           </SuspectEditorRow>
 

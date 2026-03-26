@@ -4,9 +4,14 @@ import styled, { keyframes } from 'styled-components';
 import { Suspect, Emotion } from '../types';
 import { getSuspectPortrait } from '../services/geminiService';
 
-export type ImageLoadingState = 'waiting' | 'generating' | null;
+/** `variants` = multi-slot portrait regen (case-review editor). */
+export type ImageLoadingState =
+  | 'waiting'
+  | 'generating'
+  | { kind: 'variants'; remaining: number; total: number }
+  | null;
 
-const Container = styled.div<{ $size?: number }>`
+const Container = styled.div<{ $size?: number; $fillHeight?: boolean }>`
   width: ${props => props.$size ? `${props.$size}px` : '100%'};
   height: ${props => props.$size ? `${props.$size}px` : '100%'};
   display: flex;
@@ -14,8 +19,20 @@ const Container = styled.div<{ $size?: number }>`
   justify-content: center;
   position: relative;
   overflow: hidden;
-  flex-shrink: 0;
   background-color: var(--color-bg);
+  ${(props) =>
+    props.$fillHeight && !props.$size
+      ? `
+    flex: 1 1 0%;
+    min-height: 0;
+    min-width: 0;
+    & img {
+      min-height: 0;
+    }
+  `
+      : `
+    flex-shrink: 0;
+  `}
 `;
 
 const Img = styled.img`
@@ -104,6 +121,8 @@ interface SuspectPortraitProps {
   imageLoadingState?: ImageLoadingState;
   /** When true, hide text labels and only show spinner/dots (auto-set when size <= 60) */
   compact?: boolean;
+  /** Grow to fill a flex column (e.g. case-review editor portrait rail). */
+  fillHeight?: boolean;
 }
 
 const SuspectPortrait: React.FC<SuspectPortraitProps> = ({ 
@@ -115,7 +134,8 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
   style, 
   className,
   imageLoadingState = null,
-  compact: compactProp
+  compact: compactProp,
+  fillHeight = false,
 }) => {
   // Auto-compact when rendered at small sizes
   const isCompact = compactProp ?? (size != null && size <= 60);
@@ -141,7 +161,7 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
   }, [suspect, emotion, aggravation, turnId, suspect.avatarSeed, suspect.portraits]);
 
   return (
-    <Container $size={size} style={style} className={className}>
+    <Container $size={size} $fillHeight={fillHeight} style={style} className={className}>
       {imgSrc ? (
         <Img src={imgSrc} alt={suspect.name} />
       ) : (
@@ -153,6 +173,15 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
             <>
               <SpinnerRing />
               {!isCompact && <LoadingLabel>GENERATING</LoadingLabel>}
+            </>
+          ) : typeof imageLoadingState === 'object' && imageLoadingState.kind === 'variants' ? (
+            <>
+              <SpinnerRing />
+              {!isCompact && (
+                <LoadingLabel>
+                  {imageLoadingState.remaining} variant{imageLoadingState.remaining === 1 ? '' : 's'} left
+                </LoadingLabel>
+              )}
             </>
           ) : (
             <>

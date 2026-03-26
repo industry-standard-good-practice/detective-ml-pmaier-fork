@@ -1,7 +1,17 @@
 import admin from 'firebase-admin';
 import { ai } from "./geminiClient.js";
 import { GEMINI_MODELS } from "./geminiModels.js";
-import { STYLE_REF_URL, PIXEL_ART_BASE, INSTRUCTION_NEW_CHAR, INSTRUCTION_PRESERVE_CHAR, INSTRUCTION_RELATED_EVIDENCE, EVIDENCE_CARD_CLOSEUP_FRAMING, getStyleRefBase64 } from "./geminiStyles.js";
+import {
+  STYLE_REF_URL,
+  PIXEL_ART_BASE,
+  INSTRUCTION_NEW_CHAR,
+  INSTRUCTION_PRESERVE_CHAR,
+  INSTRUCTION_EDIT_EMOTION_POSE,
+  INSTRUCTION_EDIT_REFRAME,
+  INSTRUCTION_RELATED_EVIDENCE,
+  EVIDENCE_CARD_CLOSEUP_FRAMING,
+  getStyleRefBase64,
+} from "./geminiStyles.js";
 import {
   inferVictimPortraitKeyForEvidence,
   environmentScenePortraitKey,
@@ -95,12 +105,14 @@ const buildVictimPrompt = (s: Suspect, theme?: string): string => {
   `;
 };
 
+export type ImageGenMode = 'create' | 'edit' | 'edit_reframe' | 'edit_emotion' | 'evidence';
+
 // --- IMAGE GENERATION HELPER ---
 export const generateImageRaw = async (
   prompt: string,
   aspectRatio: string = '1:1',
   refImages: string[] = [],
-  mode: 'create' | 'edit' | 'evidence' = 'create',
+  mode: ImageGenMode = 'create',
   modelOverride?: string
 ): Promise<string | null> => {
   try {
@@ -137,6 +149,8 @@ export const generateImageRaw = async (
 
     let instruction = INSTRUCTION_NEW_CHAR;
     if (mode === 'edit') instruction = INSTRUCTION_PRESERVE_CHAR;
+    else if (mode === 'edit_reframe') instruction = INSTRUCTION_EDIT_REFRAME;
+    else if (mode === 'edit_emotion') instruction = INSTRUCTION_EDIT_EMOTION_POSE;
     else if (mode === 'evidence') instruction = INSTRUCTION_RELATED_EVIDENCE;
 
     const fullPrompt = `${PIXEL_ART_BASE} ${instruction} ${prompt}`;
@@ -188,6 +202,32 @@ export const generateImageRaw = async (
   }
 };
 
+/**
+ * Affect + posture axes per emotion label (no scripted poses — reduces example overfitting).
+ * Dimensions: valence, arousal, tension, interpersonal openness, approach (withdrawn ↔ forward).
+ */
+const SUSPECT_EMOTION_DIRECTIVES: Record<string, string> = {
+  HAPPY: 'Affect: positive valence, moderate arousal. Musculoskeletal: low tension; open, approachable configuration.',
+  ANGRY: 'Affect: negative valence, high arousal. Musculoskeletal: high tension; confrontational or squared configuration.',
+  SAD: 'Affect: negative valence, low energy. Musculoskeletal: elevated passive tension; collapsed or inward configuration.',
+  NERVOUS:
+    'Affect: negative valence, high arousal. Musculoskeletal: protective or closed configuration; elevated tension in shoulders, jaw, and hands; weight may shift away from the viewer.',
+  SURPRISED: 'Affect: high arousal, abrupt shift. Musculoskeletal: sudden retraction or elevation of upper body; widened facial aperture.',
+  SLY: 'Affect: controlled positive/negative blend; low trust signaling. Musculoskeletal: asymmetric tension; guarded openness.',
+  CONTENT: 'Affect: positive valence, low arousal. Musculoskeletal: low tension; stable, balanced configuration.',
+  DEFENSIVE:
+    'Affect: negative valence, threat sensitivity. Musculoskeletal: closed or blocking configuration; elevated tension; orientation may shift away from the viewer.',
+  ARROGANT: 'Affect: dominance signaling. Musculoskeletal: expanded vertical and frontal projection; controlled high tension.',
+};
+
+const buildSuspectEmotionVariantPrompt = (emo: string, colorDesc: string): string => {
+  const key = emo.toUpperCase();
+  const directive =
+    SUSPECT_EMOTION_DIRECTIVES[key] ||
+    'Encode the label through congruent facial affect and upper-body posture; at least two independent channels (face, shoulders, arms, or stance) must change from neutral.';
+  return `Emotional state: ${key}. ${directive} Keep solid ${colorDesc} background. Single portrait — one figure, one camera. No text, no words.`;
+};
+
 // --- EMOTION GENERATION ---
 const generateEmotionalVariants = async (
   neutralUrl: string,
@@ -202,8 +242,8 @@ const generateEmotionalVariants = async (
   ];
 
   const generateVariation = async (emo: string) => {
-    const prompt = `Keep the character exactly the same, but change expression to ${emo}. Keep solid ${colorDesc} background. No text, no words.`;
-    const raw = await generateImageRaw(prompt, '3:4', [neutralUrl], 'edit');
+    const prompt = buildSuspectEmotionVariantPrompt(emo, colorDesc);
+    const raw = await generateImageRaw(prompt, '3:4', [neutralUrl], 'edit_emotion');
     return raw ? { emo, url: `data:image/png;base64,${raw}` } : null;
   };
 
@@ -222,21 +262,25 @@ const generateEmotionalVariants = async (
 const DECEASED_FORENSIC_NEGATIVE =
   'MANDATORY IF VICTIM VISIBLE: eyes fully CLOSED, eyelids shut, lifeless; no pupils, no eye whites staring. FORBIDDEN: open eyes, wide eyes, staring upward, eye contact, alive or startled expression, standing, smiling, investigators, CSI techs, or living people as subjects. FORBIDDEN: text, UI.';
 
+/** Single-viewpoint constraint for forensic reframes (no composite layouts). */
+const DECEASED_SINGLE_CAMERA_RULE =
+  'FORBIDDEN: multiple viewpoints, inset frames, overlaid regions at mismatched scale, split panels, or dual camera angles in one image. REQUIRED: one homogeneous output — single camera position and crop; subject matter fills the frame per the shot type.';
+
 /** Full edit prompt for one deceased examination view (theme used for ENVIRONMENT framing). */
 const buildDeceasedForensicEditPrompt = (view: string, theme: string): string => {
   switch (view) {
     case Emotion.HEAD:
-      return `ZOOM IN: Extreme close up of the victim's head and face. Eyes are CLOSED. Lifeless. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: closer than reference; subject region head and face only; face occupies majority of frame height and width. Eyes CLOSED, lifeless. Forensic flash. Hair and skin tone consistent with reference. Pixel art. ${DECEASED_SINGLE_CAMERA_RULE} ${DECEASED_FORENSIC_NEGATIVE}`;
     case Emotion.TORSO:
-      return `ZOOM IN: Close up of the victim's chest, shirt, and pockets. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: closer than reference; same scene identity. Subject region upper trunk and garments from reference; face excluded from frame by crop. FORBIDDEN: dual-scale composition where full-scene scale and detail scale both appear as distinct layers. ${DECEASED_SINGLE_CAMERA_RULE} Forensic flash. Garment colors consistent with reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
     case Emotion.HANDS:
-      return `ZOOM IN: Close up of the victim's hands and fingers. Pale skin. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: closer than reference. Primary subject: hands; hands occupy majority of frame; adjacent floor or fabric only as immediate context. No face. ${DECEASED_SINGLE_CAMERA_RULE} Forensic flash. Skin and garment colors consistent with reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
     case Emotion.LEGS:
-      return `ZOOM IN: Close up of the victim's legs, pants, and shoes. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: closer than reference. Primary subject: legs and footwear; lower limbs occupy majority of frame. No face. ${DECEASED_SINGLE_CAMERA_RULE} Forensic flash. Garment colors consistent with reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
     case Emotion.ENVIRONMENT:
-      return `PULL BACK — NOT a portrait crop: medium-wide crime scene shot matching the reference. Same victim and room; show floor, walls, door frame, and furniture with equal weight; victim smaller in frame — investigator overview. If the victim's face appears: eyes CLOSED, lifeless. Theme: ${theme}. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: wide field of view relative to reference; must differ materially in distance, angle, or height. Room architecture and floor plane occupy majority of frame area; victim occupies small fractional area. FORBIDDEN: same viewpoint and field size as reference with only additive objects. Theme: ${theme}. Forensic flash, pixel art. ${DECEASED_SINGLE_CAMERA_RULE} ${DECEASED_FORENSIC_NEGATIVE}`;
     default:
-      return `ZOOM IN: Close up of the victim's torso and clothing. No face. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+      return `CAMERA: closer than reference; subject region upper trunk and garments; single coherent shot. ${DECEASED_SINGLE_CAMERA_RULE} Forensic style. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
   }
 };
 
@@ -247,16 +291,14 @@ const buildEnvironmentScenePortraitPrompt = (ev: Evidence, theme: string): strin
   const includeBody = ev.environmentIncludesBody === true;
 
   if (includeBody) {
-    return `[ENVIRONMENT CLUE — PORTRAIT CARD] Shift camera from the neutral full-body reference toward the area of this beat; do NOT reuse the same floor-centered body composition. ${locBit}Hero subject: "${ev.title}" — ${ev.description}. Theme: ${theme}. The victim may appear only small, partial, or blurred at an edge; if any part of the victim's face is visible: eyes CLOSED, lifeless. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    return `[ENVIRONMENT CLUE — PORTRAIT CARD] Camera must differ from the neutral full-body reference; FORBIDDEN: identical floor-centered body composition. ${locBit}Primary evidence: "${ev.title}" — ${ev.description}. Theme: ${theme}. Victim only small, partial, or edge-blurred; if any face visible: eyes CLOSED, lifeless. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
   }
 
-  return `[ENVIRONMENT CLUE — PORTRAIT CARD — NO BODY IN FRAME] This image must match the investigator examining THIS clue (desk, drawer, shelf, surface, container) — NOT a body examination and NOT a floor crime scene overview.
+  return `[ENVIRONMENT CLUE — PORTRAIT CARD — NO BODY IN FRAME] ${locBit}Depict examination of the clue location — not a body examination and not a floor crime scene overview.
 
-COMPOSITION: TIGHT forensic shot — top-down, angled-down, or over-the-shoulder into the furniture or container. Prioritize: open drawer with visible contents, open cabinet, desk surface with objects, or the exact surface named in the placement. The clue "${ev.title}" must be clearly shown or implied (e.g. journal, object, stain) as the readable hero, consistent with: ${ev.description}.
+COMPOSITION: tight forensic shot; camera aimed into the placement surface or container. Evidence "${ev.title}" is the dominant readable subject, consistent with: ${ev.description}. Camera angle: downward or oblique into the placement; evidence occupies majority of frame.
 
-Use the reference image for room materials and wood tones only — reframe the camera entirely away from the body-on-floor layout. Do NOT show the rug, floor body, or wide room establishing shot.
-
-STRICT: no victim, corpse, body, limbs, human face, investigators, CSI, police, magnifying glass over a person, or living people. No open eyes (no people at all). Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+Use the reference image for room materials and wood tones only; reframe entirely away from the neutral body-centered layout. FORBIDDEN: victim, corpse, body, limbs, human face, investigators, police, magnifying glass over a person, or living people. No open eyes (no people at all). Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
 };
 
 function buildVictimExaminationImagePrompt(view: string, theme: string, hiddenEvidence: Evidence[] | undefined): string {
@@ -282,7 +324,7 @@ const generateForensicVariants = async (
 
   const generateView = async (view: string) => {
     const prompt = buildVictimExaminationImagePrompt(view, theme, hiddenEvidence);
-    const raw = await generateImageRaw(prompt, '3:4', [fullBodyUrl], 'edit', GEMINI_MODELS.IMAGE_HD);
+    const raw = await generateImageRaw(prompt, '3:4', [fullBodyUrl], 'edit_reframe', GEMINI_MODELS.IMAGE_HD);
     return raw ? { view, url: `data:image/png;base64,${raw}` } : null;
   };
 
@@ -430,13 +472,15 @@ export const generateEmotionalVariantsFromBase = async (
   neutralBase64: string,
   suspect: Suspect | SupportCharacter,
   caseId: string,
-  userId: string
+  userId: string,
+  opts?: { caseTheme?: string }
 ): Promise<Record<string, string>> => {
   const isSuspect = (suspect as any).isGuilty !== undefined;
   const isDeceased = isSuspect && (suspect as Suspect).isDeceased;
+  const theme = (opts?.caseTheme && String(opts.caseTheme).trim()) || 'Noir';
 
   const variantPortraits = isDeceased
-    ? await generateForensicVariants(neutralBase64, 'Noir')
+    ? await generateForensicVariants(neutralBase64, theme, (suspect as Suspect).hiddenEvidence)
     : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
 
   const folder = isSuspect ? 'suspects' : 'support';
@@ -450,6 +494,49 @@ export const generateEmotionalVariantsFromBase = async (
   }
 
   return uploadedPortraits;
+};
+
+/**
+ * Generate and upload a single portrait slot from the neutral base (living emotional, deceased forensic, or NEUTRAL upload-only).
+ * Used for progressive variant regeneration from the case-review editor.
+ */
+export const generateOnePortraitVariantFromBase = async (
+  neutralBase64: string,
+  variantKey: string,
+  suspect: Suspect | SupportCharacter,
+  caseId: string,
+  userId: string,
+  opts?: { caseTheme?: string }
+): Promise<{ url: string }> => {
+  if (!userId) throw new Error('[CRITICAL] generateOnePortraitVariantFromBase: userId is required');
+  const isSuspect = (suspect as any).isGuilty !== undefined;
+  const isDeceased = isSuspect && (suspect as Suspect).isDeceased;
+  const theme = (opts?.caseTheme && String(opts.caseTheme).trim()) || 'Noir';
+  const folder = isSuspect ? 'suspects' : 'support';
+  const fileKey = variantKey.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  if (variantKey === Emotion.NEUTRAL) {
+    const url = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/neutral.png`);
+    return { url };
+  }
+
+  if (!isDeceased) {
+    const colorDesc = getSuspectColorDescription(suspect.avatarSeed);
+    const prompt = buildSuspectEmotionVariantPrompt(variantKey, colorDesc);
+    const raw = await generateImageRaw(prompt, '3:4', [neutralBase64], 'edit_emotion');
+    if (!raw) throw new Error(`Failed to generate portrait variant: ${variantKey}`);
+    const b64 = `data:image/png;base64,${raw}`;
+    const url = await uploadImage(b64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/${fileKey}.png`);
+    return { url };
+  }
+
+  const victim = suspect as Suspect;
+  const prompt = buildVictimExaminationImagePrompt(variantKey, theme, victim.hiddenEvidence);
+  const raw = await generateImageRaw(prompt, '3:4', [neutralBase64], 'edit_reframe', GEMINI_MODELS.IMAGE_HD);
+  if (!raw) throw new Error(`Failed to generate forensic variant: ${variantKey}`);
+  const b64 = `data:image/png;base64,${raw}`;
+  const url = await uploadImage(b64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/${fileKey}.png`);
+  return { url };
 };
 
 export const generateSuspectFromUpload = async (
@@ -782,13 +869,14 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
         colorDesc = "city street or tech lab";
       }
 
+      const variantMode: ImageGenMode = isDeceased ? 'edit_reframe' : 'edit_emotion';
       if (isDeceased) {
         prompt = buildVictimExaminationImagePrompt(task.emotion, caseData.type || 'Noir', s?.hiddenEvidence);
       } else {
-        prompt = `Keep the character exactly the same, but change expression to ${task.emotion}. Keep solid/consistent ${colorDesc} background. No text, no words.`;
+        prompt = buildSuspectEmotionVariantPrompt(task.emotion, colorDesc);
       }
 
-      const b64 = await generateImageRaw(prompt, '3:4', [task.neutralUrl], 'edit', GEMINI_MODELS.IMAGE_HD);
+      const b64 = await generateImageRaw(prompt, '3:4', [task.neutralUrl], variantMode, GEMINI_MODELS.IMAGE_HD);
 
       if (b64) {
         const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/${task.type === 'suspect' ? 'suspects' : 'partner'}/${task.targetId}/${task.emotion}.png`);

@@ -124,10 +124,29 @@ export const generateEmotionalVariantsFromBase = async (
     neutralBase64: string,
     suspect: Suspect | SupportCharacter,
     caseId: string,
-    userId: string
+    userId: string,
+    caseTheme?: string
 ): Promise<Record<string, string>> => {
     return geminiPost<Record<string, string>>('/image/variants', {
-        neutralBase64, suspect, caseId, userId
+        neutralBase64, suspect, caseId, userId, caseTheme: caseTheme || undefined,
+    });
+};
+
+export const generateOnePortraitVariantFromBase = async (
+    neutralBase64: string,
+    variantKey: string,
+    suspect: Suspect | SupportCharacter,
+    caseId: string,
+    userId: string,
+    caseTheme?: string
+): Promise<{ url: string }> => {
+    return geminiPost<{ url: string }>('/image/variant-one', {
+        neutralBase64,
+        variantKey,
+        suspect,
+        caseId,
+        userId,
+        caseTheme: caseTheme || undefined,
     });
 };
 

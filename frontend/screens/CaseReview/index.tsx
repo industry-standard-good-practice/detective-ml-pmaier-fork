@@ -7,12 +7,13 @@ import { CaseData, Suspect, Emotion, Evidence } from '../../types';
 import { TTS_VOICES, getRandomVoice } from '../../constants';
 import { generateTTS } from '../../services/geminiTTS';
 import { playAudioFromUrl } from '../../services/audioPlayer';
-import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateEmotionalVariantsFromBase } from '../../services/geminiService';
+import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateOnePortraitVariantFromBase } from '../../services/geminiService';
 import { type ImageLoadingState } from '@/components/SuspectPortrait';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
 import ImageEditorModal from '@/components/ImageEditorModal';
 import Spinner from '@/components/Spinner';
+import { getPortraitVariantSlots } from '../../utils/portraitVariantSlots';
 
 // Sub-components
 import CaseDetailsPanel from './CaseDetailsPanel';
@@ -207,13 +208,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const [loadingState, setLoadingState] = useState<{ visible: boolean, message: string, step?: string, stepDetail?: string }>({ visible: false, message: '' });
   const [showCamera, setShowCamera] = useState(false);
   const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
-  const [showSuspectEditor, setShowSuspectEditor] = useState(false);
+  /** Visible overlay vs hidden-but-mounted (in-flight generate / regen). */
+  const [suspectEditorVisible, setSuspectEditorVisible] = useState(false);
+  const [suspectEditorKeepAlive, setSuspectEditorKeepAlive] = useState(false);
   const [showHeroEditor, setShowHeroEditor] = useState(false);
   const [heroMode, setHeroMode] = useState<'suspect' | 'evidence' | 'custom'>('custom');
   const [editPrompt, setEditPrompt] = useState('');
   const [mobileTab, setMobileTab] = useState<'case' | 'suspects'>('case');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const suspectEditorCameraCaptureRef = useRef<((dataUrl: string) => void) | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // --- PER-CHARACTER IMAGE LOADING STATES ---
@@ -573,19 +576,131 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     toast.success('Image regeneration complete!');
   };
 
-  const handleSaveEditedSuspect = async (newImageUrl: string, onProgress?: (current: number, total: number) => void) => {
-    if (!activeSuspect) return;
+  const handleSaveEditedSuspect = async (
+    newImageUrl: string,
+    _onProgress?: (current: number, total: number) => void,
+    meta?: { variantKey?: string }
+  ) => {
+    if (!userId) {
+      toast.error('Cannot save: No user ID.');
+      return;
+    }
+    const sid = selectedSuspectId;
+    if (!sid) return;
+    const variantKey = meta?.variantKey ?? Emotion.NEUTRAL;
+
+    const { uploadImage } = await import('../../services/firebase');
+    const currentDraft = latestDraftRef.current;
+    const folder = sid === 'officer' || sid === 'partner' ? 'support' : 'suspects';
+    const fileName = `${variantKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
+    const path = `images/${userId}/cases/${currentDraft.id}/${folder}/${sid}/${fileName}`;
+
     try {
-      const updatedPortraits = await generateEmotionalVariantsFromBase(newImageUrl, activeSuspect as any, draftCase.id, userId!);
-      handleSuspectChange(activeSuspect.id, 'portraits', updatedPortraits);
-      setShowSuspectEditor(false);
-    } catch (err) {
+      const uploadedUrl = await uploadImage(newImageUrl, path);
+      const char =
+        sid === 'officer'
+          ? currentDraft.officer
+          : sid === 'partner'
+            ? currentDraft.partner
+            : currentDraft.suspects?.find((s) => s.id === sid);
+      if (!char) return;
+      const portraits = { ...(char.portraits || {}), [variantKey]: uploadedUrl };
+      if (sid === 'officer') {
+        safeUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits } });
+      } else if (sid === 'partner') {
+        safeUpdateDraft({ ...currentDraft, partner: { ...currentDraft.partner, portraits } });
+      } else {
+        const newSuspects = currentDraft.suspects.map((s) => (s.id === sid ? { ...s, portraits } : s));
+        safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
+      }
+      setSuspectEditorVisible(false);
+      setSuspectEditorKeepAlive(false);
+      toast.success('Portrait saved.');
+    } catch (err: any) {
       console.error(err);
+      toast.error(err?.message || 'Save failed.');
       throw err;
     }
   };
 
-  const handleSaveHeroImage = async (newImageUrl: string) => {
+  const handleRegenerateAllVariantsFromModal = async (
+    neutralDataUrl: string,
+    onProgress?: (current: number, total: number) => void
+  ) => {
+    if (!userId) {
+      toast.error('Cannot regenerate: No user ID.');
+      return;
+    }
+    const sid = selectedSuspectId;
+    if (!sid) return;
+    const currentDraft = latestDraftRef.current;
+    const char =
+      sid === 'officer'
+        ? currentDraft.officer
+        : sid === 'partner'
+          ? currentDraft.partner
+          : currentDraft.suspects?.find((s) => s.id === sid);
+    if (!char) return;
+
+    const slots = getPortraitVariantSlots(char as any);
+    const total = slots.length;
+    if (total === 0) return;
+
+    onProgress?.(0, total);
+    setImageLoadingStates((prev) => ({
+      ...prev,
+      [sid]: { kind: 'variants', remaining: total, total },
+    }));
+
+    let portraits: Record<string, string> = { ...(char.portraits || {}) };
+
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
+      const { url } = await generateOnePortraitVariantFromBase(
+        neutralDataUrl,
+        slot.key,
+        char as any,
+        currentDraft.id,
+        userId,
+        currentDraft.type || 'Noir'
+      );
+      portraits = { ...portraits, [slot.key]: url };
+      const completed = i + 1;
+      onProgress?.(completed, total);
+
+      const fresh = latestDraftRef.current;
+      const remaining = total - completed;
+      setImageLoadingStates((prev) => ({
+        ...prev,
+        [sid]: remaining > 0 ? { kind: 'variants', remaining, total } : null,
+      }));
+
+      if (sid === 'officer') {
+        safeUpdateDraft({
+          ...fresh,
+          officer: { ...fresh.officer, portraits: { ...fresh.officer.portraits, ...portraits } },
+        });
+      } else if (sid === 'partner') {
+        safeUpdateDraft({
+          ...fresh,
+          partner: { ...fresh.partner, portraits: { ...fresh.partner.portraits, ...portraits } },
+        });
+      } else {
+        const newSuspects = fresh.suspects.map((s) =>
+          s.id === sid ? { ...s, portraits: { ...s.portraits, ...portraits } } : s
+        );
+        safeUpdateDraft({ ...fresh, suspects: newSuspects });
+      }
+    }
+
+    toast.success('All variants regenerated.');
+  };
+
+  const handleSaveHeroImage = async (
+    newImageUrl: string,
+    _onProgress?: (current: number, total: number) => void,
+    _meta?: { variantKey?: string }
+  ) => {
     setLoadingState({ visible: true, message: "Uploading Hero Image..." });
     try {
       const { uploadImage } = await import('../../services/firebase');
@@ -658,18 +773,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0]) return;
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (!event.target?.result) return;
-      processSuspectImage(event.target.result as string);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
   const handlePasteFromClipboard = async (callback: (base64: string) => void) => {
     try {
       const items = await navigator.clipboard.read();
@@ -718,6 +821,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(t => t.stop());
     }
+    suspectEditorCameraCaptureRef.current = null;
     setShowCamera(false);
   };
 
@@ -730,7 +834,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     if (ctx) {
       ctx.drawImage(videoRef.current, 0, 0);
       const base64 = canvas.toDataURL('image/png');
+      const captureCb = suspectEditorCameraCaptureRef.current;
+      suspectEditorCameraCaptureRef.current = null;
       stopCamera();
+      if (captureCb) {
+        captureCb(base64);
+        return;
+      }
       processSuspectImage(base64);
     }
   };
@@ -957,12 +1067,33 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         </CameraOverlay>
       )}
 
-      {showSuspectEditor && activeSuspect && (
+      {(suspectEditorVisible || suspectEditorKeepAlive) && activeSuspect && (
         <ImageEditorModal
+          visible={suspectEditorVisible}
           title={activeSuspect.portraits?.[Emotion.NEUTRAL] ? `Edit ${activeSuspect.name}` : `Create ${activeSuspect.name}`}
-          initialImageUrl={activeSuspect.portraits?.[Emotion.NEUTRAL] || undefined}
-          onClose={() => setShowSuspectEditor(false)}
+          portraitSlots={getPortraitVariantSlots(activeSuspect as any)}
+          portraitUrls={activeSuspect.portraits || {}}
+          onClose={() => setSuspectEditorVisible(false)}
+          onBusyChange={(busy, meta) => {
+            setSuspectEditorKeepAlive(busy);
+            if (!busy) {
+              if (selectedSuspectId) {
+                setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: null }));
+              }
+              return;
+            }
+            if (meta?.regenerateAll) return;
+            if (selectedSuspectId) {
+              setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: 'generating' }));
+            }
+          }}
           onSave={handleSaveEditedSuspect}
+          onRegenerateAllVariants={handleRegenerateAllVariantsFromModal}
+          onPasteFromClipboard={handlePasteFromClipboard}
+          onRequestCamera={(onCaptured) => {
+            suspectEditorCameraCaptureRef.current = onCaptured;
+            startCamera();
+          }}
           aspectRatio="3:4"
         />
       )}
@@ -974,10 +1105,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           onClose={() => setShowHeroEditor(false)}
           onSave={handleSaveHeroImage}
           aspectRatio="16:9"
+          onPasteFromClipboard={handlePasteFromClipboard}
+          onRequestCamera={(onCaptured) => {
+            suspectEditorCameraCaptureRef.current = onCaptured;
+            startCamera();
+          }}
         />
       )}
-
-      <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={handleImageUpload} />
 
       <MobileTabBar>
         <MobileTab $active={mobileTab === 'case'} onClick={() => setMobileTab('case')}>CASE DETAILS</MobileTab>
@@ -1021,11 +1155,10 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         onDeleteSuspect={handleDeleteSuspect}
         onRetryAI={handleRetryAI}
         onRerollPortrait={handleRerollPortrait}
-        onShowSuspectEditor={() => setShowSuspectEditor(true)}
-        onTriggerUpload={() => { if (fileInputRef.current) fileInputRef.current.click(); }}
-        onPasteFromClipboard={handlePasteFromClipboard}
-        onProcessSuspectImage={processSuspectImage}
-        onStartCamera={startCamera}
+        onShowSuspectEditor={() => {
+          setSuspectEditorVisible(true);
+          setSuspectEditorKeepAlive(true);
+        }}
         onPreviewVoice={handlePreviewVoice}
         onRerollEvidence={handleRerollEvidence}
         onTransferEvidence={handleTransferEvidence}
