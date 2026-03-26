@@ -193,13 +193,10 @@ const ChatLog: React.FC<ChatLogProps> = ({
   }
   const shouldShowEvidenceTooltip = !evidenceTooltipSeen && firstUncollectedMsgIdx !== -1;
 
-  // Auto-scroll to evidence chip and track its position
+  // Show evidence onboarding when first uncollected evidence exists (chat already scrolls to latest)
   useEffect(() => {
     if (shouldShowEvidenceTooltip && !showEvidenceTooltip) {
       setShowEvidenceTooltip(true);
-      setTimeout(() => {
-        evidenceChipRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
     } else if (!shouldShowEvidenceTooltip) {
       setShowEvidenceTooltip(false);
       setEvidenceChipRect(null);

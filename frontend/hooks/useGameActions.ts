@@ -626,6 +626,7 @@ export const useGameActions = ({
 
       // Find actual Evidence object in known lists
       let foundEvidence: Evidence | undefined;
+      let evidenceResolutionSource: 'hidden' | 'initial' | 'synthetic' = 'synthetic';
       
       // Check Hidden Evidence for Suspects
       const suspect = currentCase.suspects.find(s => s.id === suspectId);
@@ -634,6 +635,7 @@ export const useGameActions = ({
               e.title.toLowerCase() === parsedTitle.toLowerCase() || 
               parsedTitle.toLowerCase().includes(e.title.toLowerCase())
           );
+          if (foundEvidence) evidenceResolutionSource = 'hidden';
       }
       
       // Fallback: Check Initial Evidence
@@ -641,6 +643,7 @@ export const useGameActions = ({
           foundEvidence = currentCase.initialEvidence.find(e => 
             e.title.toLowerCase() === parsedTitle.toLowerCase()
           );
+          if (foundEvidence) evidenceResolutionSource = 'initial';
       }
 
       // If not found (AI hallucinated new item), create entry with parsed title/desc
@@ -652,6 +655,10 @@ export const useGameActions = ({
               imageUrl: undefined
           };
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H2',location:'useGameActions.ts:collectEvidence',message:'resolved evidence source',data:{suspectId,parsedTitle,resolvedSource:evidenceResolutionSource,resolvedTitle:foundEvidence?.title},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       const alreadyHas = prev.evidenceDiscovered.some(e => e.title === foundEvidence!.title);
       if (!alreadyHas) {

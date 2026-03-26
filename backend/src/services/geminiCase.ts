@@ -1,6 +1,7 @@
 
 import { Type, ThinkingLevel } from "@google/genai";
-import { ai, GEMINI_MODELS } from "./geminiClient.js";
+import { ai } from "./geminiClient.js";
+import { GEMINI_MODELS } from "./geminiModels.js";
 import { generateEvidenceImage, regenerateSingleSuspect } from "./geminiImages.js";
 
 // Inline CaseData type alias (the full type lives in the frontend)

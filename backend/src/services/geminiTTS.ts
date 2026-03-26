@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import { GEMINI_MODELS } from "./geminiClient.js";
+import { GEMINI_MODELS } from "./geminiModels.js";
 
 /**
  * Generates TTS audio and returns the raw base64-encoded audio data.

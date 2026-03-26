@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
-import { ai, GEMINI_MODELS } from "./geminiClient.js";
+import { ai } from "./geminiClient.js";
+import { GEMINI_MODELS } from "./geminiModels.js";
 import { STYLE_REF_URL, PIXEL_ART_BASE, INSTRUCTION_NEW_CHAR, INSTRUCTION_PRESERVE_CHAR, INSTRUCTION_RELATED_EVIDENCE, getStyleRefBase64 } from "./geminiStyles.js";
 
 // --- Types ---

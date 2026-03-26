@@ -1,5 +1,10 @@
 import { Type } from "@google/genai";
-import { ai, GEMINI_MODELS } from "./geminiClient.js";
+import { ai } from "./geminiClient.js";
+import {
+  GEMINI_MODELS,
+  CHAT_SUSPECT_MODEL_PRIORITY,
+  isRetryableChatModelOverloadError,
+} from "./geminiModels.js";
 
 /**
  * All chat-related Gemini service functions.
@@ -73,6 +78,10 @@ export const getSuspectResponse = async (
 
   const unrevealedStr = unrevealedItems.length > 0 ? unrevealedItems.map(e => `${e.title} (${e.description})`).join('; ') : "None";
   const revealedStr = revealedItems.length > 0 ? revealedItems.map(e => `${e.title} (${e.description})`).join('; ') : "None";
+
+  // #region agent log
+  fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1-H3-H5',location:'geminiChat.ts:getSuspectResponse:inputs',message:'suspect evidence context',data:{suspectId:suspect.id,suspectName:suspect.name,hiddenTitles:(suspect.hiddenEvidence||[]).map(e=>e.title),initialTitles:(caseData.initialEvidence||[]).map(e=>e.title),discoveredTitleCount:discoveredTitles.size,hasAttachment:!!evidenceAttachment},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const observations = suspect.witnessObservations || "None";
 
@@ -256,35 +265,59 @@ export const getSuspectResponse = async (
       `;
   }
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODELS.CHAT,
-    contents: systemPrompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING },
-          emotion: { type: Type.STRING },
-          aggravationDelta: { type: Type.NUMBER },
-          revealedEvidence: { type: Type.ARRAY, items: { type: Type.STRING } },
-          revealedTimelineStatements: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                time: { type: Type.STRING },
-                statement: { type: Type.STRING },
-                day: { type: Type.STRING },
-                dayOffset: { type: Type.NUMBER }
-              }
+  const suspectChatConfig = {
+    responseMimeType: "application/json" as const,
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        text: { type: Type.STRING },
+        emotion: { type: Type.STRING },
+        aggravationDelta: { type: Type.NUMBER },
+        revealedEvidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+        revealedTimelineStatements: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              time: { type: Type.STRING },
+              statement: { type: Type.STRING },
+              day: { type: Type.STRING },
+              dayOffset: { type: Type.NUMBER }
             }
-          },
-          hints: { type: Type.ARRAY, items: { type: Type.STRING } }
-        }
+          }
+        },
+        hints: { type: Type.ARRAY, items: { type: Type.STRING } }
       }
     }
-  });
+  };
+
+  let response: Awaited<ReturnType<typeof ai.models.generateContent>> | undefined;
+  let lastErr: unknown;
+  for (let i = 0; i < CHAT_SUSPECT_MODEL_PRIORITY.length; i++) {
+    const model = CHAT_SUSPECT_MODEL_PRIORITY[i];
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents: systemPrompt,
+        config: suspectChatConfig
+      });
+      if (i > 0) {
+        console.warn(`[Gemini] getSuspectResponse: succeeded with fallback model ${model}`);
+      }
+      break;
+    } catch (err) {
+      lastErr = err;
+      const hasFallback = i < CHAT_SUSPECT_MODEL_PRIORITY.length - 1;
+      if (!hasFallback || !isRetryableChatModelOverloadError(err)) {
+        throw err;
+      }
+      const snippet = String((err as Error).message ?? err);
+      console.warn(
+        `[Gemini] getSuspectResponse: model ${model} unavailable; retrying with ${CHAT_SUSPECT_MODEL_PRIORITY[i + 1]}. ${snippet.slice(0, 200)}`
+      );
+    }
+  }
+  if (!response) throw lastErr ?? new Error("Suspect chat: no model response");
 
   const data = JSON.parse(response.text!);
   console.log(`[Gemini] getSuspectResponse: AI Output`, data);
@@ -293,6 +326,15 @@ export const getSuspectResponse = async (
   if (Array.isArray(data.revealedEvidence)) {
     parsedEvidence = data.revealedEvidence.filter((e: any) => typeof e === 'string' && e.trim().length > 0);
   }
+
+  // #region agent log
+  const hiddenTitleSet = new Set((suspect.hiddenEvidence || []).map(e => e.title.toLowerCase()));
+  const notInSuspectHidden = parsedEvidence.filter((t: string) => {
+    const clean = t.includes(':') ? t.split(':')[0].trim().toLowerCase() : t.trim().toLowerCase();
+    return !Array.from(hiddenTitleSet).some(ht => clean === ht || clean.includes(ht) || ht.includes(clean));
+  });
+  fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1',location:'geminiChat.ts:getSuspectResponse:parsed',message:'model revealedEvidence vs suspect hiddenEvidence',data:{suspectId:suspect.id,parsedEvidence,notInSuspectHidden,countInvalid:notInSuspectHidden.length},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return {
     text: data.text,
