@@ -14,10 +14,12 @@ export type RerollImageLoadingState = {
 };
 
 /** `variants` = multi-slot portrait regen (case-review editor). */
+/** `single-variant` = one slot regen or modal nano-generate for that key. */
 export type ImageLoadingState =
   | 'waiting'
   | 'generating'
   | { kind: 'variants'; remaining: number; total: number }
+  | { kind: 'single-variant'; variantKey: string }
   | RerollImageLoadingState
   | null;
 
@@ -180,6 +182,11 @@ const SuspectPortrait: React.FC<SuspectPortraitProps> = ({
       {imageLoadingState && (
         <LoadingOverlay>
           {imageLoadingState === 'generating' ? (
+            <>
+              <SpinnerRing />
+              {!isCompact && <LoadingLabel>GENERATING</LoadingLabel>}
+            </>
+          ) : typeof imageLoadingState === 'object' && imageLoadingState.kind === 'single-variant' ? (
             <>
               <SpinnerRing />
               {!isCompact && <LoadingLabel>GENERATING</LoadingLabel>}

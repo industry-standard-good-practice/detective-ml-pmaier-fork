@@ -397,7 +397,13 @@ export interface ImageEditorModalProps {
   /** Fires when generate/save/regenerate-all busy state changes (for parent loading UI + keep-alive). */
   onBusyChange?: (
     busy: boolean,
-    meta?: { regenerateAll?: boolean; regenerateVariant?: boolean; saving?: boolean }
+    meta?: {
+      regenerateAll?: boolean;
+      regenerateVariant?: boolean;
+      saving?: boolean;
+      /** Portrait mode: which variant is being nano-edited (for carousel thumb loading). */
+      generatingVariantKey?: string;
+    }
   ) => void;
   aspectRatio?: string;
   title?: string;
@@ -414,7 +420,7 @@ export interface ImageEditorModalProps {
   onRequestCamera?: (onCaptured: (dataUrl: string) => void) => void;
   /** Parent-driven portrait work (reroll, background gen) — show progress and lock edits until cleared. */
   externalPortraitLoading?: ImageLoadingState | null;
-  /** Per carousel slot during progressive reroll (from parent). */
+  /** Per carousel slot when portraits are loading (reroll, regen variants, nano edit, etc.). */
   variantSlotStatus?: Record<string, 'idle' | 'loading' | 'done'> | null;
 }
 
@@ -523,8 +529,12 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       regenerateAll: isRegeneratingAll,
       regenerateVariant: isRegeneratingVariant,
       saving: isSaving,
+      generatingVariantKey:
+        portraitMode && isGenerating && !isRegeneratingAll && !isRegeneratingVariant
+          ? selectedVariantKey
+          : undefined,
     });
-  }, [isGenerating, isSaving, isRegeneratingAll, isRegeneratingVariant]);
+  }, [isGenerating, isSaving, isRegeneratingAll, isRegeneratingVariant, portraitMode, selectedVariantKey]);
 
   const handlePasteFromClipboard = async () => {
     if (!onPasteFromClipboard) {
@@ -759,6 +769,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             ? externalPortraitLoading.total > 0
               ? `Regenerating variants… ${externalPortraitLoading.total - externalPortraitLoading.remaining} / ${externalPortraitLoading.total}`
               : 'Regenerating variants…'
+            : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'single-variant'
+              ? 'Regenerating portrait…'
             : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'reroll'
               ? externalPortraitLoading.statusMessage
               : 'Working…';

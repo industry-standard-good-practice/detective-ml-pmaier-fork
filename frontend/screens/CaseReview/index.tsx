@@ -424,24 +424,66 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       draftCase.suspects?.find(s => s.id === selectedSuspectId);
   const isSupportChar = selectedSuspectId === 'officer' || selectedSuspectId === 'partner';
 
-  const portraitRerollSlotStatus = useMemo(() => {
+  const portraitCarouselSlotStatus = useMemo(() => {
     if (!selectedSuspectId || !activeSuspect) return null;
     const st = imageLoadingStates[selectedSuspectId];
-    if (!st || typeof st !== 'object' || st.kind !== 'reroll') return null;
+    if (st == null) return null;
+
     const slots = getPortraitVariantSlots(activeSuspect as any);
-    const out: Record<string, 'idle' | 'loading' | 'done'> = {};
-    for (const s of slots) {
-      if (st.phase === 'evidence') {
-        out[s.key] = 'done';
-      } else if (st.activeSlotKey === s.key) {
+    if (slots.length === 0) return null;
+
+    if (st === 'generating') {
+      const out: Record<string, 'idle' | 'loading' | 'done'> = {};
+      for (const s of slots) {
         out[s.key] = 'loading';
-      } else if (st.completedSlotKeys.includes(s.key)) {
-        out[s.key] = 'done';
-      } else {
-        out[s.key] = 'idle';
       }
+      return out;
     }
-    return out;
+
+    if (typeof st !== 'object') return null;
+
+    if (st.kind === 'reroll') {
+      const out: Record<string, 'idle' | 'loading' | 'done'> = {};
+      for (const s of slots) {
+        if (st.phase === 'evidence') {
+          out[s.key] = 'done';
+        } else if (st.activeSlotKey === s.key) {
+          out[s.key] = 'loading';
+        } else if (st.completedSlotKeys.includes(s.key)) {
+          out[s.key] = 'done';
+        } else {
+          out[s.key] = 'idle';
+        }
+      }
+      return out;
+    }
+
+    if (st.kind === 'variants') {
+      const { remaining, total } = st;
+      if (remaining <= 0 || total <= 0) return null;
+      const activeIdx = total - remaining;
+      const out: Record<string, 'idle' | 'loading' | 'done'> = {};
+      for (let i = 0; i < slots.length; i++) {
+        const s = slots[i];
+        if (i < activeIdx) out[s.key] = 'done';
+        else if (i === activeIdx) out[s.key] = 'loading';
+        else out[s.key] = 'idle';
+      }
+      return out;
+    }
+
+    if (st.kind === 'single-variant') {
+      const out: Record<string, 'idle' | 'loading' | 'done'> = {};
+      const portraits = (activeSuspect as Suspect).portraits;
+      for (const s of slots) {
+        if (s.key === st.variantKey) out[s.key] = 'loading';
+        else if (portraits?.[s.key]) out[s.key] = 'done';
+        else out[s.key] = 'idle';
+      }
+      return out;
+    }
+
+    return null;
   }, [imageLoadingStates, selectedSuspectId, activeSuspect]);
 
   // --- HANDLERS ---
@@ -737,7 +779,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           : currentDraft.suspects?.find((s) => s.id === sid);
     if (!char) return;
 
-    setImageLoadingStates((prev) => ({ ...prev, [sid]: 'generating' }));
+    setImageLoadingStates((prev) => ({ ...prev, [sid]: { kind: 'single-variant', variantKey } }));
     try {
       const { url } = await generateOnePortraitVariantFromBase(
         neutralDataUrl,
@@ -1272,7 +1314,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             if (meta?.regenerateAll || meta?.regenerateVariant || meta?.saving) return;
             if (selectedSuspectId) {
               modalPortraitLoadingSyncRef.current = true;
-              setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: 'generating' }));
+              setImageLoadingStates((prev) => ({
+                ...prev,
+                [selectedSuspectId]:
+                  meta?.generatingVariantKey != null && meta.generatingVariantKey !== ''
+                    ? { kind: 'single-variant', variantKey: meta.generatingVariantKey }
+                    : 'generating',
+              }));
             }
           }}
           onSave={handleSaveEditedSuspect}
@@ -1285,7 +1333,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           }}
           aspectRatio="3:4"
           externalPortraitLoading={selectedSuspectId ? imageLoadingStates[selectedSuspectId] ?? null : null}
-          variantSlotStatus={portraitRerollSlotStatus}
+          variantSlotStatus={portraitCarouselSlotStatus}
         />
       )}
 
