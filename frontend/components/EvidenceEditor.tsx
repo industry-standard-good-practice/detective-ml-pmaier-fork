@@ -2,7 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Evidence, Suspect } from '../types';
-import { TextInput, TextArea, Button } from './ui';
+import { TextInput, TextArea, Button, Dropdown, Checkbox } from './ui';
+import type { DropdownOption } from './ui';
 import { ImageSlot } from './ui/PixelImage';
 import { type } from '../theme';
 import { type ImageLoadingState } from './SuspectPortrait';
@@ -99,6 +100,11 @@ const EmptyState = styled.div`
   padding: calc(var(--space) * 1.25);
   border: 1px dashed var(--color-border);
 `;
+
+const DISCOVERY_CONTEXT_OPTIONS: DropdownOption[] = [
+  { value: 'body', label: 'On body / clothing' },
+  { value: 'environment', label: 'In room / scene' },
+];
 
 /* ─── Evidence Loading Overlay ─── */
 
@@ -296,6 +302,8 @@ interface EvidenceEditorProps {
   onTransferEvidence?: (evidence: Evidence, fromOwner: OwnerKey, toOwner: OwnerKey) => void;
   /** Per-evidence loading states, keyed by `ev-${evidence.id}` */
   imageLoadingStates?: Record<string, ImageLoadingState>;
+  /** Victim card: clue is on body vs in room; drives examination + image prompts */
+  victimExamMode?: boolean;
 }
 
 const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
@@ -307,21 +315,27 @@ const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
   suspects,
   onTransferEvidence,
   imageLoadingStates,
+  victimExamMode = false,
 }) => {
 
-  const handleChange = (index: number, field: 'title' | 'description', value: string) => {
+  const handleChange = (index: number, field: 'title' | 'location' | 'description', value: string) => {
     const newList = [...evidenceList];
     newList[index] = { ...newList[index], [field]: value };
     onChange(newList);
   };
 
   const handleAdd = () => {
-    onChange([...evidenceList, {
+    const base: Evidence = {
       id: `new-${Date.now()}`,
       title: "New Item",
+      location: "",
       description: "Description...",
       imageUrl: undefined
-    }]);
+    };
+    if (victimExamMode) {
+      base.discoveryContext = 'body';
+    }
+    onChange([...evidenceList, base]);
   };
 
   const handleDelete = (index: number) => {
@@ -372,6 +386,48 @@ const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
                 onChange={(e) => handleChange(i, 'title', e.target.value)}
                 placeholder="Title"
               />
+              <TextInput
+                value={ev.location ?? ''}
+                onChange={(e) => handleChange(i, 'location', e.target.value)}
+                placeholder={
+                  victimExamMode
+                    ? (ev.discoveryContext === 'environment' ? "Where in the room (e.g. under nightstand)" : "Where on body (e.g. inner breast pocket)")
+                    : ownerKey === 'initial'
+                      ? "Where found (crime scene)"
+                      : "Where hidden (e.g. inner breast pocket)"
+                }
+              />
+              {victimExamMode && (
+                <Dropdown
+                  title="Where this clue is found"
+                  options={DISCOVERY_CONTEXT_OPTIONS}
+                  value={ev.discoveryContext === 'environment' ? 'environment' : 'body'}
+                  onChange={(raw) => {
+                    const newList = [...evidenceList];
+                    const v = raw as 'body' | 'environment';
+                    const next: Evidence = { ...newList[i], discoveryContext: v };
+                    if (v === 'body') {
+                      delete next.environmentIncludesBody;
+                    } else if (next.environmentIncludesBody === undefined) {
+                      next.environmentIncludesBody = false;
+                    }
+                    newList[i] = next;
+                    onChange(newList);
+                  }}
+                />
+              )}
+              {victimExamMode && ev.discoveryContext === 'environment' && (
+                <Checkbox
+                  checked={ev.environmentIncludesBody === true}
+                  onChange={(nextChecked) => {
+                    const newList = [...evidenceList];
+                    newList[i] = { ...newList[i], environmentIncludesBody: nextChecked };
+                    onChange(newList);
+                  }}
+                >
+                  Evidence image may include body (background)
+                </Checkbox>
+              )}
               <TextArea
                 value={ev.description}
                 onChange={(e) => handleChange(i, 'description', e.target.value)}

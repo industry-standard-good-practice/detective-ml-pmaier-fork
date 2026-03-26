@@ -13,6 +13,10 @@ export const INSTRUCTION_PRESERVE_CHAR = "[STRICT INSTRUCTION]: The provided ima
 
 export const INSTRUCTION_RELATED_EVIDENCE = "[STRICT INSTRUCTION]: The provided reference image is the SUBJECT (e.g., the victim). You are generating a CLOSE-UP or DETAIL of a specific piece of evidence RELATED to this subject. Maintain consistency with the subject's skin tone, clothing colors, and materials shown in the reference. The evidence should look like it belongs to or was found on the subject.";
 
+/** Evidence *card* image (inventory thumbnail): the physical clue must fill the frame — not a wide room establishing shot. */
+export const EVIDENCE_CARD_CLOSEUP_FRAMING =
+  "COMPOSITION (evidence card image): TIGHT forensic close-up or tight medium shot — the physical evidence object is the clear hero, large and readable in frame. Do NOT use a wide establishing shot, panoramic room view, or tiny prop lost in empty space. Any room, rug, furniture, or body may appear only at the edges, cropped, or heavily out of focus — never the main subject.";
+
 let _styleRefCache: string | null = null;
 
 export const getStyleRefBase64 = async (): Promise<string | null> => {

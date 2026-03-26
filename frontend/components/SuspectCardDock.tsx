@@ -145,7 +145,7 @@ interface SuspectCardDockProps {
   activePosition?: { x: number; y: number };
   activeCardWidth?: string;
   activeCardHeight?: string;
-  activeEmotion?: Emotion;
+  activeEmotion?: Emotion | string;
   activeAggravation?: number;
   activeTurnId?: string;
   activeVariant?: 'default' | 'peek';

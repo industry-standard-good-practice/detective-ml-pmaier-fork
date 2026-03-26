@@ -744,6 +744,20 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
                     const origEv = (orig.hiddenEvidence || []).find((oe: any) => oe.id === ev.id || oe.title === ev.title);
                     ev.description = origEv?.description || ev.title;
                 }
+                const origEvHe = (orig.hiddenEvidence || []).find((oe: any) => oe.id === ev.id || oe.title === ev.title);
+                if (typeof ev.location !== 'string' || !ev.location.trim()) {
+                    ev.location = (origEvHe && typeof origEvHe.location === 'string' && origEvHe.location.trim()) ? origEvHe.location : '';
+                }
+                if (s.isDeceased) {
+                    if (ev.discoveryContext !== 'environment' && ev.discoveryContext !== 'body') {
+                        ev.discoveryContext = (origEvHe?.discoveryContext === 'environment') ? 'environment' : 'body';
+                    }
+                    if (ev.discoveryContext === 'environment' && typeof ev.environmentIncludesBody !== 'boolean') {
+                        ev.environmentIncludesBody = typeof origEvHe?.environmentIncludesBody === 'boolean'
+                            ? origEvHe.environmentIncludesBody
+                            : false;
+                    }
+                }
             });
         }
 
@@ -764,6 +778,10 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
             if (!ev.description || typeof ev.description !== 'string') {
                 const origEv = origEvidence.find((oe: any) => oe.id === ev.id || oe.title === ev.title);
                 ev.description = origEv?.description || ev.title;
+            }
+            const origEvIe = origEvidence.find((oe: any) => oe.id === ev.id || oe.title === ev.title);
+            if (typeof ev.location !== 'string' || !ev.location.trim()) {
+                ev.location = (origEvIe && typeof origEvIe.location === 'string' && origEvIe.location.trim()) ? origEvIe.location : '';
             }
         });
     }
@@ -790,34 +808,38 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
 // --- CORE FUNCTIONS ---
 
 export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg: string) => void, baseline?: CaseData, editContext?: string): Promise<{ updatedCase: CaseData, report: any }> => {
-    const progressSteps = [
-        'Step 1/5: Preparing case data for narrative audit...',
-        'Step 2/5: Sending suspects, evidence, and timeline for analysis...',
-        'Step 3/5: Cross-checking motives, alibis, and contradictions...',
-        'Step 4/5: Validating relationship consistency and chronology...',
-        'Step 5/5: Finalizing consistency report...'
-    ];
-    let currentStep = 0;
-    let progressTimer: ReturnType<typeof setInterval> | null = null;
-    if (onProgress) {
-        onProgress(progressSteps[0]);
-        progressTimer = setInterval(() => {
-            if (currentStep < progressSteps.length - 1) {
-                currentStep += 1;
-                onProgress(progressSteps[currentStep]);
-            }
-        }, 2500);
-    }
     try {
-        const result = await geminiPost<{ updatedCase: CaseData, report: any }>('/case/consistency', {
-            caseData, baseline, editContext
+        if (onProgress) onProgress('Analyzing case narrative...');
+        const narrative = await geminiPost<{ updatedCase: CaseData, report: any }>('/case/consistency/narrative', {
+            caseData,
+            baseline,
+            editContext,
         });
-        return result;
+
+        const merged = narrative.updatedCase;
+        try {
+            if (onProgress) onProgress('Regenerating portraits and evidence...');
+            const images = await geminiPost<{
+                updatedCase: CaseData;
+                imagePipelineChanges?: { description: string; evidenceId?: string }[];
+            }>('/case/consistency/images', {
+                mergedCase: merged,
+                originalCaseData: caseData,
+            });
+            let report = narrative.report;
+            const visual = images.imagePipelineChanges;
+            if (visual?.length && report && typeof report === 'object') {
+                const existing = Array.isArray(report.changesMade) ? report.changesMade : [];
+                report = { ...report, changesMade: [...existing, ...visual] };
+            }
+            return { updatedCase: images.updatedCase, report };
+        } catch (imgErr) {
+            console.error('Consistency image phase failed:', imgErr);
+            return { updatedCase: merged, report: narrative.report };
+        }
     } catch (e) {
         console.error('Consistency Check Failed:', e);
         return { updatedCase: caseData, report: 'Consistency check failed.' };
-    } finally {
-        if (progressTimer) clearInterval(progressTimer);
     }
 };
 

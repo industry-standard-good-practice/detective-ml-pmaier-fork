@@ -45,7 +45,7 @@ const ProfileBtn = styled.button`
 
 interface MobileSuspectHeaderProps {
   suspect: Suspect;
-  emotion: Emotion;
+  emotion: Emotion | string;
   aggravationLevel: number;
   onShowProfile: () => void;
   onCycleSuspect: (direction: 'prev' | 'next') => void;

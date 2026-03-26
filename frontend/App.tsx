@@ -14,6 +14,8 @@ import { Overlay, ModalBox, ModalTitle, ModalText, ModalButtonRow, Button } from
 // Extracted utilities
 import { formatTime, formatAuthorName, TIME_INCREMENT_MS, WAIT_THRESHOLD_MS, INITIAL_TIME_MS, DEFAULT_SUGGESTIONS } from './utils/timeUtils';
 import { normalizeTimeString, matchNormalizedTimeToTimeline, textHasAnyTimeReference, extractTimelineFromText } from './utils/timelineExtraction';
+import { parseRevealedEvidenceForCollection } from './utils/evidenceRevealParsing';
+import { resolveVictimExaminationPortraitKey } from './utils/victimPortraitKeys';
 
 // Import Modular Components
 import Layout from './components/Layout';
@@ -444,7 +446,14 @@ const App: React.FC = () => {
             setGameState(prev => ({
                 ...prev,
                 chatHistory: { ...prev.chatHistory, [currentSuspectId]: [...(prev.chatHistory[currentSuspectId] || []), narratorMsg] },
-                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: examResponse.emotion as Emotion }
+                suspectEmotions: {
+                  ...prev.suspectEmotions,
+                  [currentSuspectId]: resolveVictimExaminationPortraitKey(
+                    suspect,
+                    examResponse.emotion,
+                    examResponse.environmentEvidenceId
+                  ),
+                }
             }));
             
             setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete(currentSuspectId); return next; });
@@ -564,7 +573,14 @@ const App: React.FC = () => {
                 ...prev,
                 aggravationLevels: { ...prev.aggravationLevels, [currentSuspectId]: finalAgg },
                 sidekickComment: finalWhisper,
-                suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion as Emotion },
+                suspectEmotions: {
+                  ...prev.suspectEmotions,
+                  [currentSuspectId]: resolveVictimExaminationPortraitKey(
+                    suspect,
+                    response.emotion,
+                    response.environmentEvidenceId
+                  ),
+                },
                 chatHistory: { ...prev.chatHistory, [currentSuspectId]: newHistory },
                 timelineStatementsDiscovered: newTimelineStatements
             };
@@ -747,7 +763,14 @@ const App: React.FC = () => {
           ...prev,
           chatHistory: { ...prev.chatHistory, [currentSuspectId]: updatedHistory },
           aggravationLevels: { ...prev.aggravationLevels, [currentSuspectId]: newAgg },
-          suspectEmotions: { ...prev.suspectEmotions, [currentSuspectId]: response.emotion as Emotion },
+          suspectEmotions: {
+            ...prev.suspectEmotions,
+            [currentSuspectId]: resolveVictimExaminationPortraitKey(
+              currentSuspect,
+              response.emotion,
+              response.environmentEvidenceId
+            ),
+          },
           timelineStatementsDiscovered: newTimelineStatements,
           // PERSIST SUGGESTIONS PER SUSPECT
           suspectSuggestions: { ...prev.suspectSuggestions, [currentSuspectId]: response.hints }
@@ -1019,17 +1042,10 @@ const App: React.FC = () => {
       const currentCase = findCaseById(prev.selectedCaseId);
       if (!currentCase) return prev;
 
-      // PARSE STRING: Support "Title: Description" format from AI
-      let parsedTitle = rawEvidenceString;
-      let parsedDesc = `Evidence discovered from ${currentCase.suspects.find(s=>s.id===suspectId)?.name || 'Unknown'}.`;
-      
-      if (rawEvidenceString.includes(':')) {
-          const parts = rawEvidenceString.split(':');
-          parsedTitle = parts[0].trim();
-          if (parts.length > 1 && parts[1].trim().length > 0) {
-             parsedDesc = parts.slice(1).join(':').trim();
-          }
-      }
+      const { title: parsedTitle, descriptionHint } = parseRevealedEvidenceForCollection(rawEvidenceString);
+      let parsedDesc =
+        descriptionHint ||
+        `Evidence discovered from ${currentCase.suspects.find(s => s.id === suspectId)?.name || 'Unknown'}.`;
 
       // Find actual Evidence object in known lists
       let foundEvidence: Evidence | undefined;

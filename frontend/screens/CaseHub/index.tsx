@@ -235,7 +235,7 @@ interface CaseHubProps {
   onClearAllNewEvidence?: () => void;
   onClearNewTimeline?: () => void;
   onClearSingleTimelineId?: (id: string) => void;
-  suspectEmotions?: Record<string, Emotion>;
+  suspectEmotions?: Record<string, string>;
 }
 
 const CaseHub: React.FC<CaseHubProps> = ({

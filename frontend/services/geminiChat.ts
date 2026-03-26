@@ -19,10 +19,11 @@ export const getSuspectResponse = async (
 ): Promise<{
   text: string;
   emotion: string;
+  environmentEvidenceId: string;
   aggravationDelta: number;
   revealedEvidence: string[];
   revealedTimelineStatements: { time: string; statement: string; day: string; dayOffset: number }[];
-  hints: string[]
+  hints: string[];
 }> => {
   return geminiPost('/chat/suspect', {
     suspect, caseData, userInput, type, evidenceAttachment,

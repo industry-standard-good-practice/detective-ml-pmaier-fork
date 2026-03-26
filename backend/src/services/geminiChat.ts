@@ -1,10 +1,6 @@
 import { Type } from "@google/genai";
 import { ai } from "./geminiClient.js";
-import {
-  GEMINI_MODELS,
-  CHAT_SUSPECT_MODEL_PRIORITY,
-  isRetryableChatModelOverloadError,
-} from "./geminiModels.js";
+import { GEMINI_MODELS, generateWithTextModel } from "./geminiModels.js";
 
 /**
  * All chat-related Gemini service functions.
@@ -12,8 +8,23 @@ import {
  * The prompt engineering and response schemas are identical.
  */
 
+/** Strip internal victim-clue metadata from model output (UI shows title only). */
+function stripRevealedEvidenceLine(line: string): string {
+  const s = line.trim();
+  const idx = s.search(/\s*\|\s*DISCOVERY_ZONE\b/i);
+  return idx >= 0 ? s.slice(0, idx).trim() : s;
+}
+
 // --- Types (subset of frontend types needed here) ---
-interface Evidence { id: string; title: string; description: string; imageUrl?: string; }
+interface Evidence {
+  id: string;
+  title: string;
+  location?: string;
+  description: string;
+  imageUrl?: string;
+  discoveryContext?: 'body' | 'environment';
+  environmentIncludesBody?: boolean;
+}
 interface Alibi { statement: string; isTrue: boolean; location: string; witnesses: string[]; }
 interface Relationship { targetName: string; type: string; description: string; }
 interface TimelineEvent { time: string; activity: string; day: string; dayOffset: number; }
@@ -69,10 +80,11 @@ export const getSuspectResponse = async (
 ): Promise<{
   text: string;
   emotion: string;
+  environmentEvidenceId: string;
   aggravationDelta: number;
   revealedEvidence: string[];
   revealedTimelineStatements: { time: string; statement: string; day: string; dayOffset: number }[];
-  hints: string[]
+  hints: string[];
 }> => {
   console.log(`[Gemini] getSuspectResponse: ${suspect.name} | Input: "${userInput}" | Type: ${type} | Agg: ${currentAggravation}`);
 
@@ -90,8 +102,27 @@ export const getSuspectResponse = async (
   const unrevealedItems = (suspect.hiddenEvidence || []).filter(e => !discoveredTitles.has(e.title.toLowerCase()));
   const revealedItems = (suspect.hiddenEvidence || []).filter(e => discoveredTitles.has(e.title.toLowerCase()));
 
-  const unrevealedStr = unrevealedItems.length > 0 ? unrevealedItems.map(e => `${e.title} (${e.description})`).join('; ') : "None";
-  const revealedStr = revealedItems.length > 0 ? revealedItems.map(e => `${e.title} (${e.description})`).join('; ') : "None";
+  const unrevealedStr = unrevealedItems.length > 0
+    ? unrevealedItems.map(e => {
+        const loc = (e.location || '').trim();
+        const zone = e.discoveryContext === 'environment' ? 'environment' : 'body';
+        return `${e.title} | DISCOVERY_ZONE: ${zone} | WHERE_HIDDEN: ${loc || '(unspecified — require a targeted search, not a vague scan)'} | DETAIL: ${e.description}`;
+      }).join('\n        ')
+    : "None";
+  const revealedStr = revealedItems.length > 0
+    ? revealedItems.map(e => `${e.title} (${(e.location || '').trim() || 'found'}) — ${e.description}`).join('; ')
+    : "None";
+
+  const unrevealedEnvEvidence = unrevealedItems.filter(e => e.discoveryContext === 'environment');
+  const envScenePortraitGuide =
+    unrevealedEnvEvidence.length > 0
+      ? unrevealedEnvEvidence
+          .map(
+            e =>
+              `id="${e.id}" | TITLE: ${e.title} | WHERE_HIDDEN: ${(e.location || '').trim() || '(unspecified)'} | HINT: ${e.description.slice(0, 220)}`
+          )
+          .join('\n        ')
+      : '(no unrevealed environmental clues)';
 
   // #region agent log
   fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1-H3-H5',location:'geminiChat.ts:getSuspectResponse:inputs',message:'suspect evidence context',data:{suspectId:suspect.id,suspectName:suspect.name,hiddenTitles:(suspect.hiddenEvidence||[]).map(e=>e.title),initialTitles:(caseData.initialEvidence||[]).map(e=>e.title),discoveredTitleCount:discoveredTitles.size,hasAttachment:!!evidenceAttachment},timestamp:Date.now()})}).catch(()=>{});
@@ -118,16 +149,17 @@ export const getSuspectResponse = async (
   if (isDeceased) {
     systemPrompt = `
       You are a STRICTLY OBSERVATIONAL narrator speaking in SECOND PERSON, addressing the detective as "you".
-      The detective is examining the body of ${suspect.name}.
+      The detective is working the **crime scene** where ${suspect.name} lies (examining the body, the room, or both depending on their actions).
       
-      PHYSICAL CLUES ON BODY (UNREVEALED): ${unrevealedStr}
+      UNREVEALED CLUES — format per line: TITLE | DISCOVERY_ZONE: body OR environment | WHERE_HIDDEN: ... | DETAIL: ...
+      ${unrevealedStr}
       ALREADY FOUND CLUES: ${revealedStr}
       
       User Action: "${userInput}"
       
       INSTRUCTIONS:
-      1. Describe ONLY what the detective PHYSICALLY SEES and TOUCHES in SECOND PERSON ("You notice...", "Your fingers find...", "You see...").
-         Write in a gritty, noir style. Be visceral and intimate — the detective's hands are doing the work, their eyes are seeing the details.
+      1. Describe ONLY what the detective PHYSICALLY SEES and TOUCHES (or moves, lifts, scans) in SECOND PERSON ("You notice...", "Your fingers find...", "You see...").
+         Write in a gritty, noir style. The detective may inspect the corpse **or** the surrounding space (floor, walls, furniture, doorway, objects away from the body) when their action implies it.
       2. **ABSOLUTE NARRATIVE RESTRICTION (CRITICAL):**
          You are a CAMERA, not a storyteller. You describe what is VISIBLE and TANGIBLE. You must NEVER:
          - Interpret what evidence means or implies
@@ -135,19 +167,29 @@ export const getSuspectResponse = async (
          - Comment on the narrative significance of anything found
          - Assign blame, motive, or causation
          - Editorialize or add dramatic commentary about the story
-         - Reference any characters, events, or plot points beyond what is physically visible on the body
+         - Reference any characters, events, or plot points beyond what is physically visible in the moment (body or immediate scene)
          - Use the word "murder", "killed", "crime", or any language that presupposes what happened
          INSTEAD, describe raw physical details ONLY: Colors, textures, temperatures, smells, positions, materials.
-      3. If the user's action logically uncovers one of the UNREVEALED clues, YOU MUST REVEAL IT. 
-         - Add each item's EXACT title to the 'revealedEvidence' array.
-         - Describe finding it in second person.
-      4. **VISUAL UPDATE (STRICT MAPPING):**
-         - If user says 'check pockets', 'search jacket', 'look at chest', 'examine torso' -> Set emotion to 'TORSO'.
-         - If user says 'check face', 'examine head', 'look at eyes', 'check mouth' -> Set emotion to 'HEAD'.
-         - If user says 'check hands', 'look at fingers', 'examine nails' -> Set emotion to 'HANDS'.
-         - If user says 'check legs', 'look at shoes', 'examine feet' -> Set emotion to 'LEGS'.
-         - If user says 'examine body' or 'step back' -> Set emotion to 'NEUTRAL'.
-         - If the action is vague, keep the previous view or default to 'NEUTRAL'.
+      3. **LOCATION-GATED REVEALS (CRITICAL):**
+         - Each UNREVEALED clue has **DISCOVERY_ZONE**. Match the User Action to the correct zone:
+           * **body** — only reveal if the action targets the corpse or its clothing (pockets, lining, hands, face, shoes, pat-down, etc.).
+           * **environment** — only reveal if the action targets the **room or scene** (floor, wall, furniture, window, door, corner, "search the room", "check under the desk", blood spatter on wall, etc.). A vague **body-only** sweep must NOT reveal environment clues.
+         - Synonyms and reasonable inference allowed (e.g. breast pocket ≈ inside jacket chest pocket; "nightstand" ≈ WHERE_HIDDEN mentioning nightstand).
+         - **Vague whole-body / whole-scene actions** with no specific focus (e.g. "examine the body", "look at the victim", "inspect the corpse", "check the body", generic *action* with no sub-area) → **ZERO** new reveals. Narrate only high-level impression (pose, clothing, room layout) without producing hidden items.
+         - If WHERE_HIDDEN is "(unspecified — require a targeted search...)", **no reveal** until the user names a concrete place that matches DETAIL well enough.
+         - If User Input references **[PARTNER EXAMINATION]** or **[PARTNER HINT]**, use the partner's quoted words to infer body region **or** scene area; only reveal clues whose DISCOVERY_ZONE and WHERE_HIDDEN fit. If vague, **at most one** clue or none.
+         - For each clue you do reveal, describe retrieving or spotting it in second person in the same beat.
+      ENVIRONMENTAL CLUES (for camera — each has a **distinct** scene portrait; use **exact** id strings):
+      ${envScenePortraitGuide}
+      4. **VISUAL UPDATE (STRICT MAPPING — location variants, not emotions):**
+         - If the action targets the **room or scene** (floor, wall, furniture, rug, window, door, corner, "search the room", blood on wall) -> Set emotion to 'ENVIRONMENT'.
+         - When emotion is 'ENVIRONMENT' and the action clearly focuses **one** environmental clue from the list above, set **environmentEvidenceId** to that clue's **id** (exact string). If several match, pick the single best fit. If the action is a vague room scan or no clue clearly fits, set **environmentEvidenceId** to "".
+         - If user says 'check pockets', 'search jacket', 'look at chest', 'examine torso' -> Set emotion to 'TORSO' and environmentEvidenceId to "".
+         - If user says 'check face', 'examine head', 'look at eyes', 'check mouth' -> Set emotion to 'HEAD' and environmentEvidenceId to "".
+         - If user says 'check hands', 'look at fingers', 'examine nails' -> Set emotion to 'HANDS' and environmentEvidenceId to "".
+         - If user says 'check legs', 'look at shoes', 'examine feet' -> Set emotion to 'LEGS' and environmentEvidenceId to "".
+         - If user says 'examine body' or 'step back' -> Set emotion to 'NEUTRAL' and environmentEvidenceId to "".
+         - If the action is vague, keep the previous view or default to 'NEUTRAL' and environmentEvidenceId to "".
       5. Hints: Return an EMPTY ARRAY []. Do not give suggestion chips for a corpse.
       `;
   } else {
@@ -294,6 +336,7 @@ export const getSuspectResponse = async (
       properties: {
         text: { type: Type.STRING },
         emotion: { type: Type.STRING },
+        environmentEvidenceId: { type: Type.STRING },
         aggravationDelta: { type: Type.NUMBER },
         revealedEvidence: { type: Type.ARRAY, items: { type: Type.STRING } },
         revealedTimelineStatements: {
@@ -313,54 +356,58 @@ export const getSuspectResponse = async (
     }
   };
 
-  let response: Awaited<ReturnType<typeof ai.models.generateContent>> | undefined;
-  let lastErr: unknown;
-  for (let i = 0; i < CHAT_SUSPECT_MODEL_PRIORITY.length; i++) {
-    const model = CHAT_SUSPECT_MODEL_PRIORITY[i];
-    try {
-      response = await ai.models.generateContent({
+  const response = await generateWithTextModel(
+    GEMINI_MODELS.CHAT,
+    (model) =>
+      ai.models.generateContent({
         model,
         contents: systemPrompt,
         config: suspectChatConfig
-      });
-      if (i > 0) {
-        console.warn(`[Gemini] getSuspectResponse: succeeded with fallback model ${model}`);
-      }
-      break;
-    } catch (err) {
-      lastErr = err;
-      const hasFallback = i < CHAT_SUSPECT_MODEL_PRIORITY.length - 1;
-      if (!hasFallback || !isRetryableChatModelOverloadError(err)) {
-        throw err;
-      }
-      const snippet = String((err as Error).message ?? err);
-      console.warn(
-        `[Gemini] getSuspectResponse: model ${model} unavailable; retrying with ${CHAT_SUSPECT_MODEL_PRIORITY[i + 1]}. ${snippet.slice(0, 200)}`
-      );
-    }
-  }
-  if (!response) throw lastErr ?? new Error("Suspect chat: no model response");
+      }),
+    "getSuspectResponse"
+  );
 
   const data = JSON.parse(response.text!);
   console.log(`[Gemini] getSuspectResponse: AI Output`, data);
 
   let parsedEvidence: string[] = [];
   if (Array.isArray(data.revealedEvidence)) {
-    parsedEvidence = data.revealedEvidence.filter((e: any) => typeof e === 'string' && e.trim().length > 0);
+    parsedEvidence = data.revealedEvidence
+      .filter((e: any) => typeof e === 'string' && e.trim().length > 0)
+      .map((e: string) => stripRevealedEvidenceLine(e))
+      .filter((e: string) => e.length > 0);
   }
 
   // #region agent log
   const hiddenTitleSet = new Set((suspect.hiddenEvidence || []).map(e => e.title.toLowerCase()));
   const notInSuspectHidden = parsedEvidence.filter((t: string) => {
-    const clean = t.includes(':') ? t.split(':')[0].trim().toLowerCase() : t.trim().toLowerCase();
+    const clean = t.toLowerCase();
     return !Array.from(hiddenTitleSet).some(ht => clean === ht || clean.includes(ht) || ht.includes(clean));
   });
   fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1',location:'geminiChat.ts:getSuspectResponse:parsed',message:'model revealedEvidence vs suspect hiddenEvidence',data:{suspectId:suspect.id,parsedEvidence,notInSuspectHidden,countInvalid:notInSuspectHidden.length},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
+  let emotionOut = typeof data.emotion === 'string' ? data.emotion.trim() : 'NEUTRAL';
+  if (!emotionOut) emotionOut = 'NEUTRAL';
+  if (suspect.isDeceased) {
+    const u = emotionOut.toUpperCase();
+    const deceasedExam = new Set(['HEAD', 'TORSO', 'HANDS', 'LEGS', 'ENVIRONMENT', 'NEUTRAL']);
+    if (deceasedExam.has(u)) emotionOut = u;
+  }
+
+  let environmentEvidenceId = '';
+  if (suspect.isDeceased && typeof data.environmentEvidenceId === 'string') {
+    const t = data.environmentEvidenceId.trim();
+    const allowedEnvIds = new Set(
+      (suspect.hiddenEvidence || []).filter(e => e.discoveryContext === 'environment').map(e => e.id)
+    );
+    if (t && allowedEnvIds.has(t)) environmentEvidenceId = t;
+  }
+
   return {
     text: data.text,
-    emotion: data.emotion || 'NEUTRAL',
+    emotion: emotionOut,
+    environmentEvidenceId,
     aggravationDelta: data.aggravationDelta || 0,
     revealedEvidence: parsedEvidence,
     revealedTimelineStatements: Array.isArray(data.revealedTimelineStatements)
@@ -420,10 +467,11 @@ export const generateCaseSummary = async (
     `;
 
   try {
-    const res = await ai.models.generateContent({
-      model: GEMINI_MODELS.CHAT,
-      contents: prompt
-    });
+    const res = await generateWithTextModel(
+      GEMINI_MODELS.CHAT,
+      (model) => ai.models.generateContent({ model, contents: prompt }),
+      "generateCaseSummary"
+    );
     return res.text!;
   } catch (e) {
     return "The case file is sealed. (Error generating summary).";
@@ -454,10 +502,11 @@ export const getOfficerChatResponse = async (
     Keep it under 30 words.
   `;
 
-  const res = await ai.models.generateContent({
-    model: GEMINI_MODELS.CHAT,
-    contents: prompt
-  });
+  const res = await generateWithTextModel(
+    GEMINI_MODELS.CHAT,
+    (model) => ai.models.generateContent({ model, contents: prompt }),
+    "getOfficerChatResponse"
+  );
   return res.text!;
 };
 
@@ -476,18 +525,29 @@ export const getPartnerIntervention = async (
 
   let prompt = "";
   if (type === 'examine') {
+    const sceneNote = suspect.isDeceased
+      ? 'Describe the body and, if visible, a glance at the immediate surroundings — still observational only.'
+      : '';
     prompt = `
         You are ${partnerName}, the ${partnerRole}.
-        Action: Perform an initial visual examination of a body (${suspect.name}).
+        Action: Perform an initial visual examination${suspect.isDeceased ? ` of the crime scene and ${suspect.name}'s body` : ` of ${suspect.name}`}.
         Generate a 1-2 sentence observation describing ONLY what you physically see.
+        ${sceneNote}
         Tone: Professional, grim. Speak in first person.
       `;
   } else if (type === 'hint') {
+    const hiddenLoc = (suspect.hiddenEvidence || [])
+      .map(e => {
+        const loc = (e.location || '').trim();
+        const zone = e.discoveryContext === 'environment' ? 'scene' : 'body';
+        return loc ? `[${zone}] ${e.title} → ${loc}` : `[${zone}] ${e.title}`;
+      })
+      .join('; ');
     prompt = `
         You are ${partnerName}, the ${partnerRole}.
-        Action: Suggest where the detective should look on the victim's body (${suspect.name}).
-        Hidden Evidence they have: ${(suspect.hiddenEvidence || []).map(e => e.title).join(', ')}.
-        Generate a 1-sentence hint. Speak in first person.
+        Action: Suggest where the detective should look next${suspect.isDeceased ? ` — either on ${suspect.name}'s body or in the surrounding room, as appropriate` : ''}.
+        Unfound clues (use [body] vs [scene] and locations to nudge; do not name the object): ${hiddenLoc || 'None listed'}.
+        Generate a 1-sentence hint. Speak in first person. Do not spoil the exact item title.
       `;
   } else {
     const discoveredTitles = new Set(discoveredEvidence.map(e => e.title.toLowerCase()));
@@ -540,10 +600,11 @@ export const getPartnerIntervention = async (
     }
   }
 
-  const res = await ai.models.generateContent({
-    model: GEMINI_MODELS.CHAT,
-    contents: prompt
-  });
+  const res = await generateWithTextModel(
+    GEMINI_MODELS.CHAT,
+    (model) => ai.models.generateContent({ model, contents: prompt }),
+    "getPartnerIntervention"
+  );
   return res.text || "...";
 };
 
@@ -561,9 +622,10 @@ export const getBadCopHint = async (suspect: Suspect, unrevealed: Evidence[], re
     
     Keep it very short.
   `;
-  const res = await ai.models.generateContent({
-    model: GEMINI_MODELS.CHAT,
-    contents: prompt
-  });
+  const res = await generateWithTextModel(
+    GEMINI_MODELS.CHAT,
+    (model) => ai.models.generateContent({ model, contents: prompt }),
+    "getBadCopHint"
+  );
   return res.text!;
 };

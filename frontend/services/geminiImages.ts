@@ -7,41 +7,75 @@
  */
 import { Suspect, CaseData, Emotion, Evidence, SupportCharacter } from "../types";
 import { geminiPost } from "./backendGemini";
+import { ENV_SCENE_PORTRAIT_PREFIX } from "../utils/victimPortraitKeys";
 
 // --- CLIENT-SIDE PORTRAIT LOOKUP (no Gemini call) ---
 
-export const getSuspectPortrait = async (suspect: Suspect, emotion: Emotion, aggravation: number, turnId?: string): Promise<string> => {
-    // 1. Exact Match (Preferred) - Works for standard emotions AND Body Parts
-    if (suspect.portraits && suspect.portraits[emotion] && suspect.portraits[emotion] !== "PLACEHOLDER") {
-        return suspect.portraits[emotion];
+const DECEASED_EXAMINATION_KEYS = new Set(['HEAD', 'TORSO', 'HANDS', 'LEGS', 'ENVIRONMENT', 'NEUTRAL']);
+
+/** Map UI `emotion` to `portraits` keys (pregen uses uppercase; per-clue env uses ENVSCENE_*). */
+function deceasedPortraitLookupKey(emotion: Emotion | string): string {
+    const raw = String(emotion).trim();
+    if (raw.startsWith(ENV_SCENE_PORTRAIT_PREFIX)) return raw;
+    const upper = raw.toUpperCase();
+    if (DECEASED_EXAMINATION_KEYS.has(upper)) return upper;
+    return raw;
+}
+
+export const getSuspectPortrait = async (
+    suspect: Suspect,
+    emotion: Emotion | string,
+    aggravation: number,
+    turnId?: string
+): Promise<string> => {
+    const portraits = suspect.portraits;
+    const key = suspect.isDeceased ? deceasedPortraitLookupKey(emotion) : String(emotion);
+
+    // 1. Exact key match (living emotions OR victim examination views from pregen)
+    if (portraits && portraits[key] && portraits[key] !== "PLACEHOLDER") {
+        return portraits[key];
     }
 
-    // 2. Emotion Mapping for AI Generated Cases (Fallback if generation was partial)
+    // 1b. Deceased: case-insensitive key match for canonical keys; exact match for ENVSCENE_*
+    if (suspect.isDeceased && portraits) {
+        const want = deceasedPortraitLookupKey(emotion);
+        const hit = Object.entries(portraits).find(([k, v]) => {
+            if (typeof v !== 'string' || v === 'PLACEHOLDER') return false;
+            if (want.startsWith(ENV_SCENE_PORTRAIT_PREFIX)) return k === want;
+            return k.toUpperCase() === want.toUpperCase();
+        });
+        if (hit) return hit[1];
+    }
+
+    // 2. Victims: missing examination asset → full crime-scene (NEUTRAL) reference
+    if (suspect.isDeceased) {
+        if (portraits && portraits[Emotion.NEUTRAL] && portraits[Emotion.NEUTRAL] !== "PLACEHOLDER") {
+            return portraits[Emotion.NEUTRAL];
+        }
+        return null;
+    }
+
+    // 3. Living suspects: emotion mapping when AI generation omitted some expressions
     const isAiGenerated = suspect.portraits && suspect.portraits[Emotion.NEUTRAL] && !suspect.portraits[Emotion.NEUTRAL].includes('dicebear');
 
     if (isAiGenerated) {
         let mapped: Emotion | null = null;
 
-        // Negative / Hostile -> ANGRY
         if (emotion === Emotion.DEFENSIVE || emotion === Emotion.ARROGANT) mapped = Emotion.ANGRY;
-        // Positive / Smug -> HAPPY
         if (emotion === Emotion.SLY || emotion === Emotion.CONTENT) mapped = Emotion.HAPPY;
-        // Low Energy / Distress -> NERVOUS
         if (emotion === Emotion.SAD) mapped = Emotion.NERVOUS;
-        // If deceased, fallback any missing body part to Neutral (Full Body)
-        if (suspect.isDeceased) mapped = Emotion.NEUTRAL;
 
         if (mapped && suspect.portraits && suspect.portraits[mapped]) {
             return suspect.portraits[mapped];
         }
     }
 
-    // 3. Fallback to Neutral (if exact or mapped missing)
+    // 4. Fallback to Neutral (if exact or mapped missing)
     if (suspect.portraits && suspect.portraits[Emotion.NEUTRAL] && suspect.portraits[Emotion.NEUTRAL] !== "PLACEHOLDER") {
         return suspect.portraits[Emotion.NEUTRAL];
     }
 
-    // 4. No portrait available — return null (UI shows gray placeholder with "?")
+    // 5. No portrait available — return null (UI shows gray placeholder with "?")
     return null;
 };
 
@@ -51,10 +85,16 @@ export const generateEvidenceImage = async (
     evidence: Evidence,
     caseId: string,
     userId: string,
-    refImage?: string
+    refImage?: string,
+    meta?: { forDeceasedVictim?: boolean; caseTheme?: string }
 ): Promise<string> => {
     const result = await geminiPost<{ url: string }>('/image/evidence', {
-        evidence, caseId, userId, refImage
+        evidence,
+        caseId,
+        userId,
+        refImage,
+        forDeceasedVictim: meta?.forDeceasedVictim,
+        caseTheme: meta?.caseTheme,
     });
     return result.url;
 };

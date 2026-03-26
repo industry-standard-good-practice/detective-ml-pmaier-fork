@@ -414,7 +414,7 @@ const InfoItem = styled.li`
 
 interface SuspectCardProps {
   suspect: Suspect;
-  emotion?: Emotion;
+  emotion?: Emotion | string;
   aggravation?: number;
   width?: string;
   height?: string;
@@ -516,6 +516,8 @@ const SuspectCard: React.FC<SuspectCardProps> = ({
                   <div style={{ width: '150px', minWidth: '150px', height: '100%', position: 'relative', borderRight: '2px solid rgba(255,255,255,0.2)' }}>
                     <SuspectPortrait
                       suspect={suspect}
+                      emotion={emotion}
+                      aggravation={aggravation}
                       size={200}
                       turnId={turnId}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}

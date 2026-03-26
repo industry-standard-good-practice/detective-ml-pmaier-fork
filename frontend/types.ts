@@ -20,16 +20,33 @@ export enum Emotion {
   CONTENT = 'CONTENT',
   DEFENSIVE = 'DEFENSIVE',
   ARROGANT = 'ARROGANT',
-  // Special States for Deceased Victims (Views)
+  // Special States for Deceased Victims (examination views — not emotional states)
   HEAD = 'HEAD',
   TORSO = 'TORSO',
   HANDS = 'HANDS',
-  LEGS = 'LEGS'
+  LEGS = 'LEGS',
+  /** Room / scene overview when clues are hidden in the environment */
+  ENVIRONMENT = 'ENVIRONMENT',
 }
 
 export interface Evidence {
   id: string;
   title: string;
+  /**
+   * Where the item is found (crime scene placement for initialEvidence; pocket / lining / hand, etc. for body clues).
+   * Victim hidden clues use this to gate examination — vague "whole body" searches should not reveal them. Legacy cases may omit.
+   */
+  location?: string;
+  /**
+   * For victim (deceased) hidden clues: discovered on the corpse vs in the surrounding scene (floor, furniture, room).
+   * Omitted or 'body' = on-body search; 'environment' = treat like searching the crime scene / room.
+   */
+  discoveryContext?: 'body' | 'environment';
+  /**
+   * When discoveryContext is 'environment', whether the evidence image may show the victim/body (e.g. distant/background).
+   * If false, the art must be environment-only (no corpse in frame).
+   */
+  environmentIncludesBody?: boolean;
   description: string;
   imageUrl?: string;
 }
@@ -171,7 +188,8 @@ export interface GameState {
   timelineStatementsDiscovered: TimelineStatement[];
   chatHistory: Record<string, ChatMessage[]>;
   officerHistory: ChatMessage[];
-  suspectEmotions: Record<string, Emotion>;
+  /** Per suspect: living = Emotion enum string; deceased = examination portrait key (e.g. HEAD, ENVSCENE_…). */
+  suspectEmotions: Record<string, string>;
   partnerEmotion: Emotion; // New: Tracks the partner's current reaction
   suspectTurnIds: Record<string, string | undefined>; // suspectId -> unique ID for current portrait state, or undefined for base
   gameResult: 'SUCCESS' | 'PARTIAL' | 'FAILURE' | null;

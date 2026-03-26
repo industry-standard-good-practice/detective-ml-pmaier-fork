@@ -105,7 +105,7 @@ interface InterrogationProps {
   suspect: Suspect;
   chatHistory: ChatMessage[];
   aggravationLevel: number;
-  emotion: Emotion;
+  emotion: Emotion | string;
   partnerEmotion: Emotion;
   suspectTurnIds: Record<string, string | undefined>;
   evidenceDiscovered: Evidence[];

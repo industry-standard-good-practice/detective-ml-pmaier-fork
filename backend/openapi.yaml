@@ -43,6 +43,29 @@ components:
       example:
         success: true
 
+    Evidence:
+      type: object
+      description: Case evidence item (scene or concealed on a suspect / victim)
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        location:
+          type: string
+          description: Where found at scene (initial) or hidden (pocket, lining, room feature for victim crime scene)
+        description:
+          type: string
+        discoveryContext:
+          type: string
+          enum: [body, environment]
+          description: Victim hidden evidence only — clue on body vs in room/scene
+        environmentIncludesBody:
+          type: boolean
+          description: When discoveryContext is environment, whether generated evidence image may show the body in the background
+        imageUrl:
+          type: string
+
     CaseData:
       type: object
       required: [id, title, type, description, difficulty, suspects, authorId]
@@ -89,7 +112,7 @@ components:
         initialEvidence:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/Evidence'
         initialTimeline:
           type: array
           items:
@@ -876,6 +899,98 @@ paths:
           description: Unauthorized
         '500':
           description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/case/consistency/narrative:
+    post:
+      summary: Consistency check — narrative phase only
+      description: |
+        Runs the AI narrative consistency pass and merge. Does not regenerate images.
+        Pair with POST /api/gemini/case/consistency/images using the returned updatedCase as mergedCase.
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [caseData]
+              properties:
+                caseData:
+                  $ref: '#/components/schemas/CaseData'
+                baseline:
+                  $ref: '#/components/schemas/CaseData'
+                editContext:
+                  type: string
+      responses:
+        '200':
+          description: Merged case and report (images unchanged)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCase:
+                    $ref: '#/components/schemas/CaseData'
+                  report:
+                    type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: AI generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/gemini/case/consistency/images:
+    post:
+      summary: Consistency check — image regeneration phase
+      description: |
+        Regenerates victim portraits, examination views, and evidence images after narrative merge.
+        originalCaseData must be the case JSON from before the narrative pass (for invalidation diffs).
+      tags: [Gemini AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mergedCase, originalCaseData]
+              properties:
+                mergedCase:
+                  $ref: '#/components/schemas/CaseData'
+                originalCaseData:
+                  $ref: '#/components/schemas/CaseData'
+      responses:
+        '200':
+          description: mergedCase mutated in place with new image URLs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updatedCase:
+                    $ref: '#/components/schemas/CaseData'
+                  imagePipelineChanges:
+                    type: array
+                    description: Rows to merge into the consistency report (visual pass)
+                    items:
+                      type: object
+                      properties:
+                        description:
+                          type: string
+                        evidenceId:
+                          type: string
+        '400':
+          description: Missing mergedCase or originalCaseData
+        '401':
+          description: Unauthorized
+        '500':
+          description: Image pipeline failed
           content:
             application/json:
               schema:

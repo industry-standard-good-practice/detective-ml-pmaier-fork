@@ -1134,6 +1134,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                 suspects={draftCase.suspects}
                 onTransferEvidence={onTransferEvidence}
                 imageLoadingStates={imageLoadingStates}
+                victimExamMode={(activeSuspect as Suspect).isDeceased === true}
               />
 
               <InputGroup>

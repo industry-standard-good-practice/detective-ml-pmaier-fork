@@ -21,3 +21,6 @@ export { Select } from './Select';
 
 export { default as Dropdown } from './Dropdown';
 export type { DropdownOption, DropdownProps } from './Dropdown';
+
+export { default as Checkbox } from './Checkbox';
+export type { CheckboxProps } from './Checkbox';

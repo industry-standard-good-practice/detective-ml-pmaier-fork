@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getSuspectResponse, generateCaseSummary, getOfficerChatResponse, getPartnerIntervention, getBadCopHint } from '../services/geminiChat.js';
-import { generateCaseFromPrompt, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty } from '../services/geminiCase.js';
+import { generateCaseFromPrompt, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, applyConsistencyImagePipeline } from '../services/geminiCase.js';
 import { generateImageRaw, generateEvidenceImage, generateEmotionalVariantsFromBase, generateSuspectFromUpload, regenerateSingleSuspect, pregenerateCaseImages, createImageFromPrompt, editImageWithPrompt } from '../services/geminiImages.js';
 import { generateTTS } from '../services/geminiTTS.js';
 
@@ -79,12 +79,39 @@ router.post('/case/generate', async (req: Request, res: Response) => {
 router.post('/case/consistency', async (req: Request, res: Response) => {
   try {
     const { caseData, baseline, editContext } = req.body;
-    // onProgress is not supported in HTTP mode — the client waits for the full response
     const result = await checkCaseConsistency(caseData, undefined, baseline, editContext);
     res.json(result);
   } catch (error: any) {
     console.error('[Gemini Route] case/consistency error:', error);
     res.status(500).json({ error: error.message || 'Failed to check case consistency' });
+  }
+});
+
+/** Narrative-only phase (no image regeneration). Pair with POST /case/consistency/images. */
+router.post('/case/consistency/narrative', async (req: Request, res: Response) => {
+  try {
+    const { caseData, baseline, editContext } = req.body;
+    const result = await checkCaseConsistency(caseData, undefined, baseline, editContext, { narrativeOnly: true });
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Gemini Route] case/consistency/narrative error:', error);
+    res.status(500).json({ error: error.message || 'Failed narrative consistency check' });
+  }
+});
+
+/** Image pipeline after narrative merge. Body: { mergedCase, originalCaseData } (original = pre-check draft). */
+router.post('/case/consistency/images', async (req: Request, res: Response) => {
+  try {
+    const { mergedCase, originalCaseData } = req.body;
+    if (!mergedCase || !originalCaseData) {
+      res.status(400).json({ error: 'mergedCase and originalCaseData are required' });
+      return;
+    }
+    const { changesMade } = await applyConsistencyImagePipeline(mergedCase, originalCaseData, undefined);
+    res.json({ updatedCase: mergedCase, imagePipelineChanges: changesMade });
+  } catch (error: any) {
+    console.error('[Gemini Route] case/consistency/images error:', error);
+    res.status(500).json({ error: error.message || 'Failed consistency image pipeline' });
   }
 });
 
@@ -114,8 +141,11 @@ router.post('/image/generate', async (req: Request, res: Response) => {
 
 router.post('/image/evidence', async (req: Request, res: Response) => {
   try {
-    const { evidence, caseId, userId, refImage } = req.body;
-    const result = await generateEvidenceImage(evidence, caseId, userId, refImage);
+    const { evidence, caseId, userId, refImage, forDeceasedVictim, caseTheme } = req.body;
+    const result = await generateEvidenceImage(evidence, caseId, userId, refImage, {
+      forDeceasedVictim: !!forDeceasedVictim,
+      caseTheme: typeof caseTheme === 'string' ? caseTheme : undefined,
+    });
     res.json({ url: result });
   } catch (error: any) {
     console.error('[Gemini Route] image/evidence error:', error);

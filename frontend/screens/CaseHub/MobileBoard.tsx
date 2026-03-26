@@ -263,7 +263,7 @@ interface MobileBoardProps {
   newTimelineIds: Set<string>;
   unreadSuspectIds: Map<string, number>;
   thinkingSuspectIds: Set<string>;
-  suspectEmotions: Record<string, Emotion>;
+  suspectEmotions: Record<string, string>;
   scrollToSuspectId?: string | null;
   onStartInterrogation: (suspectId: string) => void;
 }

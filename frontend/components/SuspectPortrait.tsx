@@ -93,7 +93,8 @@ const LoadingLabel = styled.span`
 
 interface SuspectPortraitProps {
   suspect: Suspect;
-  emotion?: Emotion;
+  /** Living: Emotion enum. Deceased: examination key (HEAD, ENVSCENE_…, ENVIRONMENT, …). */
+  emotion?: Emotion | string;
   aggravation?: number;
   size?: number;
   turnId?: string;

@@ -1,8 +1,9 @@
 
 import { Type, ThinkingLevel } from "@google/genai";
 import { ai } from "./geminiClient.js";
-import { GEMINI_MODELS } from "./geminiModels.js";
-import { generateEvidenceImage, regenerateSingleSuspect } from "./geminiImages.js";
+import { GEMINI_MODELS, generateWithTextModel } from "./geminiModels.js";
+import { generateEvidenceImage, regenerateSingleSuspect, ensureVictimExaminationPortraits } from "./geminiImages.js";
+import { inferVictimPortraitKeyForEvidence, environmentScenePortraitKey } from "./victimPortraitKey.js";
 
 // Inline CaseData type alias (the full type lives in the frontend)
 type CaseData = any;
@@ -1033,6 +1034,20 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
                     const origEv = (orig.hiddenEvidence || []).find((oe: any) => oe.id === ev.id || oe.title === ev.title);
                     ev.description = origEv?.description || ev.title;
                 }
+                const origEvHe = (orig.hiddenEvidence || []).find((oe: any) => oe.id === ev.id || oe.title === ev.title);
+                if (typeof ev.location !== 'string' || !ev.location.trim()) {
+                    ev.location = (origEvHe && typeof origEvHe.location === 'string' && origEvHe.location.trim()) ? origEvHe.location : '';
+                }
+                if (s.isDeceased) {
+                    if (ev.discoveryContext !== 'environment' && ev.discoveryContext !== 'body') {
+                        ev.discoveryContext = (origEvHe?.discoveryContext === 'environment') ? 'environment' : 'body';
+                    }
+                    if (ev.discoveryContext === 'environment' && typeof ev.environmentIncludesBody !== 'boolean') {
+                        ev.environmentIncludesBody = typeof origEvHe?.environmentIncludesBody === 'boolean'
+                            ? origEvHe.environmentIncludesBody
+                            : false;
+                    }
+                }
             });
         }
 
@@ -1055,6 +1070,10 @@ export const enforceSuspectSchema = (caseData: any, originalCase?: any) => {
             if (!ev.description || typeof ev.description !== 'string') {
                 const origEv = origEvidence.find((oe: any) => oe.id === ev.id || oe.title === ev.title);
                 ev.description = origEv?.description || ev.title;
+            }
+            const origEvIe = origEvidence.find((oe: any) => oe.id === ev.id || oe.title === ev.title);
+            if (typeof ev.location !== 'string' || !ev.location.trim()) {
+                ev.location = (origEvIe && typeof origEvIe.location === 'string' && origEvIe.location.trim()) ? origEvIe.location : '';
             }
         });
     }
@@ -1157,7 +1176,7 @@ If the crime involves a death or a body (e.g. Murder, Homicide), YOU MUST GENERA
 - Name: A realistic full name for the victim.
 - Role: "The Victim".
 - **isDeceased: true**.
-- hiddenEvidence: Must contain 2-3 physical clues found on the body (e.g. "Bruise on wrist", "Watch frozen at 9pm", "Pocket lint").
+- hiddenEvidence: Must contain 2-5 discoverable clues for the **crime scene examination** (talking to the victim card). **Mix** items found **on or under the body** with items in the **surrounding environment** (floor, furniture, doorway, windowsill, knocked-over chair, blood spatter on wall, etc.). Each item needs 'title', non-empty 'location', 'description', plus 'discoveryContext' and (when environment) 'environmentIncludesBody' per EVIDENCE DISCOVERY rules.
 - Alibi/Motive: Set to "N/A (Deceased)".
 - Bio: Description of the body's state and their life before death.
 If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espionage), set hasVictim to false. Do NOT generate a deceased suspect card.`,
@@ -1196,13 +1215,15 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
   The timeline SHOULD span multiple days when relevant — include events from days before that establish motive or opportunity.
 - PROFESSIONAL BACKGROUND: A valid job or skill set.
 - WITNESS OBSERVATIONS: Something specific they saw or heard.
-- hiddenEvidence: Items they have that prove guilt or secrets. The guilty party MUST have damning hidden evidence.`,
+- hiddenEvidence: Items they have that prove guilt or secrets. Each item MUST include non-empty 'location' (where it is concealed). The guilty party MUST have damning hidden evidence.`,
 
     /** Data completeness requirement — used in all three */
     DATA_COMPLETENESS: `**DATA COMPLETENESS (CRITICAL):**
 - You MUST populate 'alibi', 'motive', 'relationships', 'knownFacts', 'timeline', 'professionalBackground', and 'witnessObservations' for EVERY suspect.
 - Do NOT return null or empty strings for required fields.
-- Do NOT return empty arrays [] for timeline, relationships, or knownFacts — generate real content.`,
+- Do NOT return empty arrays [] for timeline, relationships, or knownFacts — generate real content.
+- Every evidence item in 'initialEvidence' and every 'hiddenEvidence' entry MUST include a non-empty 'location' string (see EVIDENCE LOCATION rules).
+- For the **victim** (isDeceased), every 'hiddenEvidence' item MUST include 'discoveryContext' ("body" or "environment") and, when "environment", a boolean 'environmentIncludesBody' for image generation (see EVIDENCE LOCATION rules).`,
 
     /** Output format for consistency/edit modes — NOT used in generation */
     OUTPUT_FORMAT_WITH_REPORT: `**OUTPUT FORMAT:**
@@ -1272,6 +1293,19 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
 - CORRECT (natural): "Robert Chen claims he was at his apartment during the time of the murder."
 - If fixing existing text that overuses full names, rewrite it to sound natural by replacing repeated names with appropriate pronouns.`,
 
+    /** Evidence placement — used in generation, consistency, and edit */
+    EVIDENCE_LOCATION: `**EVIDENCE 'location' FIELD (CRITICAL — GAMEPLAY):**
+- Every object in 'initialEvidence' and every object in each suspect's 'hiddenEvidence' MUST include a non-empty string field 'location'.
+- **initialEvidence.location:** Where this item was found or collected at the scene (e.g. "Master bedroom floor near window", "Victim's office desk drawer", "Service alley behind the venue").
+- **hiddenEvidence (living suspects):** Where the item is hidden on their person or belongings (e.g. "Inside wallet", "Laptop bag front pocket").
+- **hiddenEvidence (victim, isDeceased) — TWO DISCOVERY ZONES:**
+  * **On the body:** 'discoveryContext' MUST be **"body"**. 'location' is a precise garment or anatomy sub-spot (breast pocket, inner lining, hand, under torso, etc.). Avoid useless generics like only "on the body".
+  * **In the environment (room/scene):** 'discoveryContext' MUST be **"environment"**. 'location' names the scene feature (e.g. "Under the overturned nightstand", "Blood smear on west wall near door", "Carpet fibers at room threshold"). The player finds these by searching the **room**, not by patting down the corpse.
+  * **environmentIncludesBody (boolean, REQUIRED when discoveryContext is "environment"):** Controls the evidence **image** asset. If **true**, the clue image may show the victim/body small or in soft focus in the background. If **false**, the image must be **environment-only** — no corpse, no body, no human remains in frame (furniture, walls, floor, objects only).
+  * Include **at least one** environment clue when the victim has 3+ hidden items (when reasonable for the setting).
+- **description** states what the object is; **location** states only where it sits. Keep the two distinct; do not paste the full description into location.
+- On the same victim, vary locations across items so clues are not all found with one search.`,
+
     /** Voice accent generation — used in generation; carried forward in consistency/edit */
     VOICE_ACCENT: `**VOICE ACCENT (REQUIRED FOR ALL CHARACTERS):**
 - Every suspect, officer, and partner MUST have a 'voiceAccent' field.
@@ -1324,9 +1358,12 @@ const CASE_SCHEMA = {
                 properties: {
                     id: { type: Type.STRING },
                     title: { type: Type.STRING },
-                    description: { type: Type.STRING }
+                    location: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    discoveryContext: { type: Type.STRING },
+                    environmentIncludesBody: { type: Type.BOOLEAN }
                 },
-                required: ["id", "title", "description"]
+                required: ["id", "title", "location", "description"]
             }
         },
         initialTimeline: {
@@ -1399,9 +1436,12 @@ const CASE_SCHEMA = {
                             properties: {
                                 id: { type: Type.STRING },
                                 title: { type: Type.STRING },
-                                description: { type: Type.STRING }
+                                location: { type: Type.STRING },
+                                description: { type: Type.STRING },
+                                discoveryContext: { type: Type.STRING },
+                                environmentIncludesBody: { type: Type.BOOLEAN }
                             },
-                            required: ["id", "title", "description"]
+                            required: ["id", "title", "location", "description"]
                         }
                     }
                 },
@@ -1439,9 +1479,258 @@ const REPORT_SCHEMA = {
     required: ["issuesFound", "changesMade", "conclusion"]
 };
 
+/** Drop evidence imageUrl when narrative fields changed vs baseline so assets regenerate. */
+function invalidateEvidenceImagesOnNarrativeChange(
+    finalCase: CaseData,
+    baselineCase: CaseData,
+    themeChanged: boolean
+): void {
+    const run = (evList: any[], origList: any[]) => {
+        evList.forEach((ev: any) => {
+            const orig = origList.find((o: any) => o.id === ev.id);
+            if (orig) {
+                const changed =
+                    themeChanged ||
+                    ev.title !== orig.title ||
+                    ev.description !== orig.description ||
+                    ev.location !== orig.location ||
+                    ev.discoveryContext !== orig.discoveryContext ||
+                    ev.environmentIncludesBody !== orig.environmentIncludesBody;
+                if (changed) delete ev.imageUrl;
+            } else {
+                delete ev.imageUrl;
+            }
+        });
+    };
+    run(finalCase.initialEvidence || [], baselineCase.initialEvidence || []);
+    (finalCase.suspects || []).forEach((s: any) => {
+        const origS = baselineCase.suspects?.find((os: any) => os.id === s.id);
+        if (origS) run(s.hiddenEvidence || [], origS.hiddenEvidence || []);
+    });
+}
+
+/** Full regenerateSingleSuspect for victim when base art is missing or victim-facing narrative/theme changed. */
+function victimNeedsFullPortraitRegen(s: any, orig: any, themeChanged: boolean): boolean {
+    if (!s?.isDeceased) return false;
+    if (themeChanged) return true;
+    const p = s.portraits;
+    if (!p || Object.keys(p).length === 0) return true;
+    const n = p.NEUTRAL;
+    if (!n || n === 'PLACEHOLDER') return true;
+    if (orig) {
+        if ((s.physicalDescription || '') !== (orig.physicalDescription || '')) return true;
+        if ((s.name || '') !== (orig.name || '')) return true;
+        if ((s.role || '') !== (orig.role || '')) return true;
+        if ((s.bio || '') !== (orig.bio || '')) return true;
+        if ((s.witnessObservations || '') !== (orig.witnessObservations || '')) return true;
+    }
+    return false;
+}
+
+/**
+ * Victim **examination** portrait keys (HEAD/ENVIRONMENT/…) — not evidence card thumbnails.
+ * - Clears portrait slots when zone metadata changes so wide/close-up views match the case.
+ * - Clears evidence imageUrl only when inferred examination **zone** changes (body vs environment
+ *   or body region), because image prompts differ materially.
+ * - Does NOT wipe environment clue card art on every consistency run (that was forcing wide rug
+ *   shots over correct close-ups of the object).
+ */
+function refreshVictimExaminationPortraitKeys(finalData: CaseData, originalCaseData: CaseData): void {
+    (finalData.suspects || []).forEach((s: any) => {
+        if (!s.isDeceased) return;
+        const origS = originalCaseData.suspects?.find((os: any) => os.id === s.id);
+        const portraitKeysToClear = new Set<string>();
+        (s.hiddenEvidence || []).forEach((ev: any) => {
+            const origEv = origS?.hiddenEvidence?.find((o: any) => o.id === ev.id);
+            const keyNow = inferVictimPortraitKeyForEvidence(ev);
+            const keyOrig = origEv ? inferVictimPortraitKeyForEvidence(origEv) : null;
+
+            if (keyOrig !== null && keyNow !== keyOrig) {
+                delete ev.imageUrl;
+                portraitKeysToClear.add(keyNow);
+                portraitKeysToClear.add(keyOrig);
+            }
+
+            if (ev.discoveryContext === 'environment' && origEv) {
+                const envMetaChanged =
+                    (ev.location || '') !== (origEv.location || '') ||
+                    (ev.title || '') !== (origEv.title || '') ||
+                    (ev.description || '') !== (origEv.description || '') ||
+                    ev.discoveryContext !== origEv.discoveryContext ||
+                    ev.environmentIncludesBody !== origEv.environmentIncludesBody;
+                if (envMetaChanged) {
+                    portraitKeysToClear.add(environmentScenePortraitKey(ev.id));
+                    portraitKeysToClear.add(environmentScenePortraitKey(origEv.id));
+                    portraitKeysToClear.add('ENVIRONMENT');
+                }
+            } else if (ev.discoveryContext === 'environment' && !origEv) {
+                portraitKeysToClear.add(environmentScenePortraitKey(ev.id));
+                portraitKeysToClear.add('ENVIRONMENT');
+            }
+        });
+        if (!s.portraits || portraitKeysToClear.size === 0) return;
+        portraitKeysToClear.forEach((k) => {
+            delete s.portraits[k];
+        });
+    });
+}
+
+/** If hero was tied to the victim's neutral portrait, point it at the new URL after regeneration. */
+function syncHeroImageWithVictimNeutral(finalData: CaseData, originalCaseData: CaseData): void {
+    const origVictim = originalCaseData.suspects?.find((s: any) => s.isDeceased);
+    const victim = finalData.suspects?.find((s: any) => s.isDeceased);
+    const newNeutral = victim?.portraits?.NEUTRAL;
+    const oldNeutral = origVictim?.portraits?.NEUTRAL;
+    if (!newNeutral || !finalData.heroImageUrl || !oldNeutral) return;
+    if (finalData.heroImageUrl === oldNeutral) {
+        finalData.heroImageUrl = newNeutral;
+    }
+}
+
+export type ConsistencyImagePipelineChange = { description: string; evidenceId?: string };
+
+/**
+ * Image regeneration after narrative merge. Call with merged case + the case snapshot from before consistency (for diffs).
+ * Returns audit rows for the consistency report (visual pass).
+ */
+export const applyConsistencyImagePipeline = async (
+    finalData: CaseData,
+    originalCaseData: CaseData,
+    onProgress?: (msg: string) => void
+): Promise<{ changesMade: ConsistencyImagePipelineChange[] }> => {
+    const changesMade: ConsistencyImagePipelineChange[] = [];
+    const themeChangedConsistency = finalData.type !== originalCaseData.type;
+    invalidateEvidenceImagesOnNarrativeChange(finalData, originalCaseData, themeChangedConsistency);
+    refreshVictimExaminationPortraitKeys(finalData, originalCaseData);
+
+    const userId = finalData.authorId || originalCaseData.authorId;
+    if (!userId) throw new Error('[CRITICAL] applyConsistencyImagePipeline: authorId is required');
+
+    const victimFullRegenNames: string[] = [];
+    const victimFullRegenTasks: Promise<void>[] = [];
+    (finalData.suspects || []).forEach((s: any) => {
+        if (!s.isDeceased) return;
+        const orig = originalCaseData.suspects?.find((os: any) => os.id === s.id);
+        if (!victimNeedsFullPortraitRegen(s, orig, themeChangedConsistency)) return;
+        victimFullRegenNames.push(s.name || s.id);
+        victimFullRegenTasks.push((async () => {
+            try {
+                const updated = await regenerateSingleSuspect(s, finalData.id, userId, finalData.type);
+                if (updated.portraits) s.portraits = updated.portraits;
+            } catch (e) {
+                console.error(`Full victim portrait regeneration failed for ${s.name}:`, e);
+            }
+        })());
+    });
+    if (victimFullRegenTasks.length > 0) {
+        if (onProgress) onProgress('Regenerating victim portraits...');
+        await Promise.all(victimFullRegenTasks);
+        changesMade.push({
+            description: `Regenerated full victim portrait set (neutral + examination views) for: ${victimFullRegenNames.join(', ')}`,
+        });
+    }
+
+    const ensureTasks: Promise<{ name: string; n: number }>[] = [];
+    (finalData.suspects || []).forEach((s: any) => {
+        if (!s.isDeceased) return;
+        ensureTasks.push((async () => {
+            try {
+                const n = await ensureVictimExaminationPortraits(s, finalData.id, userId, finalData.type);
+                return { name: s.name || s.id, n };
+            } catch (e) {
+                console.error(`ensureVictimExaminationPortraits failed for ${s.name}:`, e);
+                return { name: s.name || s.id, n: 0 };
+            }
+        })());
+    });
+    if (ensureTasks.length > 0) {
+        if (onProgress) onProgress('Syncing victim examination views...');
+        const rows = await Promise.all(ensureTasks);
+        const hits = rows.filter((r) => r.n > 0);
+        if (hits.length > 0) {
+            changesMade.push({
+                description: `Generated missing victim examination view(s): ${hits.map((h) => `${h.name} (+${h.n} view${h.n === 1 ? '' : 's'})`).join('; ')}`,
+            });
+        }
+    }
+
+    const evidenceTasks: Promise<{ title: string; id: string } | null>[] = [];
+    (finalData.initialEvidence || []).forEach((ev: any) => {
+        if (!ev.imageUrl) {
+            evidenceTasks.push((async () => {
+                try {
+                    const url = await generateEvidenceImage(ev, finalData.id, userId, undefined, { caseTheme: finalData.type });
+                    if (url) {
+                        ev.imageUrl = url;
+                        return { title: ev.title || ev.id, id: ev.id };
+                    }
+                } catch (e) {
+                    console.error(`Failed to generate image for evidence ${ev.id}:`, e);
+                }
+                return null;
+            })());
+        }
+    });
+    (finalData.suspects || []).forEach((s: any) => {
+        const victimRef = s.isDeceased && s.portraits ? (s.portraits as Record<string, string>)['NEUTRAL'] : undefined;
+        (s.hiddenEvidence || []).forEach((ev: any) => {
+            if (!ev.imageUrl) {
+                evidenceTasks.push((async () => {
+                    try {
+                        const url = await generateEvidenceImage(
+                            ev,
+                            finalData.id,
+                            userId,
+                            s.isDeceased ? victimRef : undefined,
+                            s.isDeceased ? { forDeceasedVictim: true, caseTheme: finalData.type } : undefined
+                        );
+                        if (url) {
+                            ev.imageUrl = url;
+                            return { title: ev.title || ev.id, id: ev.id };
+                        }
+                    } catch (e) {
+                        console.error(`Failed to generate image for evidence ${ev.id}:`, e);
+                    }
+                    return null;
+                })());
+            }
+        });
+    });
+    if (evidenceTasks.length > 0) {
+        if (onProgress) onProgress('Generating evidence images...');
+        const evResults = await Promise.all(evidenceTasks);
+        const done = evResults.filter(Boolean) as { title: string; id: string }[];
+        if (done.length > 0) {
+            changesMade.push({
+                description: `Regenerated ${done.length} evidence card image(s): ${done.map((d) => d.title).join('; ')}`,
+            });
+        }
+    }
+
+    syncHeroImageWithVictimNeutral(finalData, originalCaseData);
+
+    return { changesMade };
+};
+
+function mergeImagePipelineIntoReport(report: any, imageChanges: ConsistencyImagePipelineChange[]): any {
+    if (!imageChanges.length) return report;
+    if (!report || typeof report !== 'object') return report;
+    const existing = Array.isArray(report.changesMade) ? report.changesMade : [];
+    return {
+        ...report,
+        changesMade: [...existing, ...imageChanges],
+    };
+}
+
 // --- CORE FUNCTIONS ---
 
-export const checkCaseConsistency = async (caseData: CaseData, onProgress?: (msg: string) => void, baseline?: CaseData, editContext?: string): Promise<{ updatedCase: CaseData, report: any }> => {
+export const checkCaseConsistency = async (
+    caseData: CaseData,
+    onProgress?: (msg: string) => void,
+    baseline?: CaseData,
+    editContext?: string,
+    options?: { narrativeOnly?: boolean }
+): Promise<{ updatedCase: CaseData, report: any }> => {
     console.log(`[DEBUG] checkCaseConsistency: Starting for case "${caseData.title}"`);
 
     // Compute user changes from baseline for the AI prompt
@@ -1524,8 +1813,11 @@ ${userChangeLog}
     }, 2500);
 
     try {
-        const result = await ai.models.generateContent({
-            model: GEMINI_MODELS.CASE_ENGINE,
+        const result = await generateWithTextModel(
+            GEMINI_MODELS.CASE_ENGINE,
+            (model) =>
+                ai.models.generateContent({
+            model,
             contents: `${shouldPropagateNarrative
     ? `You are a Narrative Consistency Refactorer.
     I will provide a JSON object representing a detective mystery game case.
@@ -1589,6 +1881,10 @@ ${userChangeLog}
     - A name is misspelled differently across fields → unify the spelling
     - A timeline entry has the activity stuffed into the time field → fix the format
     - Evidence description references a suspect by the wrong name → fix the name
+    - Evidence is missing 'location', or 'location' contradicts where the description says the item was found → set or correct 'location' (minimal edit)
+    - Victim (isDeceased) hiddenEvidence uses vague locations like only "on the body" → replace with specific pockets/areas per EVIDENCE LOCATION rules
+    - Victim hiddenEvidence missing 'discoveryContext' or missing 'environmentIncludesBody' when discoveryContext is "environment" → set per EVIDENCE LOCATION rules
+    - Victim hiddenEvidence: body-zone wording (pocket/hand/face/shoe vs rug/wall/furniture) should match 'discoveryContext' (body vs environment) so the correct examination portrait can be generated downstream
     - Required fields are completely empty/missing → populate them minimally
     - Timeline uses 24-hour format → convert to 12-hour AM/PM
     - A relationship description is just one word repeating the type → add a minimal 2-sentence description
@@ -1609,6 +1905,7 @@ ${userChangeLog}
     **FORMAT RULES (apply these ONLY where formatting is currently wrong):**
     ${PROMPT_RULES.TIMELINE_FORMAT}
     ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
+    ${PROMPT_RULES.EVIDENCE_LOCATION}
     
     **STRUCTURAL RULES (check but only fix if actually broken):**
     ${PROMPT_RULES.DATA_COMPLETENESS}
@@ -1639,7 +1936,9 @@ ${userChangeLog}
                 },
                 thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
             }
-        });
+        }),
+            "checkCaseConsistency"
+        );
 
         clearInterval(progressInterval);
         if (onProgress) onProgress("Finalizing Narrative Repair...");
@@ -1741,35 +2040,13 @@ ${userChangeLog}
             }
         }
 
-        // Generate images for any NEW evidence added by the AI
-        if (onProgress) onProgress("Generating images for new evidence...");
-        const userId = caseData.authorId;
-        if (!userId) throw new Error('[CRITICAL] checkCaseConsistency: caseData.authorId is required');
-        const newEvidenceTasks: Promise<void>[] = [];
-
-        const allEvidence = [
-            ...(finalData.initialEvidence || []),
-            ...(finalData.suspects || []).flatMap((s: any) => s.hiddenEvidence || [])
-        ];
-
-        allEvidence.forEach(ev => {
-            if (!ev.imageUrl) {
-                newEvidenceTasks.push((async () => {
-                    try {
-                        const url = await generateEvidenceImage(ev, finalData.id, userId);
-                        if (url) ev.imageUrl = url;
-                    } catch (e) {
-                        console.error(`Failed to generate image for new evidence ${ev.id}:`, e);
-                    }
-                })());
-            }
-        });
-
-        if (newEvidenceTasks.length > 0) {
-            await Promise.all(newEvidenceTasks);
+        if (options?.narrativeOnly) {
+            return { updatedCase: finalData, report: reportObj };
         }
 
-        return { updatedCase: finalData, report: reportObj };
+        const imageAudit = await applyConsistencyImagePipeline(finalData, caseData, onProgress);
+
+        return { updatedCase: finalData, report: mergeImagePipelineIntoReport(reportObj, imageAudit.changesMade) };
     } catch (e) {
         clearInterval(progressInterval);
         console.error("Consistency Check Failed:", e);
@@ -1832,8 +2109,11 @@ ${userChangeLog}
 `;
 
     try {
-        const result = await ai.models.generateContent({
-            model: GEMINI_MODELS.CASE_ENGINE,
+        const result = await generateWithTextModel(
+            GEMINI_MODELS.CASE_ENGINE,
+            (model) =>
+                ai.models.generateContent({
+            model,
             contents: `You are a Master Narrative Architect.
       I will provide a JSON object representing a detective mystery game case and a USER REQUEST for modification.
       
@@ -1856,6 +2136,7 @@ ${userChangeLog}
       3. **EVIDENCE MANAGEMENT:**
          - You MUST update initialEvidence and hiddenEvidence to fit the new narrative.
          - Ensure all evidence is logically linked to the crime and the suspects.
+         - Every evidence object MUST keep a non-empty 'location' (see EVIDENCE LOCATION rules) whenever that item exists.
          
       4. **BASIC CONSISTENCY:**
          - Make a reasonable effort to keep timelines, names, and relationships consistent with your changes.
@@ -1879,7 +2160,9 @@ ${userChangeLog}
            
       13. ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
       
-      14. ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
+      14. ${PROMPT_RULES.EVIDENCE_LOCATION}
+      
+      15. ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
       
       CASE DATA:
       ${JSON.stringify(lightweightCase, null, 2)}`,
@@ -1895,7 +2178,9 @@ ${userChangeLog}
                 },
                 thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
             }
-        });
+        }),
+            "editCaseWithPrompt"
+        );
 
         clearInterval(progressInterval);
         if (onProgress) onProgress("Finalizing Case Transformation...");
@@ -2002,7 +2287,10 @@ ${userChangeLog}
                 if (orig) {
                     const titleChanged = ev.title !== orig.title;
                     const descChanged = ev.description !== orig.description;
-                    if (themeChanged || titleChanged || descChanged) {
+                    const locChanged = ev.location !== orig.location;
+                    const discChanged = ev.discoveryContext !== orig.discoveryContext;
+                    const envBodyChanged = ev.environmentIncludesBody !== orig.environmentIncludesBody;
+                    if (themeChanged || titleChanged || descChanged || locChanged || discChanged || envBodyChanged) {
                         delete ev.imageUrl;
                     }
                 } else {
@@ -2069,16 +2357,11 @@ ${userChangeLog}
         });
 
         // 3. Evidence Images
-        const allEvidence = [
-            ...(finalData.initialEvidence || []),
-            ...(finalData.suspects || []).flatMap((s: any) => s.hiddenEvidence || [])
-        ];
-
-        allEvidence.forEach(ev => {
+        (finalData.initialEvidence || []).forEach((ev: any) => {
             if (!ev.imageUrl) {
                 generationTasks.push((async () => {
                     try {
-                        const url = await generateEvidenceImage(ev, finalData.id, userId);
+                        const url = await generateEvidenceImage(ev, finalData.id, userId, undefined, { caseTheme: finalData.type });
                         if (url) ev.imageUrl = url;
                     } catch (e) {
                         console.error(`Failed to generate image for evidence ${ev.id}:`, e);
@@ -2086,9 +2369,45 @@ ${userChangeLog}
                 })());
             }
         });
+        (finalData.suspects || []).forEach((s: any) => {
+            const victimRef = s.isDeceased && s.portraits ? (s.portraits as Record<string, string>)['NEUTRAL'] : undefined;
+            (s.hiddenEvidence || []).forEach((ev: any) => {
+                if (!ev.imageUrl) {
+                    generationTasks.push((async () => {
+                        try {
+                            const url = await generateEvidenceImage(
+                                ev,
+                                finalData.id,
+                                userId,
+                                s.isDeceased ? victimRef : undefined,
+                                s.isDeceased ? { forDeceasedVictim: true, caseTheme: finalData.type } : undefined
+                            );
+                            if (url) ev.imageUrl = url;
+                        } catch (e) {
+                            console.error(`Failed to generate image for evidence ${ev.id}:`, e);
+                        }
+                    })());
+                }
+            });
+        });
 
         if (generationTasks.length > 0) {
             await Promise.all(generationTasks);
+        }
+
+        const ensureVictimTasks = (finalData.suspects || [])
+            .filter((s: any) => s.isDeceased)
+            .map((s: any) =>
+                (async () => {
+                    try {
+                        await ensureVictimExaminationPortraits(s, finalData.id, userId, finalData.type);
+                    } catch (e) {
+                        console.error(`ensureVictimExaminationPortraits failed for ${s.name}:`, e);
+                    }
+                })()
+            );
+        if (ensureVictimTasks.length > 0) {
+            await Promise.all(ensureVictimTasks);
         }
 
         return { updatedCase: finalData, report: reportObj };
@@ -2154,6 +2473,8 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     
     ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
     
+    ${PROMPT_RULES.EVIDENCE_LOCATION}
+    
     Output JSON structure matching CaseData interface.
   `;
 
@@ -2196,8 +2517,11 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                             type: Type.OBJECT, properties: {
                                 id: { type: Type.STRING },
                                 title: { type: Type.STRING },
-                                description: { type: Type.STRING }
-                            }, required: ["title", "description"]
+                                location: { type: Type.STRING },
+                                description: { type: Type.STRING },
+                                discoveryContext: { type: Type.STRING },
+                                environmentIncludesBody: { type: Type.BOOLEAN }
+                            }, required: ["title", "location", "description"]
                         }
                     },
                     initialTimeline: {
@@ -2264,8 +2588,11 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
                                         type: Type.OBJECT, properties: {
                                             id: { type: Type.STRING },
                                             title: { type: Type.STRING },
-                                            description: { type: Type.STRING }
-                                        }, required: ["title", "description"]
+                                            location: { type: Type.STRING },
+                                            description: { type: Type.STRING },
+                                            discoveryContext: { type: Type.STRING },
+                                            environmentIncludesBody: { type: Type.BOOLEAN }
+                                        }, required: ["title", "location", "description"]
                                     }
                                 }
                             }, required: ["name", "gender", "role", "status", "bio", "personality", "secret", "isGuilty", "baseAggravation", "motive", "alibi", "relationships", "knownFacts", "hiddenEvidence", "timeline", "professionalBackground", "witnessObservations", "voiceAccent"]
@@ -2283,7 +2610,10 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     // Post-process to ensure IDs and defaults if AI missed something despite schema
     data.id = `custom-${Date.now()}`;
     data.initialEvidence = data.initialEvidence || [];
-    data.initialEvidence.forEach((e: any, i: number) => e.id = `ie-${i}`);
+    data.initialEvidence.forEach((e: any, i: number) => {
+        e.id = `ie-${i}`;
+        if (typeof e.location !== 'string') e.location = '';
+    });
 
     // Robustness for Support Characters
     data.initialTimeline = data.initialTimeline || [];
@@ -2313,7 +2643,18 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
         s.id = `s-${i}`;
         s.portraits = {};
         s.hiddenEvidence = s.hiddenEvidence || [];
-        s.hiddenEvidence.forEach((e: any, j: number) => e.id = `he-${s.id}-${j}`);
+        s.hiddenEvidence.forEach((e: any, j: number) => {
+            e.id = `he-${s.id}-${j}`;
+            if (typeof e.location !== 'string') e.location = '';
+            if (s.isDeceased) {
+                if (e.discoveryContext !== 'environment' && e.discoveryContext !== 'body') {
+                    e.discoveryContext = 'body';
+                }
+                if (e.discoveryContext === 'environment' && typeof e.environmentIncludesBody !== 'boolean') {
+                    e.environmentIncludesBody = false;
+                }
+            }
+        });
 
         // Assign voice
         if (!s.voice || s.voice === "None") {

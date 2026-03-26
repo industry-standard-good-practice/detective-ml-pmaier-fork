@@ -1,10 +1,29 @@
 import admin from 'firebase-admin';
 import { ai } from "./geminiClient.js";
 import { GEMINI_MODELS } from "./geminiModels.js";
-import { STYLE_REF_URL, PIXEL_ART_BASE, INSTRUCTION_NEW_CHAR, INSTRUCTION_PRESERVE_CHAR, INSTRUCTION_RELATED_EVIDENCE, getStyleRefBase64 } from "./geminiStyles.js";
+import { STYLE_REF_URL, PIXEL_ART_BASE, INSTRUCTION_NEW_CHAR, INSTRUCTION_PRESERVE_CHAR, INSTRUCTION_RELATED_EVIDENCE, EVIDENCE_CARD_CLOSEUP_FRAMING, getStyleRefBase64 } from "./geminiStyles.js";
+import {
+  inferVictimPortraitKeyForEvidence,
+  environmentScenePortraitKey,
+  ENV_SCENE_PORTRAIT_PREFIX,
+} from "./victimPortraitKey.js";
 
 // --- Types ---
-interface Evidence { id: string; title: string; description: string; imageUrl?: string; }
+interface Evidence {
+  id: string;
+  title: string;
+  location?: string;
+  description: string;
+  imageUrl?: string;
+  discoveryContext?: 'body' | 'environment';
+  environmentIncludesBody?: boolean;
+}
+
+export type GenerateEvidenceImageMeta = {
+  /** Victim-card hidden clues use special prompts (body vs room) and optional portrait ref. */
+  forDeceasedVictim?: boolean;
+  caseTheme?: string;
+};
 interface SupportCharacter { id: string; name: string; gender: string; role: string; personality: string; avatarSeed: number; portraits?: Record<string, string>; voice?: string; }
 interface Suspect {
   id: string; name: string; gender: string; age: number; bio: string; role: string;
@@ -26,7 +45,9 @@ const Emotion = {
   NEUTRAL: 'NEUTRAL', ANGRY: 'ANGRY', SAD: 'SAD', NERVOUS: 'NERVOUS',
   HAPPY: 'HAPPY', SURPRISED: 'SURPRISED', SLY: 'SLY', CONTENT: 'CONTENT',
   DEFENSIVE: 'DEFENSIVE', ARROGANT: 'ARROGANT',
-  HEAD: 'HEAD', TORSO: 'TORSO', HANDS: 'HANDS', LEGS: 'LEGS'
+  HEAD: 'HEAD', TORSO: 'TORSO', HANDS: 'HANDS', LEGS: 'LEGS',
+  /** Crime-scene / room overview for environment-hidden clues (not a body close-up). */
+  ENVIRONMENT: 'ENVIRONMENT',
 } as const;
 
 // --- Helper: color descriptions ---
@@ -197,35 +218,113 @@ const generateEmotionalVariants = async (
 };
 
 // --- FORENSIC VARIANTS (DECEASED) ---
+const DECEASED_FORENSIC_NEGATIVE =
+  'NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.';
+
+/** Full edit prompt for one deceased examination view (theme used for ENVIRONMENT framing). */
+const buildDeceasedForensicEditPrompt = (view: string, theme: string): string => {
+  switch (view) {
+    case Emotion.HEAD:
+      return `ZOOM IN: Extreme close up of the victim's head and face. Eyes are CLOSED. Lifeless. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    case Emotion.TORSO:
+      return `ZOOM IN: Close up of the victim's chest, shirt, and pockets. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    case Emotion.HANDS:
+      return `ZOOM IN: Close up of the victim's hands and fingers. Pale skin. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    case Emotion.LEGS:
+      return `ZOOM IN: Close up of the victim's legs, pants, and shoes. No face visible. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    case Emotion.ENVIRONMENT:
+      return `PULL BACK — NOT a portrait crop: medium-wide crime scene shot matching the reference. Same victim and room; show floor, walls, door frame, and furniture with equal weight; victim smaller in frame — investigator overview. Theme: ${theme}. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+    default:
+      return `ZOOM IN: Close up of the victim's torso and clothing. No face. Forensic style. Maintain consistent clothing colors and skin tone from reference. Pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+  }
+};
+
+/** One environmental clue → its own crime-scene framing (pregen / consistency). */
+const buildEnvironmentScenePortraitPrompt = (ev: Evidence, theme: string): string => {
+  const loc = (ev.location || '').trim();
+  const locBit = loc ? `Focal area / placement: ${loc}. ` : '';
+  return `PULL BACK — medium-wide crime scene shot matching the reference victim and room. ${locBit}Camera and composition emphasize this beat: "${ev.title}" — ${ev.description} Theme: ${theme}. Keep the same victim identity, pose, and clothing as the reference; shift viewpoint toward this area of the scene. Forensic flash, pixel art. ${DECEASED_FORENSIC_NEGATIVE}`;
+};
+
+function buildVictimExaminationImagePrompt(view: string, theme: string, hiddenEvidence: Evidence[] | undefined): string {
+  if (view.startsWith(ENV_SCENE_PORTRAIT_PREFIX)) {
+    const ev = hiddenEvidence?.find((e) => environmentScenePortraitKey(e.id) === view);
+    if (ev) return buildEnvironmentScenePortraitPrompt(ev, theme);
+  }
+  return buildDeceasedForensicEditPrompt(view, theme);
+}
+
 const generateForensicVariants = async (
   fullBodyUrl: string,
-  suspect: Suspect
+  theme: string = 'Noir',
+  hiddenEvidence?: Evidence[]
 ): Promise<Record<string, string>> => {
   const newPortraits: Record<string, string> = { [Emotion.NEUTRAL]: fullBodyUrl };
-  const views = [Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS];
+  const views: string[] = [Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS, Emotion.ENVIRONMENT];
+  (hiddenEvidence || []).forEach((ev) => {
+    if (ev.discoveryContext === 'environment') {
+      views.push(environmentScenePortraitKey(ev.id));
+    }
+  });
 
   const generateView = async (view: string) => {
-    let partPrompt = "";
-    const commonNegative = "NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.";
-    switch (view) {
-      case Emotion.HEAD: partPrompt = "Extreme close up of the victim's head and face. Eyes are CLOSED. Lifeless. Forensic style."; break;
-      case Emotion.TORSO: partPrompt = "Close up of the victim's chest, shirt, and pockets. No face visible. Forensic style."; break;
-      case Emotion.HANDS: partPrompt = "Close up of the victim's hands and fingers. Pale skin. No face visible. Forensic style."; break;
-      case Emotion.LEGS: partPrompt = "Close up of the victim's legs, pants, and shoes. No face visible. Forensic style."; break;
-    }
-    const prompt = `ZOOM IN: ${partPrompt} Maintain consistent clothing colors and skin tone from reference. Pixel art. ${commonNegative}`;
-    const raw = await generateImageRaw(prompt, '3:4', [fullBodyUrl], 'edit');
+    const prompt = buildVictimExaminationImagePrompt(view, theme, hiddenEvidence);
+    const raw = await generateImageRaw(prompt, '3:4', [fullBodyUrl], 'edit', GEMINI_MODELS.IMAGE_HD);
     return raw ? { view, url: `data:image/png;base64,${raw}` } : null;
   };
 
   const BATCH_SIZE = 2;
   for (let i = 0; i < views.length; i += BATCH_SIZE) {
     const batch = views.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(batch.map(v => generateView(v)));
-    results.forEach(r => { if (r) newPortraits[r.view] = r.url; });
+    const results = await Promise.all(batch.map((v) => generateView(v)));
+    results.forEach((r) => {
+      if (r) newPortraits[r.view] = r.url;
+    });
   }
 
   return newPortraits;
+};
+
+/**
+ * Ensures the victim has portrait URLs for every examination zone required by current hiddenEvidence
+ * (inferred from discoveryContext + location/title/description). Mutates suspect.portraits.
+ */
+export const ensureVictimExaminationPortraits = async (
+  suspect: Suspect,
+  caseId: string,
+  userId: string,
+  caseTheme: string
+): Promise<number> => {
+  if (!userId) throw new Error('[CRITICAL] ensureVictimExaminationPortraits: userId is required');
+  if (!suspect.isDeceased || !(suspect.hiddenEvidence?.length)) return 0;
+
+  const neutral = suspect.portraits?.[Emotion.NEUTRAL];
+  if (!neutral || neutral === 'PLACEHOLDER') return 0;
+
+  const required = new Set<string>();
+  for (const ev of suspect.hiddenEvidence) {
+    required.add(inferVictimPortraitKeyForEvidence(ev));
+  }
+
+  suspect.portraits = suspect.portraits || {};
+  const folder = 'suspects';
+  let generated = 0;
+
+  for (const view of required) {
+    const cur = suspect.portraits[view];
+    if (cur && cur !== 'PLACEHOLDER') continue;
+
+    const prompt = buildVictimExaminationImagePrompt(view, caseTheme, suspect.hiddenEvidence);
+    const raw = await generateImageRaw(prompt, '3:4', [neutral], 'edit', GEMINI_MODELS.IMAGE_HD);
+    if (!raw) {
+      console.warn(`[Images] Failed to generate missing victim portrait "${view}" for ${suspect.name}`);
+      continue;
+    }
+    const b64 = `data:image/png;base64,${raw}`;
+    suspect.portraits[view] = await uploadImage(b64, `images/${userId}/cases/${caseId}/${folder}/${suspect.id}/${view}.png`);
+    generated += 1;
+  }
+  return generated;
 };
 
 // --- PUBLIC IMAGE METHODS ---
@@ -234,18 +333,61 @@ export const generateEvidenceImage = async (
   evidence: Evidence,
   caseId: string,
   userId: string,
-  refImage?: string
+  refImage?: string,
+  meta?: GenerateEvidenceImageMeta
 ): Promise<string> => {
   if (!userId) throw new Error('[CRITICAL] generateEvidenceImage: userId is required');
-  const refs = STYLE_REF_URL ? [STYLE_REF_URL] : [];
-  if (refImage) refs.push(refImage);
+  const styleRefs: string[] = STYLE_REF_URL ? [STYLE_REF_URL] : [];
+  const theme = meta?.caseTheme || 'Noir investigation';
+  const loc = (evidence.location || '').trim();
+  const locBit = loc ? ` Placement: ${loc}.` : '';
 
-  const mode = refImage ? 'evidence' : 'create';
+  let refs = [...styleRefs];
+  let mode: 'create' | 'evidence' = 'create';
+  let prompt = '';
 
-  const b64 = await generateImageRaw(
-    `Subject: ${evidence.title}, ${evidence.description}. Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. No text.`,
-    '1:1', refs, mode
-  );
+  if (meta?.forDeceasedVictim) {
+    const zone = evidence.discoveryContext === 'environment' ? 'environment' : 'body';
+    if (zone === 'environment') {
+      const includeBody = evidence.environmentIncludesBody === true;
+      if (includeBody && refImage) {
+        refs = [...styleRefs, refImage];
+        mode = 'evidence';
+        prompt = `${INSTRUCTION_RELATED_EVIDENCE} ${EVIDENCE_CARD_CLOSEUP_FRAMING} ${PIXEL_ART_BASE} Theme: ${theme}. Evidence: "${evidence.title}" — ${evidence.description}.${locBit} The physical evidence fills most of the frame. The victim from the reference may appear only as a small, partial, heavily blurred background hint — never the dominant subject. Harsh flash forensic mood. No text, no captions.`;
+      } else {
+        refs = [...styleRefs];
+        mode = 'create';
+        prompt = `${PIXEL_ART_BASE} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Theme: ${theme}.${locBit} Evidence object: "${evidence.title}" — ${evidence.description}. STRICT NEGATIVE: no dead body, no corpse, no human remains, no victim, no person, no limbs, no face in frame. Surrounding rug/floor/furniture only as soft peripheral context. Forensic flash. No text.`;
+      }
+    } else {
+      if (refImage) {
+        refs = [...styleRefs, refImage];
+        mode = 'evidence';
+        prompt = `${INSTRUCTION_RELATED_EVIDENCE} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Close-up forensic detail on the body or clothing. "${evidence.title}", ${evidence.description}.${locBit} ${PIXEL_ART_BASE} Harsh flash, high contrast. No text.`;
+      } else {
+        refs = [...styleRefs];
+        mode = 'create';
+        prompt = `Subject: "${evidence.title}", ${evidence.description}.${locBit} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Style: Forensic close-up on remains or garments. ${PIXEL_ART_BASE} No text.`;
+      }
+    }
+  } else {
+    if (refImage) {
+      refs = [...styleRefs, refImage];
+      mode = 'evidence';
+      prompt = `Subject: ${evidence.title}, ${evidence.description}.${locBit} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows. Gritty crime scene aesthetic. ${PIXEL_ART_BASE} No text.`;
+    } else if (evidence.discoveryContext === 'environment') {
+      refs = [...styleRefs];
+      mode = 'create';
+      const noBody = evidence.environmentIncludesBody !== true;
+      prompt = `${PIXEL_ART_BASE} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Theme: ${theme}.${locBit} "${evidence.title}" — ${evidence.description}. ${noBody ? 'STRICT: no dead body, no corpse, no human remains in frame. ' : ''}Forensic flash. No text.`;
+    } else {
+      refs = [...styleRefs];
+      mode = 'create';
+      prompt = `Subject: ${evidence.title}, ${evidence.description}.${locBit} ${EVIDENCE_CARD_CLOSEUP_FRAMING} Style: Forensic evidence photo taken with a harsh flash. High contrast, strong shadows, illuminated center, dark vignette edges. Gritty crime scene aesthetic. ${PIXEL_ART_BASE} No text.`;
+    }
+  }
+
+  const b64 = await generateImageRaw(prompt, '1:1', refs, mode);
   if (!b64) return "";
 
   const url = await uploadImage(b64, `images/${userId}/cases/${caseId}/evidence/${evidence.id}.png`);
@@ -281,7 +423,7 @@ export const generateEmotionalVariantsFromBase = async (
   const isDeceased = isSuspect && (suspect as Suspect).isDeceased;
 
   const variantPortraits = isDeceased
-    ? await generateForensicVariants(neutralBase64, suspect as Suspect)
+    ? await generateForensicVariants(neutralBase64, 'Noir')
     : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
 
   const folder = isSuspect ? 'suspects' : 'support';
@@ -367,7 +509,7 @@ export const generateSuspectFromUpload = async (
   const neutralUrl = await uploadImage(neutralBase64, `images/${userId}/cases/${caseId}/suspects/${suspect.id}/neutral.png`);
 
   const variantPortraits = suspect.isDeceased
-    ? await generateForensicVariants(neutralBase64, suspect)
+    ? await generateForensicVariants(neutralBase64, 'Noir')
     : await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
 
   const uploadedPortraits: Record<string, string> = { [Emotion.NEUTRAL]: neutralUrl };
@@ -380,7 +522,10 @@ export const generateSuspectFromUpload = async (
     for (let i = 0; i < suspect.hiddenEvidence.length; i++) {
       const ev = suspect.hiddenEvidence[i];
       try {
-        const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64);
+        const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64, {
+          forDeceasedVictim: true,
+          caseTheme: 'Noir',
+        });
         if (evUrl) ev.imageUrl = evUrl;
       } catch (e) {
         console.error(`Failed to regenerate hidden evidence ${ev.id} for victim:`, e);
@@ -427,7 +572,7 @@ export const regenerateSingleSuspect = async (
 
   let emotionPortraits: Record<string, string> = {};
   if (isSuspect && (suspect as Suspect).isDeceased) {
-    emotionPortraits = await generateForensicVariants(neutralBase64, suspect as Suspect);
+    emotionPortraits = await generateForensicVariants(neutralBase64, theme, (suspect as Suspect).hiddenEvidence);
   } else {
     emotionPortraits = await generateEmotionalVariants(neutralBase64, suspect.avatarSeed);
   }
@@ -443,7 +588,10 @@ export const regenerateSingleSuspect = async (
     for (let i = 0; i < s.hiddenEvidence.length; i++) {
       const ev = s.hiddenEvidence[i];
       try {
-        const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64);
+        const evUrl = await generateEvidenceImage(ev, caseId, userId, neutralBase64, {
+          forDeceasedVictim: true,
+          caseTheme: theme,
+        });
         if (evUrl) ev.imageUrl = evUrl;
       } catch (e) {
         console.error(`Failed to regenerate hidden evidence ${ev.id} for victim:`, e);
@@ -526,13 +674,13 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
 
   (caseData.initialEvidence || []).forEach(ev => {
     evidenceTasks.push((async () => {
-      const b64 = await generateImageRaw(
-        `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo taken with a harsh flash. Gritty crime scene aesthetic. No text.`,
-        '1:1', styleRefs, 'create'
-      );
-      if (b64) {
-        const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/evidence/${ev.id}.png`);
-        ev.imageUrl = url;
+      try {
+        const url = await generateEvidenceImage(ev, caseData.id, userId, undefined, {
+          caseTheme: caseData.type,
+        });
+        if (url) ev.imageUrl = url;
+      } catch (e) {
+        console.error(`[pregenerate] initial evidence ${ev.id}:`, e);
       }
     })());
   });
@@ -541,15 +689,19 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
     const suspectRef = base64Map[s.id];
     (s.hiddenEvidence || []).forEach(ev => {
       evidenceTasks.push((async () => {
-        const mode = (s.isDeceased && suspectRef) ? 'evidence' : 'create';
-        const refs = suspectRef ? [...styleRefs, suspectRef] : styleRefs;
-        const b64 = await generateImageRaw(
-          `Subject: ${ev.title}, ${ev.description}. Style: Forensic evidence photo. Gritty crime scene aesthetic. No text.`,
-          '1:1', refs, mode as any
-        );
-        if (b64) {
-          const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/evidence/${ev.id}.png`);
-          ev.imageUrl = url;
+        try {
+          const url = await generateEvidenceImage(
+            ev,
+            caseData.id,
+            userId,
+            s.isDeceased ? suspectRef : undefined,
+            s.isDeceased
+              ? { forDeceasedVictim: true, caseTheme: caseData.type }
+              : undefined
+          );
+          if (url) ev.imageUrl = url;
+        } catch (e) {
+          console.error(`[pregenerate] hidden evidence ${ev.id}:`, e);
         }
       })());
     });
@@ -567,15 +719,30 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
 
   const variantTasks: VariantTask[] = [];
   const livingEmotions = [Emotion.HAPPY, Emotion.ANGRY, Emotion.SAD, Emotion.NERVOUS, Emotion.SURPRISED, Emotion.SLY, Emotion.CONTENT, Emotion.DEFENSIVE, Emotion.ARROGANT];
-  const forensicViews = [Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS];
+  const forensicViews = [Emotion.HEAD, Emotion.TORSO, Emotion.HANDS, Emotion.LEGS, Emotion.ENVIRONMENT];
 
   (caseData.suspects || []).forEach(s => {
     const b64 = base64Map[s.id];
     if (b64) {
-      const targetEmotions = s.isDeceased ? forensicViews : livingEmotions;
-      targetEmotions.forEach(emo => {
-        variantTasks.push({ targetId: s.id, emotion: emo, neutralUrl: b64, type: 'suspect' });
-      });
+      if (s.isDeceased) {
+        forensicViews.forEach(emo => {
+          variantTasks.push({ targetId: s.id, emotion: emo, neutralUrl: b64, type: 'suspect' });
+        });
+        (s.hiddenEvidence || []).forEach(ev => {
+          if (ev.discoveryContext === 'environment') {
+            variantTasks.push({
+              targetId: s.id,
+              emotion: environmentScenePortraitKey(ev.id),
+              neutralUrl: b64,
+              type: 'suspect',
+            });
+          }
+        });
+      } else {
+        livingEmotions.forEach(emo => {
+          variantTasks.push({ targetId: s.id, emotion: emo, neutralUrl: b64, type: 'suspect' });
+        });
+      }
     }
   });
 
@@ -603,20 +770,12 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
       }
 
       if (isDeceased) {
-        let partPrompt = "";
-        const commonNegative = "NEGATIVE PROMPT: open eyes, staring, pupils, iris, looking at camera, standing up, alive, smiling, text, UI.";
-        switch (task.emotion) {
-          case Emotion.HEAD: partPrompt = "Extreme close up of the victim's head and face. Eyes CLOSED. Lifeless. Forensic style."; break;
-          case Emotion.TORSO: partPrompt = "Close up of the victim's torso and clothing. No face. Forensic style."; break;
-          case Emotion.HANDS: partPrompt = "Close up of the victim's hands. No face. Forensic style."; break;
-          case Emotion.LEGS: partPrompt = "Close up of the victim's legs and shoes. No face. Forensic style."; break;
-        }
-        prompt = `ZOOM IN: ${partPrompt} Maintain consistent clothing colors and skin tone from reference. Pixel art. ${commonNegative}`;
+        prompt = buildVictimExaminationImagePrompt(task.emotion, caseData.type || 'Noir', s?.hiddenEvidence);
       } else {
         prompt = `Keep the character exactly the same, but change expression to ${task.emotion}. Keep solid/consistent ${colorDesc} background. No text, no words.`;
       }
 
-      const b64 = await generateImageRaw(prompt, '3:4', [task.neutralUrl], 'edit');
+      const b64 = await generateImageRaw(prompt, '3:4', [task.neutralUrl], 'edit', GEMINI_MODELS.IMAGE_HD);
 
       if (b64) {
         const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/${task.type === 'suspect' ? 'suspects' : 'partner'}/${task.targetId}/${task.emotion}.png`);

@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { type } from '../../theme';
 import { ChatMessage, Suspect, CaseData, Evidence } from '../../types';
+import { sanitizeEvidenceRevealTitle } from '../../utils/evidenceRevealParsing';
 import AsciiCelebration from '../../components/AsciiCelebration';
 import { OnboardingOverlay, OnboardingHighlight, OnboardingTooltip } from '../../components/OnboardingTour';
 
@@ -125,8 +126,11 @@ const EvidenceChip = styled.div<{ $collected: boolean }>`
 
 const getShortEvidenceTitle = (ev: string | null | undefined) => {
   if (!ev) return '';
-  if (ev.includes(':')) return ev.split(':')[0].trim();
-  return ev;
+  const cleaned = sanitizeEvidenceRevealTitle(ev);
+  if (cleaned.includes(':') && !/\b(WHERE_HIDDEN|DETAIL)\b/i.test(cleaned)) {
+    return cleaned.split(':')[0].trim();
+  }
+  return cleaned;
 };
 
 const getSuspectColor = (suspectId: string) => {

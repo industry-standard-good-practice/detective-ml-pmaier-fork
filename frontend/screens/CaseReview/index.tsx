@@ -476,16 +476,17 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     };
     updateImage(undefined);
 
+    const ownerSuspect = suspectId ? draftCase.suspects?.find(s => s.id === suspectId) : undefined;
     let refImage: string | undefined;
-    if (suspectId) {
-      const ownerSuspect = draftCase.suspects?.find(s => s.id === suspectId);
-      if (ownerSuspect?.isDeceased && ownerSuspect.portraits?.[Emotion.NEUTRAL]) {
-        refImage = ownerSuspect.portraits[Emotion.NEUTRAL];
-      }
+    if (ownerSuspect?.isDeceased && ownerSuspect.portraits?.[Emotion.NEUTRAL]) {
+      refImage = ownerSuspect.portraits[Emotion.NEUTRAL];
     }
 
     try {
-      const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!, refImage);
+      const newUrl = await generateEvidenceImage(ev, draftCase.id, userId!, refImage, {
+        forDeceasedVictim: !!ownerSuspect?.isDeceased,
+        caseTheme: draftCase.type,
+      });
       if (newUrl) updateImage(newUrl);
     } catch (e: any) {
       console.error("Evidence reroll failed", e);
@@ -832,7 +833,13 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         ].join('\n\n')
         : undefined;
       const { updatedCase, report } = await checkCaseConsistency(draftCase, (msg) => {
-        setLoadingState({ visible: true, message: msg, step: 'Step 1/1', stepDetail: 'Consistency Check' });
+        const narrativePhase = msg.toLowerCase().includes('narrative');
+        setLoadingState({
+          visible: true,
+          message: msg,
+          step: narrativePhase ? '1/2' : '2/2',
+          stepDetail: 'Consistency Check',
+        });
       }, baselineRef.current, editContext);
       setConsistencyModal({ visible: true, report, updatedCase });
     } catch (e) {
@@ -850,9 +857,14 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       const { updatedCase: editedCase, report: editReport } = await editCaseWithPrompt(draftCase, editPrompt, (msg) => {
         setLoadingState({ visible: true, message: msg, step: 'Step 1/2', stepDetail: 'Applying Edits' });
       }, baselineRef.current);
-      setLoadingState({ visible: true, message: "Running full consistency audit...", step: 'Step 2/2', stepDetail: 'Consistency Check' });
       const { updatedCase, report: consistencyReport } = await checkCaseConsistency(editedCase, (msg) => {
-        setLoadingState({ visible: true, message: msg, step: 'Step 2/2', stepDetail: 'Consistency Check' });
+        const narrativePhase = msg.toLowerCase().includes('narrative');
+        setLoadingState({
+          visible: true,
+          message: msg,
+          step: '2/2',
+          stepDetail: narrativePhase ? 'Consistency — narrative' : 'Consistency — images',
+        });
       }, draftCase, editPrompt);
       setConsistencyModal({ visible: true, report: consistencyReport, updatedCase, editReport, editPrompt });
       setEditPrompt('');
