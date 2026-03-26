@@ -236,6 +236,60 @@ export function playCrtBootSfx(volume: number = 0.5): void {
   tri.stop(tReady + 0.4);
 }
 
+/**
+ * Subtle UI click — short digital glitch (noise tick + micro square blips).
+ * `volume` is 0–1 (global SFX slider); internally scaled down so it stays quiet.
+ */
+export function playClickGlitchSfx(volume: number = 0.5): void {
+  const v = Math.max(0, Math.min(1, volume)) * 0.11;
+  if (v <= 0) return;
+
+  const ctx = getSfxContext();
+  if (!ctx) return;
+  void ctx.resume();
+
+  const now = ctx.currentTime;
+  const out = ctx.destination;
+
+  const len = Math.ceil(ctx.sampleRate * 0.038);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / len) * 0.85;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800 + Math.random() * 1400;
+  bp.Q.value = 3.2;
+  const gN = ctx.createGain();
+  gN.gain.setValueAtTime(0, now);
+  gN.gain.linearRampToValueAtTime(v * 0.55, now + 0.002);
+  gN.gain.exponentialRampToValueAtTime(0.001, now + 0.032);
+  noise.connect(bp);
+  bp.connect(gN);
+  gN.connect(out);
+  noise.start(now);
+  noise.stop(now + 0.042);
+
+  for (let i = 0; i < 2; i++) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.value = 620 + i * 380 + (Math.random() - 0.5) * 90;
+    const t0 = now + i * 0.01;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(v * 0.35, t0 + 0.0015);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.018);
+    o.connect(g);
+    g.connect(out);
+    o.start(t0);
+    o.stop(t0 + 0.022);
+  }
+}
+
 // ---- Playback ----
 
 export interface AudioPlayback {

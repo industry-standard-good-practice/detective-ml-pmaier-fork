@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
 import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
 import { generateTTS } from './services/geminiTTS';
-import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx } from './services/audioPlayer';
+import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx, playClickGlitchSfx } from './services/audioPlayer';
 import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft } from './services/persistence';
 import { CaseStats } from './types';
 import { auth, logout } from './services/firebase';
@@ -120,6 +120,26 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('globalVolume', String(volume));
   }, [volume]);
+
+  const volumeRef = useRef(volume);
+  const isMutedRef = useRef(isMuted);
+  useEffect(() => {
+    volumeRef.current = volume;
+    isMutedRef.current = isMuted;
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (!e.isTrusted || e.button !== 0) return;
+      const el = e.target as HTMLElement | null;
+      if (!el?.closest?.('[data-monitor]')) return;
+      if (el.closest('[data-no-click-sfx]')) return;
+      if (isMutedRef.current) return;
+      playClickGlitchSfx(volumeRef.current);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
 
   const [musicEnabled, setMusicEnabled] = useState(() => {
     const saved = localStorage.getItem('musicEnabled');
