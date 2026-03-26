@@ -1,9 +1,9 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { type } from '../../theme';
 import { ChatMessage, Suspect, CaseData, Evidence } from '../../types';
-import { sanitizeEvidenceRevealTitle } from '../../utils/evidenceRevealParsing';
+import { buildEvidenceSearchList, resolveEvidenceDisplayTitle } from '../../utils/evidenceRevealParsing';
 import AsciiCelebration from '../../components/AsciiCelebration';
 import { OnboardingOverlay, OnboardingHighlight, OnboardingTooltip } from '../../components/OnboardingTour';
 
@@ -124,15 +124,6 @@ const EvidenceChip = styled.div<{ $collected: boolean }>`
 
 // --- Helpers ---
 
-const getShortEvidenceTitle = (ev: string | null | undefined) => {
-  if (!ev) return '';
-  const cleaned = sanitizeEvidenceRevealTitle(ev);
-  if (cleaned.includes(':') && !/\b(WHERE_HIDDEN|DETAIL)\b/i.test(cleaned)) {
-    return cleaned.split(':')[0].trim();
-  }
-  return cleaned;
-};
-
 const getSuspectColor = (suspectId: string) => {
   let hash = 0;
   for (let i = 0; i < suspectId.length; i++) {
@@ -172,6 +163,10 @@ const ChatLog: React.FC<ChatLogProps> = ({
   dismissEvidenceTooltip,
   scrollRef,
 }) => {
+  const evidenceSearchList = useMemo(() => buildEvidenceSearchList(activeCase), [activeCase]);
+  const getShortEvidenceTitle = (ev: string | null | undefined) =>
+    resolveEvidenceDisplayTitle(ev, evidenceSearchList);
+
   const [celebratingItem, setCelebratingItem] = React.useState<{ index: number, name: string, suspectId: string, evidenceIndex: number } | null>(null);
   const [showEvidenceTooltip, setShowEvidenceTooltip] = React.useState(false);
   const [evidenceChipRect, setEvidenceChipRect] = React.useState<DOMRect | null>(null);
