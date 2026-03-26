@@ -81,6 +81,17 @@ export const getSuspectPortrait = async (
 
 // --- BACKEND-DELEGATED IMAGE FUNCTIONS ---
 
+/**
+ * `/image/create` and `/image/edit` return `base64` that may be either raw base64 or an
+ * already-prefixed data URL (backend adds `data:image/png;base64,`). Avoid double-prefixing.
+ */
+function toImageDataUrl(apiField: string | null | undefined): string | null {
+    if (apiField == null || apiField === '') return null;
+    const s = String(apiField).trim();
+    if (s.startsWith('data:')) return s;
+    return `data:image/png;base64,${s}`;
+}
+
 export const generateEvidenceImage = async (
     evidence: Evidence,
     caseId: string,
@@ -106,7 +117,7 @@ export const createImageFromPrompt = async (
     const result = await geminiPost<{ base64: string | null }>('/image/create', {
         userPrompt, aspectRatio
     });
-    return result.base64 ? `data:image/png;base64,${result.base64}` : null;
+    return toImageDataUrl(result.base64);
 };
 
 export const editImageWithPrompt = async (
@@ -117,7 +128,7 @@ export const editImageWithPrompt = async (
     const result = await geminiPost<{ base64: string | null }>('/image/edit', {
         baseImageBase64, userPrompt, aspectRatio
     });
-    return result.base64 ? `data:image/png;base64,${result.base64}` : null;
+    return toImageDataUrl(result.base64);
 };
 
 export const generateEmotionalVariantsFromBase = async (
