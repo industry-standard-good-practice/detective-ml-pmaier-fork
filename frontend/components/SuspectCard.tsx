@@ -562,7 +562,7 @@ const SuspectCard: React.FC<SuspectCardProps> = ({
               <div style={{ position: 'absolute', right: '15px', bottom: '15px', zIndex: 100, transform: 'translateZ(60px)' }}>
                 <button style={{ background: 'var(--color-polaroid-bg)', color: bgColor, border: 'none', fontWeight: 'bold', padding: '5px 10px', cursor: 'pointer' }}
                   onClick={(e) => { e.stopPropagation(); onAction(); }}>
-                  [{actionLabel}]
+                  {actionLabel}
                 </button>
               </div>
             )}
@@ -574,7 +574,7 @@ const SuspectCard: React.FC<SuspectCardProps> = ({
                 onTouchEnd={handleFlip}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                [Flip Card]
+                Flip Card
               </FlipButton>
             )}
 
@@ -673,7 +673,7 @@ const SuspectCard: React.FC<SuspectCardProps> = ({
               onTouchEnd={handleFlip}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              [Flip Card]
+              Flip Card
             </FlipButton>
           </CardBackFace>
 

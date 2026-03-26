@@ -437,7 +437,7 @@ const DesktopBoard: React.FC<DesktopBoardProps> = ({
                   BATT: {officerHintsRemaining * 10}%
                 </BatteryStatus>
                 <SecureLineButton id="secure-line" onClick={onOpenChat}>
-                  [SECURE LINE]
+                  Ask for help
                 </SecureLineButton>
               </OfficerInfo>
             </ChiefWidgetRow>

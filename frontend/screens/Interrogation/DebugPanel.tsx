@@ -70,7 +70,7 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
 
   return (
     <>
-      <DebugToggle onClick={() => setDebugMode(!debugMode)}>[DEBUG]</DebugToggle>
+      <DebugToggle onClick={() => setDebugMode(!debugMode)}>DEBUG</DebugToggle>
       {debugMode && (
         <DebugMenu>
           <div style={{ color: '#f00', borderBottom: '1px solid #500', marginBottom: 'var(--space)' }}>FORCE EVIDENCE</div>

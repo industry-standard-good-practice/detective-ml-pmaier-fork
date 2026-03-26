@@ -153,8 +153,8 @@ const STEPS: Record<number, StepConfig> = {
     mobileTab: "HQ"
   },
   [OnboardingStep.SECURE_LINE]: {
-    title: "Secure Line",
-    description: "Stuck on a lead? Use the Secure Line to contact HQ. The Chief can provide hints, but remember: the battery is limited. Use it wisely.",
+    title: "Ask for help",
+    description: "Stuck on a lead? Use the Ask for help button to contact HQ. The Chief can provide hints, but remember: the battery is limited. Use it wisely.",
     targetId: "secure-line",
     position: "left",
     mobileTab: "HQ"
@@ -187,7 +187,7 @@ const STEPS: Record<number, StepConfig> = {
   },
   [OnboardingStep.FLIP_CARD]: {
     title: "Deep Dive",
-    description: "Every card has information on the back. Click the [Flip Card] button to see their background and role.",
+    description: "Every card has information on the back. Click the Flip Card button to see their background and role.",
     completedDescription: "Great! Always check a profile before diving in. Their background, profession, and role can reveal motives and help you ask the right questions — or know where to look on the body.",
     targetId: "flip-card-button",
     completedTargetId: "active-suspect-card",

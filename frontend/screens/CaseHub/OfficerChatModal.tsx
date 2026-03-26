@@ -146,7 +146,7 @@ const OfficerChatModal: React.FC<OfficerChatModalProps> = ({
     <ModalOverlay>
       <ChatModalContainer>
         <ChatHeader>
-          <span>SECURE LINE: {officerRole.toUpperCase()}</span>
+          <span>ASK FOR HELP: {officerRole.toUpperCase()}</span>
           <CloseButton onClick={onClose}>[X]</CloseButton>
         </ChatHeader>
         <ChatLog ref={logRef}>

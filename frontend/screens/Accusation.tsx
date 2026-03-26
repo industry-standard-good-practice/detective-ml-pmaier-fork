@@ -198,13 +198,13 @@ const Accusation: React.FC<AccusationProps> = ({ suspects, onAccuse, onBack }) =
 
       <AccuseButton onClick={handleAccuse}>
         {selectedSuspectIds.length > 0
-          ? `[ ACCUSE ${selectedSuspectIds.length} SUSPECT(S) ]`
-          : '[ ACCUSE NOBODY ]'
+          ? `ACCUSE ${selectedSuspectIds.length} SUSPECT(S)`
+          : 'ACCUSE NOBODY'
         }
       </AccuseButton>
 
       <CancelButton onClick={onBack}>
-        [ CANCEL ]
+        CANCEL
       </CancelButton>
     </Container>
   );

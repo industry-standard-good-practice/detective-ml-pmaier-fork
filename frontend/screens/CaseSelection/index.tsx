@@ -359,9 +359,9 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
       <Header>
         <HeaderTitle className="hide-on-mobile">OPEN CASES</HeaderTitle>
         <TabBar>
-          <TabButton $active={activeTab === 'featured'} $color="#0f0" onClick={() => setActiveTab('featured')}>[ FEATURED ]</TabButton>
-          <TabButton $active={activeTab === 'network'} $color="#0ff" onClick={() => setActiveTab('network')}>[ NETWORK ]</TabButton>
-          <TabButton $active={activeTab === 'mycases'} $color="#fc0" onClick={() => setActiveTab('mycases')}>[ MY CASES ]</TabButton>
+          <TabButton $active={activeTab === 'featured'} $color="#0f0" onClick={() => setActiveTab('featured')}>FEATURED</TabButton>
+          <TabButton $active={activeTab === 'network'} $color="#0ff" onClick={() => setActiveTab('network')}>NETWORK</TabButton>
+          <TabButton $active={activeTab === 'mycases'} $color="#fc0" onClick={() => setActiveTab('mycases')}>MY CASES</TabButton>
         </TabBar>
         {activeTab === 'network' && (
           <SortBar>{renderSortControls()}</SortBar>

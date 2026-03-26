@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
 import { getSuspectResponse, getOfficerChatResponse, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
 import { generateTTS } from './services/geminiTTS';
+import { playAudioFromUrl } from './services/audioPlayer';
 import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft } from './services/persistence';
 import { CaseStats } from './types';
 import { auth, logout } from './services/firebase';
@@ -830,21 +831,38 @@ const App: React.FC = () => {
         gameState.notes,
         gameState.chatHistory 
       );
-      
 
-      
-      const officerMsg: ChatMessage = { sender: 'officer', text: responseText, timestamp: formatTime(newGameTime) };
-      
+      const officer = currentCase.officer;
+      let officerAudioUrl: string | null = null;
+      if (!isMuted && officer?.voice && officer.voice !== 'None') {
+        officerAudioUrl = await generateTTS(responseText, officer.voice, officer.voiceStyle);
+      }
+
+      const officerMsg: ChatMessage = {
+        sender: 'officer',
+        text: responseText,
+        timestamp: formatTime(newGameTime),
+        audioUrl: officerAudioUrl,
+      };
+
       setGameState(prev => ({
         ...prev,
         officerHistory: [...prev.officerHistory, officerMsg]
       }));
+
+      if (officerAudioUrl) {
+        try {
+          await playAudioFromUrl(officerAudioUrl, volume);
+        } catch (e) {
+          console.warn('[Officer TTS] playback failed', e);
+        }
+      }
     } catch (e: any) {
       console.error("Officer Chat Error:", e);
-      toast.error(`Officer response failed: ${e?.message || 'Secure line disconnected. Try again.'}`);
+      toast.error(`Officer response failed: ${e?.message || 'Ask for help disconnected. Try again.'}`);
       setGameState(prev => ({
         ...prev,
-        officerHistory: [...prev.officerHistory, { sender: 'system', text: "[SECURE LINE DISCONNECTED]", timestamp: formatTime(newGameTime) }]
+        officerHistory: [...prev.officerHistory, { sender: 'system', text: 'ASK FOR HELP DISCONNECTED', timestamp: formatTime(newGameTime) }]
       }));
     } finally {
       setThinkingSuspectIds(prev => { const next = new Set(prev); next.delete('__officer__'); return next; });
@@ -1604,8 +1622,8 @@ const App: React.FC = () => {
               Uploading this case to the Network will make it <strong>PUBLICLY AVAILABLE</strong>.
             </ModalText>
             <ModalButtonRow>
-              <CancelButton onClick={() => setShowPublishConfirm(false)}>[ Cancel ]</CancelButton>
-              <ConfirmButton onClick={executePublish}>[ CONFIRM UPLOAD ]</ConfirmButton>
+              <CancelButton onClick={() => setShowPublishConfirm(false)}>Cancel</CancelButton>
+              <ConfirmButton onClick={executePublish}>CONFIRM UPLOAD</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>
@@ -1619,8 +1637,8 @@ const App: React.FC = () => {
               Uploading this case to the Network will make it <strong>PUBLICLY AVAILABLE</strong>.
             </ModalText>
             <ModalButtonRow>
-              <CancelButton onClick={() => setPendingPublishDraftId(null)}>[ Cancel ]</CancelButton>
-              <ConfirmButton onClick={executePublishDraft}>[ CONFIRM UPLOAD ]</ConfirmButton>
+              <CancelButton onClick={() => setPendingPublishDraftId(null)}>Cancel</CancelButton>
+              <ConfirmButton onClick={executePublishDraft}>CONFIRM UPLOAD</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>
@@ -1634,8 +1652,8 @@ const App: React.FC = () => {
               Are you sure you want to delete this case permanently? This action cannot be undone.
             </ModalText>
             <ModalButtonRow>
-              <CancelButton onClick={() => setCaseToDelete(null)}>[ Cancel ]</CancelButton>
-              <ConfirmButton onClick={confirmDeleteCase}>[ DELETE ]</ConfirmButton>
+              <CancelButton onClick={() => setCaseToDelete(null)}>Cancel</CancelButton>
+              <ConfirmButton onClick={confirmDeleteCase}>DELETE</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>
@@ -1649,8 +1667,8 @@ const App: React.FC = () => {
               Are you sure you want to permanently delete this case? If it's published, it will also be removed from the Network. <strong>This cannot be undone.</strong>
             </ModalText>
             <ModalButtonRow>
-              <CancelButton onClick={() => setMyCaseToDelete(null)}>[ Cancel ]</CancelButton>
-              <ConfirmButton onClick={confirmDeleteMyCase}>[ DELETE PERMANENTLY ]</ConfirmButton>
+              <CancelButton onClick={() => setMyCaseToDelete(null)}>Cancel</CancelButton>
+              <ConfirmButton onClick={confirmDeleteMyCase}>DELETE PERMANENTLY</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>
@@ -1664,8 +1682,8 @@ const App: React.FC = () => {
               Are you sure you want to delete this draft? <strong>This cannot be undone.</strong>
             </ModalText>
             <ModalButtonRow>
-              <CancelButton onClick={() => setDraftToDelete(null)}>[ Cancel ]</CancelButton>
-              <ConfirmButton onClick={confirmDeleteDraft}>[ DELETE ]</ConfirmButton>
+              <CancelButton onClick={() => setDraftToDelete(null)}>Cancel</CancelButton>
+              <ConfirmButton onClick={confirmDeleteDraft}>DELETE</ConfirmButton>
             </ModalButtonRow>
           </ModalBox>
         </Overlay>

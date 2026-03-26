@@ -301,7 +301,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             return (
               <AttachmentChip key={i}>
                 <span>📎 {label}</span>
-                <button onClick={() => toggleEvidence(ev)}>[x]</button>
+                <button type="button" onClick={() => toggleEvidence(ev)} aria-label="Remove attachment">×</button>
               </AttachmentChip>
             );
           })}

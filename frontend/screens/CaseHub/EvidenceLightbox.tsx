@@ -105,7 +105,7 @@ const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
           transition={{ duration: 0.25 }}
           onClick={onClose}
         >
-          <LightboxClose onClick={onClose}>[CLOSE]</LightboxClose>
+          <LightboxClose onClick={onClose}>CLOSE</LightboxClose>
           <LightboxCardWrapper
             layoutId={selectedEvidenceId}
             onClick={e => e.stopPropagation()}

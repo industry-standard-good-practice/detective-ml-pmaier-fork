@@ -225,7 +225,7 @@ const CaseCardRenderer: React.FC<CaseCardRendererProps> = ({
         {!(c.heroImageUrl || c.initialEvidence?.[0]?.imageUrl) && "?"}
       </CaseImage>
       <CardTextContent>
-        <CardTitle $color={colors.bright}>{c.title || "[ NO TITLE ]"}</CardTitle>
+        <CardTitle $color={colors.bright}>{c.title || 'NO TITLE'}</CardTitle>
         <BadgeRow>
           {extraBadges}
           {showFeaturedBadge && c.isFeatured && (

@@ -360,7 +360,7 @@ const CaseHub: React.FC<CaseHubProps> = ({
                   </div>
                 </ChiefStatus>
                 <SecureLineButton id="secure-line-mobile" onClick={() => setIsChatOpen(true)}>
-                  [SECURE LINE]
+                  Ask for help
                 </SecureLineButton>
               </MobileChiefWidget>
               <MobileBriefingWidget id="mission-briefing-mobile">
