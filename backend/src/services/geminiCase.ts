@@ -1154,6 +1154,28 @@ const PROMPT_RULES = {
 - **MULTI-DAY TIMELINES:** Cases SHOULD span multiple days when it makes narrative sense. Suspects' timelines should include events from before today that establish motive, opportunity, and alibi. The initialTimeline should include key events leading up to discovery.
 - This applies to BOTH suspect timelines AND the case-level initialTimeline.`,
 
+    /**
+     * Authoritative per-character timelines — generation, consistency, and edit.
+     */
+    TIMELINE_SOURCE_OF_TRUTH: `**TIMELINE = SOURCE OF TRUTH FOR THE CASE (CRITICAL):**
+- Each suspect's \`timeline\` (including **every victim** with \`isDeceased: true\`) is the **canonical, omniscient chronology** for that person. It must state **precisely what happened** — specific times, places, actions, and who crossed paths — not vague summaries.
+- **Density (minimum floors — expand freely above these):**
+  * **Living suspects:** **At least 10** entries each, covering the days that matter (lead-up, crime window, day of questioning). Split long stretches into **many** short steps (e.g. separate "left office", "walked to garage", "started car" instead of one blob). Times should be **specific** (e.g. "8:15 PM", "8:22 PM"), not "evening".
+  * **Victims:** **At least 8** entries for the **last day(s) before death**, through arrival at the scene and final interactions — granular enough that other characters' timelines can lock to the same clock.
+  * **Guilty suspects (\`isGuilty: true\`):** The timeline MUST include a **clear, step-by-step sequence of the actual criminal conduct** (preparation, execution, cover-up if any) with **tight timestamps** that fit the crime method in \`secret\` / case logic. This is **author truth** for the engine — not a player-facing confession card. Do not replace the crime with a single vague line like "was at the venue"; break it into **many** precise entries.
+- **Reconciliation direction:** If \`secret\`, \`motive\`, \`witnessObservations\`, \`knownFacts\`, evidence text, \`case.description\`, or relationships **disagree** with the timelines, **prefer the timeline** and **rewrite the other fields** to match (except \`bio\` spoiler rules and \`initialTimeline\` spoiler rules — see below). If timelines are too thin to support the story, **expand the timelines first**, then align dependencies.
+- **Alibi vs timeline:** \`alibi.statement\` is what the suspect **claims**; it may **lie**. The \`timeline\` is what **actually** happened. If \`alibi.isTrue\` is true, the alibi must align with the timeline; if false, contradiction is allowed.
+- **initialTimeline** remains **spoiler-safe for the player** — it must NOT name the guilty party's crime. Derive neutral patrol/first-responder facts from the authoritative suspect/victim timelines without revealing the solution.`,
+
+    /**
+     * Consistency-check emphasis — references TIMELINE_SOURCE_OF_TRUTH.
+     */
+    TIMELINE_CONSISTENCY_AUDIT: `**TIMELINE — CONSISTENCY PASS (MANDATORY):**
+- Apply **TIMELINE SOURCE OF TRUTH** above to **every** suspect and victim. If any \`timeline\` is sparse, vague, or has fewer than the minimum entries, **expand it** with precise entries.
+- **Guilty parties:** If the criminal sequence is missing, compressed into one line, or contradicts \`isGuilty\` + \`secret\`, **rewrite the timeline** to spell out exactly what they did and when, then fix \`secret\`, evidence, and other fields to match.
+- **Victims:** Ensure their final hours mesh with guilty and witness timelines (same events, compatible times).
+- **initialTimeline / startTime:** Must remain logically consistent with the full chronology and INITIAL TIMELINE SPOILER PROTECTION.`,
+
     /** Rules for keeping initial timeline spoiler-free — used in generation, consistency, and edit */
     INITIAL_TIMELINE_SPOILER_PROTECTION: `**INITIAL TIMELINE — SPOILER PROTECTION (CRITICAL):**
 - The 'initialTimeline' represents facts documented by PATROL OFFICERS and FIRST RESPONDERS before the case is handed to a detective (the player).
@@ -1222,12 +1244,12 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
   *INSTRUCTION*: Descriptions must be detailed (2-3 sentences).
 - KNOWN FACTS: 2-3 specific facts they know about the crime.
 - MOTIVE: A clear reason they might be suspected.
-- TIMELINE: A step-by-step list of their movements (at least 3 entries). Each entry has FOUR fields:
-  * 'time': ONLY the timestamp (e.g. "8:00 PM"). Do NOT include the activity here.
-  * 'activity': The description of what happened (e.g. "Arrived at the restaurant for dinner").
+- TIMELINE: **Canonical chronology for this character** (see TIMELINE SOURCE OF TRUTH). Minimum: **10 entries** for living suspects, **8** for victims (\`isDeceased\`) covering their final day(s). **Guilty** suspects must include **many granular entries** for the **actual offense** (precise times). Each entry has FOUR fields:
+  * 'time': ONLY the timestamp (e.g. "8:15 PM"). Do NOT include the activity here.
+  * 'activity': Specific factual description (who, what, where — one beat per row).
   * 'day': Which day relative to the investigation (e.g. "Today", "Yesterday", "2 Days Ago"). Must be a human-readable label. "Today" = the day of questioning.
   * 'dayOffset': Numeric offset for sorting (0 = today, -1 = yesterday, -2 = 2 days ago, etc.).
-  The timeline SHOULD span multiple days when relevant — include events from days before that establish motive or opportunity.
+  Span multiple days; prefer **many short entries** over few long paragraphs in \`activity\`.
 - PROFESSIONAL BACKGROUND: A valid job or skill set.
 - WITNESS OBSERVATIONS: Something specific they saw or heard.
 - hiddenEvidence: **At least 2 items** for each **living** suspect — items they have that prove guilt or secrets. Each item MUST include non-empty 'location' (where it is concealed). The guilty party MUST have damning hidden evidence.`,
@@ -1237,6 +1259,7 @@ If the crime does NOT involve a death or a body (e.g. Theft, Fraud, Arson, Espio
 - You MUST populate 'alibi', 'motive', 'relationships', 'knownFacts', 'timeline', 'professionalBackground', and 'witnessObservations' for EVERY suspect.
 - Do NOT return null or empty strings for required fields.
 - Do NOT return empty arrays [] for timeline, relationships, or knownFacts — generate real content.
+- **Timelines:** Living suspects **≥ 10** entries; victims **≥ 8** entries (final hours); guilty living suspects must include a **detailed criminal sequence** per TIMELINE SOURCE OF TRUTH.
 - **initialEvidence** MUST list **at least 3** items (see EVIDENCE COUNTS). Every living suspect MUST have **at least 2** \`hiddenEvidence\` items (victim: 2–5 per VICTIM GENERATION).
 - Every evidence item in 'initialEvidence' and every 'hiddenEvidence' entry MUST include a non-empty 'location' string (see EVIDENCE LOCATION rules).
 - For the **victim** (isDeceased), every 'hiddenEvidence' item MUST include 'discoveryContext' ("body" or "environment") and, when "environment", a boolean 'environmentIncludesBody' for image generation (see EVIDENCE LOCATION rules).`,
@@ -1831,13 +1854,14 @@ ${userChangeLog}
             "Identifying high-impact user edits...",
             "Rebuilding suspect motive and role alignment...",
             "Reconciling timeline, alibis, and relationships...",
+            "Auditing every suspect and victim timeline (including guilty-party opportunity)...",
             "Re-linking evidence to updated narrative facts...",
             "Validating cross-field consistency...",
             "Synthesizing reconciliation report..."
         ]
         : [
             "Auditing suspect alibis...",
-            "Verifying timeline continuity...",
+            "Verifying timeline continuity (all suspects and victims)...",
             "Checking motive consistency...",
             "Cross-referencing evidence links...",
             "Identifying logical narrative gaps...",
@@ -1864,15 +1888,16 @@ ${userChangeLog}
     
     YOUR MISSION:
     Perform a targeted narrative synchronization pass. Some user-edited fields are authoritative and may require dependent fields to be rewritten so the full case remains coherent.
-    You must preserve the user's explicit field values and update dependent narrative data where required (bios, motives, secrets, alibis, relationships, timeline activity, and evidence descriptions).`
+    You must preserve the user's explicit field values and update dependent narrative data where required. **Per-character timelines are the source of truth** — expand and sharpen them first, then align bios, motives, secrets, alibis, relationships, evidence, and case description to match (subject to bio / initialTimeline spoiler rules).`
     : `You are a Continuity Proofreader — a careful, conservative editor.
     I will provide a JSON object representing a detective mystery game case.
     
     YOUR MISSION:
     Perform a **minimalist quality-control pass**. You are looking for ACTUAL ERRORS — factual contradictions, broken references, impossible timelines.
+    **Timelines are the case chronology source of truth:** If a guilty suspect's \`timeline\` omits the actual criminal acts implied by \`secret\`/\`isGuilty\`, or any suspect/victim timeline is far below minimum density in TIMELINE SOURCE OF TRUTH, that is a **structural error** — expand and precise those timelines, then align conflicting fields (not stylistic rewrites elsewhere).
     **If the case is already consistent, you should make ZERO changes and return the case data exactly as-is.**
-    You are NOT rewriting content. You are NOT improving prose. You are NOT redesigning the mystery.
-    Your job is to find and fix ONLY genuine contradictions and broken references — nothing else.`}
+    You are NOT rewriting content for taste. You are NOT redesigning the mystery beyond timeline truth and dependency fixes.
+    Your job is to find and fix ONLY genuine contradictions, broken references, and timeline authority violations — nothing else.`}
     
     ${editContextSection}
     ${userEditsSection}
@@ -1911,13 +1936,14 @@ ${userChangeLog}
     4. **MINIMIZE COLLATERAL CHANGES.**
        - If a field is imperfect but not contradictory, LEAVE IT ALONE.
        - If evidence is vague but not wrong, LEAVE IT ALONE.
-       - If a timeline has gaps but no conflicts, LEAVE IT ALONE.
+       - **Exception — timelines:** Sparse timelines (below minimum entry counts), missing guilty-party crime sequence, or vague single-line crime summaries **violate TIMELINE SOURCE OF TRUTH**. You MUST expand and make them precise; this is not optional "collateral."
        - If prose is mediocre but accurate, LEAVE IT ALONE.
-       - When in doubt, DO NOT CHANGE IT.
+       - When in doubt, DO NOT CHANGE IT — **except** timelines per the rule above.
     
     ${(!editContextSection && !shouldPropagateNarrative) ? `**CRITICAL RESTATEMENT:** If you cannot identify a specific, concrete factual contradiction between two fields in the case, you should return the case UNCHANGED with an empty changesMade array and a report saying "No inconsistencies found."` : ''}
     
     **WHAT YOU MAY FIX:**
+    - **Timelines (all suspects + victims):** Enforce **TIMELINE SOURCE OF TRUTH** + **TIMELINE CONSISTENCY AUDIT** below. ${shouldPropagateNarrative ? 'Rebuild thin timelines; guilty parties get a full, timestamped crime sequence; then sync \`secret\`, evidence, and other fields to the timelines.' : 'If timelines are under minimum length, lack the guilty party\'s actual acts, or contradict \`secret\`/cross-character chronology, fix them and align dependent fields.'}
     - A suspect's timeline says they were at Location A at 8 PM, but their alibi says Location B at 8 PM → fix the contradiction
     - A relationship references a person who doesn't exist in the case → fix the broken reference
     - A name is misspelled differently across fields → unify the spelling
@@ -1933,6 +1959,7 @@ ${userChangeLog}
     ${shouldPropagateNarrative ? `
     - Dependent fields that became inconsistent after user edits (e.g. motives/secrets/alibis/bios/evidence links no longer match current role flags) → rewrite those dependencies to restore coherence
     - **Per-suspect \`hiddenEvidence\`:** Verify relevance to the story, correct **ownership** (this suspect actually has or would conceal this item), and alignment with \`isGuilty\` / innocence. Rewrite title, description, location, and victim-only discovery fields as needed. If an item is irreconcilable with the new guilty party, replace it with a new clue that fits the same investigative role (maintain minimum evidence counts per DATA COMPLETENESS).
+    - **Timelines:** **Primary repair target.** Expand to many precise entries; **each guilty party** must have an explicit step-by-step of the offense; **each victim** must have dense final-hour coverage; then rewrite \`secret\`, motives, evidence, etc. to match the timelines.
     - Case description or suspect summaries that conflict with authoritative edited fields → update to align with current truth` : ''}
     
     **WHAT YOU MUST NEVER DO:**
@@ -1950,6 +1977,12 @@ ${userChangeLog}
     ${PROMPT_RULES.EVIDENCE_DESCRIPTION_STYLE}
     ${PROMPT_RULES.EVIDENCE_LOCATION}
     
+    **TIMELINE — SOURCE OF TRUTH & DENSITY (apply before reconciling other fields):**
+    ${PROMPT_RULES.TIMELINE_SOURCE_OF_TRUTH}
+    
+    **TIMELINE — CONSISTENCY PASS (every suspect + victim):**
+    ${PROMPT_RULES.TIMELINE_CONSISTENCY_AUDIT}
+    
     **STRUCTURAL RULES (check but only fix if actually broken):**
     ${PROMPT_RULES.DATA_COMPLETENESS}
     ${PROMPT_RULES.SUSPECT_PROFILES}
@@ -1961,8 +1994,8 @@ ${userChangeLog}
     ${PROMPT_RULES.OUTPUT_FORMAT_WITH_REPORT}
     
     **REPORT INSTRUCTIONS:**
-    - In 'issuesFound': List ONLY genuine contradictions you found. If none, say "No inconsistencies found."
-    - In 'changesMade': List ONLY changes you actually made. If you made no changes, return an EMPTY ARRAY [].
+    - In 'issuesFound': List contradictions, sparse timelines, or missing guilty-party crime sequences you addressed. If none after your pass, say "No inconsistencies found."
+    - In 'changesMade': List ONLY changes you actually made (note major timeline expansions). If you made no changes, return an EMPTY ARRAY [].
     - In 'conclusion': Summarize. If the case was already consistent, say so clearly: "The case is internally consistent. No changes were necessary."
     
     CASE DATA:
@@ -2189,6 +2222,8 @@ ${userChangeLog}
       5. ${PROMPT_RULES.RELATIONSHIP_QUALITY}
           
       6. ${PROMPT_RULES.TIMELINE_FORMAT}
+      
+      6a. ${PROMPT_RULES.TIMELINE_SOURCE_OF_TRUTH}
           
       7. ${PROMPT_RULES.INITIAL_TIMELINE_SPOILER_PROTECTION}
       
@@ -2485,6 +2520,8 @@ export const generateCaseFromPrompt = async (userPrompt: string, isLucky: boolea
     ${PROMPT_RULES.INITIAL_TIMELINE_SPOILER_PROTECTION}
     
     ${PROMPT_RULES.TIMELINE_FORMAT}
+    
+    ${PROMPT_RULES.TIMELINE_SOURCE_OF_TRUTH}
     
     CRITICAL INSTRUCTION - SUPPORT CHARACTERS:
     You must generate two support characters that fit the THEME:
