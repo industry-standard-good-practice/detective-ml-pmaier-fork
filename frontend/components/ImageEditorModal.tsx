@@ -1091,7 +1091,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           <ModalBox onClick={(e) => e.stopPropagation()} $borderColor="rgba(255, 170, 0, 0.45)" $glowColor="rgba(255, 170, 0, 0.15)">
             <ModalTitle $color="var(--color-accent-orange)">Revert changes?</ModalTitle>
             <ModalText style={{ color: 'var(--color-text-muted)', fontSize: 'var(--type-body)' }}>
-              This undoes unsaved image changes since the last save and restores what is stored on the case.
+              This undoes unsaved edits in this session (e.g. nano-generate / paste not yet saved with Save Edit) and
+              restores portrait URLs from the case.
             </ModalText>
             <ModalButtonRow>
               <UiButton type="button" $variant="ghost" onClick={() => setDiscardDialogOpen(false)}>

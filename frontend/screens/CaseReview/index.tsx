@@ -218,8 +218,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   /** Visible overlay vs hidden-but-mounted (in-flight generate / regen). */
   const [suspectEditorVisible, setSuspectEditorVisible] = useState(false);
   const [suspectEditorKeepAlive, setSuspectEditorKeepAlive] = useState(false);
-  /** Portrait URLs when the suspect image modal was opened; regen in the modal stages into overrides until Save. */
-  const [portraitSessionBaseline, setPortraitSessionBaseline] = useState<Record<string, string | undefined> | null>(null);
+  /** Nano-edit / paste in the modal only—URLs not yet written to the draft (regen merges into draft immediately). */
   const [portraitSessionOverrides, setPortraitSessionOverrides] = useState<Record<string, string>>({});
   const [showHeroEditor, setShowHeroEditor] = useState(false);
   const [heroMode, setHeroMode] = useState<'suspect' | 'evidence' | 'custom'>('custom');
@@ -247,6 +246,30 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const safeUpdateDraft = (updated: CaseData) => {
     latestDraftRef.current = updated;
     onUpdateDraft(updated);
+  };
+
+  const mergePortraitsForCharacterId = (charId: string, portraitPatch: Record<string, string>) => {
+    const fresh = latestDraftRef.current;
+    if (charId === 'officer') {
+      const o = fresh.officer;
+      safeUpdateDraft({
+        ...fresh,
+        officer: { ...o, portraits: { ...(o.portraits || {}), ...portraitPatch } },
+      });
+    } else if (charId === 'partner') {
+      const p = fresh.partner;
+      safeUpdateDraft({
+        ...fresh,
+        partner: { ...p, portraits: { ...(p.portraits || {}), ...portraitPatch } },
+      });
+    } else {
+      safeUpdateDraft({
+        ...fresh,
+        suspects: fresh.suspects.map((s) =>
+          s.id === charId ? { ...s, portraits: { ...(s.portraits || {}), ...portraitPatch } } : s
+        ),
+      });
+    }
   };
 
   const saveBaselineRef = useRef<CaseData>(JSON.parse(JSON.stringify(originalBaseline || draftCase)));
@@ -436,15 +459,14 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
   useEffect(() => {
     if (suspectEditorVisible && activeSuspect) {
-      setPortraitSessionBaseline({ ...(activeSuspect.portraits || {}) });
       setPortraitSessionOverrides({});
     }
   }, [suspectEditorVisible, selectedSuspectId]);
 
-  const suspectPortraitUrlsForEditor =
-    portraitSessionBaseline != null
-      ? { ...portraitSessionBaseline, ...portraitSessionOverrides }
-      : activeSuspect?.portraits || {};
+  const suspectPortraitUrlsForEditor: Record<string, string | undefined> = {
+    ...(activeSuspect?.portraits || {}),
+    ...portraitSessionOverrides,
+  };
 
   const portraitSessionHasRemoteChanges = Object.keys(portraitSessionOverrides).length > 0;
 
@@ -456,10 +478,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     const slots = getPortraitVariantSlots(activeSuspect as any);
     if (slots.length === 0) return null;
 
-    const portraitsForStatus =
-      suspectEditorVisible && portraitSessionBaseline != null
-        ? { ...portraitSessionBaseline, ...portraitSessionOverrides }
-        : (activeSuspect as Suspect).portraits;
+    const portraitsForStatus = suspectEditorVisible
+      ? { ...((activeSuspect as Suspect).portraits || {}), ...portraitSessionOverrides }
+      : (activeSuspect as Suspect).portraits;
 
     if (st === 'generating') {
       const out: Record<string, 'idle' | 'loading' | 'done'> = {};
@@ -518,7 +539,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     selectedSuspectId,
     activeSuspect,
     suspectEditorVisible,
-    portraitSessionBaseline,
     portraitSessionOverrides,
   ]);
 
@@ -679,7 +699,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   };
 
   const clearPortraitEditSession = () => {
-    setPortraitSessionBaseline(null);
     setPortraitSessionOverrides({});
   };
 
@@ -722,18 +741,16 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             : currentDraft.suspects?.find((s) => s.id === sid);
       if (!char) return;
 
-      const base = portraitSessionBaseline ?? { ...(char.portraits || {}) };
       let urlForVariant = newImageUrl;
       if (newImageUrl.startsWith('data:')) {
         urlForVariant = await uploadImage(newImageUrl, path);
       }
 
-      const portraits: Record<string, string> = { ...(char.portraits || {}) };
-      for (const [k, v] of Object.entries(base)) {
-        if (typeof v === 'string' && v) portraits[k] = v;
-      }
-      Object.assign(portraits, portraitSessionOverrides);
-      portraits[variantKey] = urlForVariant;
+      const portraits: Record<string, string> = {
+        ...(char.portraits || {}),
+        ...portraitSessionOverrides,
+        [variantKey]: urlForVariant,
+      };
       if (sid === 'officer') {
         safeUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits } });
       } else if (sid === 'partner') {
@@ -761,15 +778,16 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       toast.error('Cannot regenerate: No user ID.');
       return;
     }
-    const sid = selectedSuspectId;
-    if (!sid) return;
-    const currentDraft = latestDraftRef.current;
+    const regenSid = selectedSuspectId;
+    if (!regenSid) return;
+
+    const openDraft = latestDraftRef.current;
     const char =
-      sid === 'officer'
-        ? currentDraft.officer
-        : sid === 'partner'
-          ? currentDraft.partner
-          : currentDraft.suspects?.find((s) => s.id === sid);
+      regenSid === 'officer'
+        ? openDraft.officer
+        : regenSid === 'partner'
+          ? openDraft.partner
+          : openDraft.suspects?.find((s) => s.id === regenSid);
     if (!char) return;
 
     const slots = getPortraitVariantSlots(char as any);
@@ -779,31 +797,39 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     onProgress?.(0, total);
     setImageLoadingStates((prev) => ({
       ...prev,
-      [sid]: { kind: 'variants', remaining: total, total },
+      [regenSid]: { kind: 'variants', remaining: total, total },
     }));
 
     for (let i = 0; i < slots.length; i++) {
       const slot = slots[i];
+      const freshDraft = latestDraftRef.current;
+      const freshChar =
+        regenSid === 'officer'
+          ? freshDraft.officer
+          : regenSid === 'partner'
+            ? freshDraft.partner
+            : freshDraft.suspects?.find((s) => s.id === regenSid);
+      if (!freshChar) break;
       const { url } = await generateOnePortraitVariantFromBase(
         neutralDataUrl,
         slot.key,
-        char as any,
-        currentDraft.id,
+        freshChar as any,
+        freshDraft.id,
         userId,
-        currentDraft.type || 'Noir'
+        freshDraft.type || 'Noir'
       );
-      setPortraitSessionOverrides((prevOverrides) => ({ ...prevOverrides, [slot.key]: url }));
+      mergePortraitsForCharacterId(regenSid, { [slot.key]: url });
       const completed = i + 1;
       onProgress?.(completed, total);
 
       const remaining = total - completed;
       setImageLoadingStates((prev) => ({
         ...prev,
-        [sid]: remaining > 0 ? { kind: 'variants', remaining, total } : null,
+        [regenSid]: remaining > 0 ? { kind: 'variants', remaining, total } : null,
       }));
     }
 
-    toast.success('All variants regenerated. Click Save to keep them on the case.');
+    toast.success('All variants regenerated and saved to the case.');
   };
 
   const handleRegenerateOneVariantFromModal = async (neutralDataUrl: string, variantKey: string) => {
@@ -812,50 +838,50 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       return;
     }
     if (variantKey === Emotion.NEUTRAL) return;
-    const sid = selectedSuspectId;
-    if (!sid) return;
-    const currentDraft = latestDraftRef.current;
-    const char =
-      sid === 'officer'
-        ? currentDraft.officer
-        : sid === 'partner'
-          ? currentDraft.partner
-          : currentDraft.suspects?.find((s) => s.id === sid);
-    if (!char) return;
+    const regenSid = selectedSuspectId;
+    if (!regenSid) return;
 
     setImageLoadingStates((prev) => {
-      const cur = prev[sid];
+      const cur = prev[regenSid];
       const existing =
         cur && typeof cur === 'object' && cur.kind === 'single-variant'
           ? singleVariantInFlightKeys(cur)
           : [];
       const variantKeys = [...new Set([...existing, variantKey])];
-      return { ...prev, [sid]: { kind: 'single-variant', variantKeys } };
+      return { ...prev, [regenSid]: { kind: 'single-variant', variantKeys } };
     });
     try {
+      const freshDraft = latestDraftRef.current;
+      const freshChar =
+        regenSid === 'officer'
+          ? freshDraft.officer
+          : regenSid === 'partner'
+            ? freshDraft.partner
+            : freshDraft.suspects?.find((s) => s.id === regenSid);
+      if (!freshChar) return;
       const { url } = await generateOnePortraitVariantFromBase(
         neutralDataUrl,
         variantKey,
-        char as any,
-        currentDraft.id,
+        freshChar as any,
+        freshDraft.id,
         userId,
-        currentDraft.type || 'Noir'
+        freshDraft.type || 'Noir'
       );
-      setPortraitSessionOverrides((prev) => ({ ...prev, [variantKey]: url }));
-      toast.success('Variant regenerated. Click Save to apply to the case.');
+      mergePortraitsForCharacterId(regenSid, { [variantKey]: url });
+      toast.success('Variant regenerated and saved to the case.');
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Variant regeneration failed.');
       throw err;
     } finally {
       setImageLoadingStates((prev) => {
-        const cur = prev[sid];
+        const cur = prev[regenSid];
         if (!cur || typeof cur !== 'object' || cur.kind !== 'single-variant') {
-          return { ...prev, [sid]: null };
+          return { ...prev, [regenSid]: null };
         }
         const next = singleVariantInFlightKeys(cur).filter((k) => k !== variantKey);
-        if (next.length === 0) return { ...prev, [sid]: null };
-        return { ...prev, [sid]: { kind: 'single-variant', variantKeys: next } };
+        if (next.length === 0) return { ...prev, [regenSid]: null };
+        return { ...prev, [regenSid]: { kind: 'single-variant', variantKeys: next } };
       });
     }
   };
@@ -893,30 +919,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       }));
     };
 
-    const mergePortraits = (portraitPatch: Record<string, string>) => {
-      const fresh = latestDraftRef.current;
-      if (charId === 'officer') {
-        const o = fresh.officer;
-        safeUpdateDraft({
-          ...fresh,
-          officer: { ...o, portraits: { ...(o.portraits || {}), ...portraitPatch } },
-        });
-      } else if (charId === 'partner') {
-        const p = fresh.partner;
-        safeUpdateDraft({
-          ...fresh,
-          partner: { ...p, portraits: { ...(p.portraits || {}), ...portraitPatch } },
-        });
-      } else {
-        safeUpdateDraft({
-          ...fresh,
-          suspects: fresh.suspects.map((s) =>
-            s.id === charId ? { ...s, portraits: { ...(s.portraits || {}), ...portraitPatch } } : s
-          ),
-        });
-      }
-    };
-
     try {
       const slots = getPortraitVariantSlots(activeSuspect as any);
 
@@ -934,7 +936,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         theme
       );
       completed.push(Emotion.NEUTRAL);
-      mergePortraits({ [Emotion.NEUTRAL]: neutralUrl });
+      mergePortraitsForCharacterId(charId, { [Emotion.NEUTRAL]: neutralUrl });
 
       for (const slot of slots) {
         if (slot.key === Emotion.NEUTRAL) continue;
@@ -960,7 +962,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           theme
         );
         completed.push(slot.key);
-        mergePortraits({ [slot.key]: url });
+        mergePortraitsForCharacterId(charId, { [slot.key]: url });
       }
 
       const victimAfter = latestDraftRef.current.suspects?.find((s) => s.id === charId) as Suspect | undefined;
