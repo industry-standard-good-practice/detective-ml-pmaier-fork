@@ -536,6 +536,13 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     });
   }, [isGenerating, isSaving, isRegeneratingAll, isRegeneratingVariant, portraitMode, selectedVariantKey]);
 
+  /** Clearing busy on unmount avoids stale regen/generate flags when the parent remounts this modal for another character (see CaseReview `key={selectedSuspectId}`). */
+  useEffect(() => {
+    return () => {
+      onBusyChangeRef.current?.(false, {});
+    };
+  }, []);
+
   const handlePasteFromClipboard = async () => {
     if (!onPasteFromClipboard) {
       try {

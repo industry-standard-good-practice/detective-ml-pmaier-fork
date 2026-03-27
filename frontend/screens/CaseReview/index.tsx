@@ -25,16 +25,17 @@ import ConsistencyModal from './ConsistencyModal';
 const Container = styled.div`
   display: flex;
   height: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 20px var(--screen-edge-horizontal) calc(var(--screen-edge-bottom) + 20px) var(--screen-edge-horizontal);
   gap: calc(var(--space) * 3);
   position: relative;
+  overflow-x: hidden;
 
   @media (max-width: 1080px) {
     flex-direction: column;
     padding: 10px var(--screen-edge-horizontal) calc(var(--screen-edge-bottom) + 20px) var(--screen-edge-horizontal);
     gap: 0;
-    overflow-x: hidden;
-    min-width: 0;
   }
 `;
 
@@ -65,6 +66,7 @@ const MobileTab = styled.button<{ $active: boolean }>`
 
 const LeftColumn = styled.div<{ $mobileHidden?: boolean }>`
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1317,6 +1319,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
       {(suspectEditorVisible || suspectEditorKeepAlive) && activeSuspect && (
         <ImageEditorModal
+          key={selectedSuspectId}
           visible={suspectEditorVisible}
           title={activeSuspect.portraits?.[Emotion.NEUTRAL] ? `Edit ${activeSuspect.name}` : `Create ${activeSuspect.name}`}
           portraitSlots={getPortraitVariantSlots(activeSuspect as any)}

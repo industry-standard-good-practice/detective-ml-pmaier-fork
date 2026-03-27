@@ -11,11 +11,13 @@ import { type ImageLoadingState } from '@/components/SuspectPortrait';
 
 const Panel = styled.div<{ $mobileHidden?: boolean }>`
   flex: 1;
+  min-width: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   padding: calc(var(--space) * 3);
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   gap: calc(var(--space) * 3);
 
@@ -23,9 +25,7 @@ const Panel = styled.div<{ $mobileHidden?: boolean }>`
     display: ${props => props.$mobileHidden ? 'none' : 'flex'};
     padding: calc(var(--space) * 2);
     min-height: 0;
-    min-width: 0;
     flex: 1;
-    overflow-x: hidden;
   }
 `;
 

@@ -373,6 +373,8 @@ const UploadButton = styled(NavButton)`
 const ScreenContent = styled.div`
   flex: 1;
   position: relative;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 `;
 
