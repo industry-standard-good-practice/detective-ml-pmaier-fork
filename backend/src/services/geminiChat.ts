@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 import { ai } from "./geminiClient.js";
 import { GEMINI_MODELS, generateWithTextModel } from "./geminiModels.js";
+import { normalizeRevealedEvidenceTitles } from "./evidenceRevealMapping.js";
 
 /**
  * All chat-related Gemini service functions.
@@ -198,6 +199,11 @@ export const getSuspectResponse = async (
   const unrevealedItems = (suspect.hiddenEvidence || []).filter(e => !discoveredTitles.has(e.title.toLowerCase()));
   const revealedItems = (suspect.hiddenEvidence || []).filter(e => discoveredTitles.has(e.title.toLowerCase()));
 
+  const exactRevealTitleList =
+    unrevealedItems.length > 0
+      ? unrevealedItems.map((e) => `"${e.title.replace(/"/g, '\\"')}"`).join(', ')
+      : 'NONE — you MUST return revealedEvidence as []';
+
   const unrevealedStr = unrevealedItems.length > 0
     ? unrevealedItems.map(e => {
         const loc = (e.location || '').trim();
@@ -250,6 +256,8 @@ export const getSuspectResponse = async (
       UNREVEALED CLUES — format per line: TITLE | DISCOVERY_ZONE: body OR environment | WHERE_HIDDEN: ... | DETAIL: ...
       ${unrevealedStr}
       ALREADY FOUND CLUES: ${revealedStr}
+      
+      **revealedEvidence (STRICT):** Only titles from this suspect's UNREVEALED list. Each string must be the **exact TITLE** (copy verbatim before the first " | "), or the server will drop it. Allowed titles only: ${exactRevealTitleList}
       
       User Action: "${userInput}"
       
@@ -427,6 +435,8 @@ export const getSuspectResponse = async (
         2. If the user asks about a topic related to your UNREVEALED SECRETS, YOU MUST REVEAL IT.
         3. If the user presents evidence that contradicts your story, you REVEAL the related UNREVEALED SECRET.
         4. DO NOT add items from REVEALED SECRETS to 'revealedEvidence'. The detective already knows them.
+        5. **revealedEvidence — EXACT TITLES ONLY:** Each string must be a **verbatim copy** of one TITLE from UNREVEALED SECRETS (the text before the first " | " on that line). Do not paraphrase, reword, abbreviate, or invent titles. Do not name initialEvidence or another character's hidden items. Allowed titles only: ${exactRevealTitleList}
+        6. The server maps near-miss strings to the closest allowed title when confident; if nothing matches, the reveal is discarded — so exact titles are best.
         `}
       `;
   }
@@ -480,13 +490,13 @@ export const getSuspectResponse = async (
       .filter((e: string) => e.length > 0);
   }
 
+  const beforeNormalize = [...parsedEvidence];
+  parsedEvidence = normalizeRevealedEvidenceTitles(parsedEvidence, unrevealedItems, { minFuzzyScore: 0.7 });
+
   // #region agent log
   const hiddenTitleSet = new Set((suspect.hiddenEvidence || []).map(e => e.title.toLowerCase()));
-  const notInSuspectHidden = parsedEvidence.filter((t: string) => {
-    const clean = t.toLowerCase();
-    return !Array.from(hiddenTitleSet).some(ht => clean === ht || clean.includes(ht) || ht.includes(clean));
-  });
-  fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1',location:'geminiChat.ts:getSuspectResponse:parsed',message:'model revealedEvidence vs suspect hiddenEvidence',data:{suspectId:suspect.id,parsedEvidence,notInSuspectHidden,countInvalid:notInSuspectHidden.length},timestamp:Date.now()})}).catch(()=>{});
+  const notInSuspectHidden = parsedEvidence.filter((t: string) => !hiddenTitleSet.has(t.toLowerCase()));
+  fetch('http://127.0.0.1:7823/ingest/7ccd5c3b-2f27-4653-a2d1-5c9a73591090',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0a2296'},body:JSON.stringify({sessionId:'0a2296',runId:'pre',hypothesisId:'H1',location:'geminiChat.ts:getSuspectResponse:parsed',message:'revealedEvidence normalized to hiddenEvidence',data:{suspectId:suspect.id,beforeNormalize,afterNormalize:parsedEvidence,notInSuspectHidden,countInvalid:notInSuspectHidden.length},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
   let emotionOut = typeof data.emotion === 'string' ? data.emotion.trim() : 'NEUTRAL';
