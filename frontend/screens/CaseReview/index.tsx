@@ -689,6 +689,11 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     setSuspectEditorKeepAlive(false);
   };
 
+  /** Hide the portrait editor overlay only; keep modal mounted while regen/generate/save runs. */
+  const handleHideSuspectImageEditorWhileBusy = () => {
+    setSuspectEditorVisible(false);
+  };
+
   const handleSaveEditedSuspect = async (
     newImageUrl: string,
     _onProgress?: (current: number, total: number) => void,
@@ -1361,6 +1366,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           portraitSlots={getPortraitVariantSlots(activeSuspect as any)}
           portraitUrls={suspectPortraitUrlsForEditor}
           onClose={handleCloseSuspectImageEditor}
+          onCloseWhileBusy={handleHideSuspectImageEditorWhileBusy}
           portraitSessionHasRemoteChanges={portraitSessionHasRemoteChanges}
           onBusyChange={(busy, meta) => {
             setSuspectEditorKeepAlive(busy);

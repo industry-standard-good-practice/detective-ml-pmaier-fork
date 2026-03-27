@@ -405,6 +405,12 @@ export interface ImageEditorModalProps {
     meta?: { variantKey?: string }
   ) => Promise<void>;
   onClose: () => void;
+  /**
+   * When the modal is busy (generate / save / regen), the default is to block closing.
+   * If set, closing (X, backdrop, Escape) while busy calls this instead—typically hide the overlay
+   * while the component stays mounted so work can finish (see parent keep-alive).
+   */
+  onCloseWhileBusy?: () => void;
   /** Portrait mode: parent has regen / staged URLs not yet written to the case draft. */
   portraitSessionHasRemoteChanges?: boolean;
   /** When false, the modal is hidden but stays mounted so in-flight generation can finish. */
@@ -445,6 +451,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   initialImageUrl,
   onSave,
   onClose,
+  onCloseWhileBusy,
   portraitSessionHasRemoteChanges = false,
   visible = true,
   onBusyChange,
@@ -590,6 +597,10 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const tryRequestClose = useCallback(() => {
     if (!visible) return;
     if (showPreviewBusyOverlay) {
+      if (onCloseWhileBusy) {
+        onCloseWhileBusy();
+        return;
+      }
       toast.error('Wait for the current operation to finish before closing.');
       return;
     }
@@ -599,7 +610,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       return;
     }
     onClose();
-  }, [visible, showPreviewBusyOverlay, currentImageUrl, portraitSessionHasRemoteChanges, onClose]);
+  }, [visible, showPreviewBusyOverlay, onCloseWhileBusy, currentImageUrl, portraitSessionHasRemoteChanges, onClose]);
 
   useEffect(() => {
     if (!visible) setDiscardDialogOpen(false);
@@ -1059,13 +1070,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               )}
 
               <ButtonGroup>
-                <Button
-                  $variant="danger"
-                  onClick={tryRequestClose}
-                  type="button"
-                  disabled={showPreviewBusyOverlay}
-                >
-                  Cancel
+                <Button $variant="danger" onClick={tryRequestClose} type="button">
+                  Revert
                 </Button>
                 <Button type="button" $variant="primary" onClick={handleSave} disabled={pipelineLocked || !currentImageUrl}>
                   <Save size={16} />
@@ -1083,10 +1089,9 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           role="presentation"
         >
           <ModalBox onClick={(e) => e.stopPropagation()} $borderColor="rgba(255, 170, 0, 0.45)" $glowColor="rgba(255, 170, 0, 0.15)">
-            <ModalTitle $color="var(--color-accent-orange)">Discard changes?</ModalTitle>
+            <ModalTitle $color="var(--color-accent-orange)">Revert changes?</ModalTitle>
             <ModalText style={{ color: 'var(--color-text-muted)', fontSize: 'var(--type-body)' }}>
-              You have unsaved image edits and generated portraits that are not on the case yet. Closing now will discard
-              them. Save keeps them on the case.
+              This undoes unsaved image changes since the last save and restores what is stored on the case.
             </ModalText>
             <ModalButtonRow>
               <UiButton type="button" $variant="ghost" onClick={() => setDiscardDialogOpen(false)}>
@@ -1100,7 +1105,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   onClose();
                 }}
               >
-                Discard
+                Revert
               </UiButton>
             </ModalButtonRow>
           </ModalBox>
