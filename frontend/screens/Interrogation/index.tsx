@@ -190,7 +190,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
   const ttsPlaybackGenRef = useRef(0);
   const prevSuspectIdRef = useRef(suspect.id);
   const isFirstRenderRef = useRef(true);
-  /** Dedup TTS start per chat tail; cleared in effect cleanup so React Strict Mode can replay after gen invalidation. */
+  /** Dedup TTS start per chat tail. Do not clear on every effect cleanup — new `chatHistory` array refs (e.g. after collecting evidence) would otherwise replay the same audio. */
   const lastTtsTailKeyRef = useRef<string | null>(null);
   const unreadSuspectIdsRef = useRef(unreadSuspectIds);
   const onClearUnreadRef = useRef(onClearUnread);
@@ -288,7 +288,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
     };
   }, []);
 
-  // TTS Playback Logic — tail-key dedup (not chatGrew): Strict Mode invalidates gen; cleanup clears key so the retry run can start TTS again.
+  // TTS Playback Logic — tail-key dedup (not chatGrew).
   useEffect(() => {
     const suspectChanged = suspect.id !== prevSuspectIdRef.current;
     const isFirstRender = isFirstRenderRef.current;
@@ -335,10 +335,6 @@ const Interrogation: React.FC<InterrogationProps> = ({
       tryPlay(lastMsg.audioUrl);
       if (unreadSuspectIdsRef.current.has(suspect.id)) onClearUnreadRef.current?.(suspect.id);
     }
-
-    return () => {
-      lastTtsTailKeyRef.current = null;
-    };
   }, [chatHistory, ttsPlaybackVolume, suspect.id, startTtsPlayback, invalidateInFlightTts]);
 
   // Force Action type if Deceased
