@@ -5,11 +5,12 @@ import styled, { createGlobalStyle, keyframes, css } from 'styled-components';
 import { ScreenState } from '../types';
 import CRTOverlay from './CRTOverlay';
 import { User } from 'firebase/auth';
-import { cssTokens, media, type } from '../theme';
+import { cssTokens, type } from '../theme';
 
 import { useOnboarding } from '../contexts/OnboardingContext';
 import ExitCaseDialog from './ExitCaseDialog';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, HelpCircle } from 'lucide-react';
+import { Overlay, ModalBox, ModalTitle, ModalText, ModalButtonRow, Button } from './ui';
 import { OnboardingTour } from './OnboardingTour';
 import YouTubeBackgroundMusic, {
   BACKGROUND_MUSIC_ATTRIBUTION_LABEL,
@@ -591,11 +592,27 @@ const MusicControlsRow = styled.div`
   align-items: stretch;
   gap: calc(var(--space) * 0.75);
   width: 100%;
+
+  /* SlideMenu forces every menu button to full width; the music rail is a link (narrow); TTS help is a button — pin [toggle | icon] layout. */
+  & > :first-child {
+    flex: 1;
+    min-width: 0;
+    width: auto !important;
+  }
+
+  & > :last-child {
+    width: 44px !important;
+    flex: 0 0 44px;
+    align-self: stretch;
+    /* SlideMenu gives all buttons a bottom border; icon rail is not a full-width row control. */
+    border-bottom: none;
+  }
 `;
 
 const MusicToggleButton = styled(AccentNavButton)`
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
 `;
 
 const TtsToggleButton = styled(MusicToggleButton)``;
@@ -622,6 +639,45 @@ const MusicAttributionLink = styled.a`
     outline-offset: 2px;
   }
 `;
+
+/** Same footprint and alignment as `MusicAttributionLink` (44px rail, right side of row). */
+const TtsHelpIconButton = styled(MusicAttributionLink).attrs({
+  as: 'button' as const,
+  type: 'button' as const,
+})`
+  color: var(--color-accent-green);
+  cursor: pointer;
+  border-bottom: none;
+
+  &:hover {
+    color: var(--color-text-bright);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent-green);
+    outline-offset: 2px;
+  }
+`;
+
+const TtsHelpOverlay = styled(Overlay)`
+  position: fixed;
+  z-index: 999;
+  padding: calc(var(--space) * 2);
+`;
+
+const TtsHelpBox = styled(ModalBox)`
+  width: 100%;
+  max-width: 420px;
+  border-color: var(--color-accent-green);
+  box-shadow: 0 0 30px rgba(0, 200, 100, 0.18);
+`;
+
+const TtsHelpTitle = styled(ModalTitle)`
+  color: var(--color-accent-green);
+  text-shadow: 0 0 10px var(--color-accent-green);
+`;
+
+const TtsHelpOkButton = styled(Button).attrs({ $variant: 'accent' as const })``;
 
 const MenuDivider = styled.div`
   border-top: 1px solid var(--color-border-subtle);
@@ -760,20 +816,21 @@ const Layout: React.FC<LayoutProps> = ({
   onCloseCase,
   onCheckConsistency,
   onTestInvestigation,
-  volume = 0.7,
+  volume = 0.4,
   onVolumeChange,
   musicEnabled = true,
   onToggleMusic = () => {},
-  musicVolume = 0.35,
+  musicVolume = 0.15,
   onMusicVolumeChange,
   ttsEnabled = true,
   onToggleTts = () => {},
-  ttsVolume = 1,
+  ttsVolume = 0.3,
   onTtsVolumeChange,
   bootIntroSfxActive = false
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [showTtsHelpModal, setShowTtsHelpModal] = useState(false);
   const { startTour } = useOnboarding();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const marqueeSpanRef = useRef<HTMLSpanElement>(null);
@@ -1087,6 +1144,16 @@ const Layout: React.FC<LayoutProps> = ({
                         >
                           {ttsEnabled ? '[TTS: ON]' : '[TTS: OFF]'}
                         </TtsToggleButton>
+                        <TtsHelpIconButton
+                          aria-label="About text-to-speech"
+                          title="About text-to-speech"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTtsHelpModal(true);
+                          }}
+                        >
+                          <HelpCircle size={20} strokeWidth={2} aria-hidden />
+                        </TtsHelpIconButton>
                       </MusicControlsRow>
 
                       {ttsEnabled && onTtsVolumeChange && (
@@ -1174,6 +1241,22 @@ const Layout: React.FC<LayoutProps> = ({
                 onConfirm={handleExitCase}
                 onCancel={() => setShowExitDialog(false)}
               />
+            )}
+
+            {showTtsHelpModal && (
+              <TtsHelpOverlay onClick={() => setShowTtsHelpModal(false)}>
+                <TtsHelpBox onClick={e => e.stopPropagation()} $borderColor="var(--color-accent-green)" $glowColor="rgba(0, 200, 100, 0.25)">
+                  <TtsHelpTitle>Text-to-speech</TtsHelpTitle>
+                  <ModalText>
+                    The game runs much faster with TTS off, but leaving it on makes dialogue more immersive.
+                  </ModalText>
+                  <ModalButtonRow>
+                    <TtsHelpOkButton type="button" onClick={() => setShowTtsHelpModal(false)}>
+                      OK
+                    </TtsHelpOkButton>
+                  </ModalButtonRow>
+                </TtsHelpBox>
+              </TtsHelpOverlay>
             )}
 
             <ScreenContent>
