@@ -52,6 +52,9 @@ const App: React.FC = () => {
 
   // --- STATE ---
   const [hasBooted, setHasBooted] = useState(false);
+  /** Keep YouTube boot SFX enabled after dismiss until the clip can finish (Layout was disabling at ~600ms). */
+  const [bootIntroAudioHold, setBootIntroAudioHold] = useState(false);
+  const bootIntroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [powerState, setPowerState] = useState<'on' | 'off' | 'turning-on' | 'turning-off'>('turning-on');
   
   const [communityCases, setCommunityCases] = useState<CaseData[]>([]);
@@ -202,10 +205,25 @@ const App: React.FC = () => {
     });
   }, [gameState.currentScreen, gameState.selectedCaseId, gameState.currentSuspectId, gameState.aggravationLevels, gameState.gameTime]);
 
+  useEffect(() => {
+    return () => {
+      if (bootIntroHoldTimerRef.current) {
+        clearTimeout(bootIntroHoldTimerRef.current);
+        bootIntroHoldTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Handle Boot Sequence Completion
   const handleBootComplete = () => {
     // Prime Web Audio in this user gesture so the delayed boot SFX can play (mobile autoplay policy)
     primeSfxAudioContext();
+    setBootIntroAudioHold(true);
+    if (bootIntroHoldTimerRef.current) clearTimeout(bootIntroHoldTimerRef.current);
+    bootIntroHoldTimerRef.current = setTimeout(() => {
+      bootIntroHoldTimerRef.current = null;
+      setBootIntroAudioHold(false);
+    }, 14000);
     // 1. Start turning off (collapse screen)
     setPowerState('turning-off');
 
@@ -1510,7 +1528,7 @@ const App: React.FC = () => {
         draftCheckConsistencyFnRef.current?.();
       } : undefined}
       onTestInvestigation={gameState.currentScreen === ScreenState.CASE_REVIEW ? handleTestInvestigation : undefined}
-      bootIntroSfxActive={!hasBooted}
+      bootIntroSfxActive={!hasBooted || bootIntroAudioHold}
     >
       {!hasBooted ? (
         <BootSequence onComplete={handleBootComplete} />

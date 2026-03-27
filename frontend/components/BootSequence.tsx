@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type } from '../theme';
 import styled, { keyframes } from 'styled-components';
+import { BOOT_INTRO_SFX_GESTURE_EVENT } from './YouTubeBootIntroSfx';
 
 const blink = keyframes`
   0%, 100% { opacity: 1; }
@@ -119,7 +120,7 @@ const BootSequence: React.FC<BootSequenceProps> = ({ onComplete }) => {
     if (phase !== 'waiting') return;
 
     const handleInteract = () => {
-      // Notify parent immediately; parent handles the visual exit animation
+      window.dispatchEvent(new CustomEvent(BOOT_INTRO_SFX_GESTURE_EVENT));
       onComplete();
     };
 

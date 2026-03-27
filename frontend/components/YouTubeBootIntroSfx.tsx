@@ -3,9 +3,12 @@ import styled from 'styled-components';
 
 /** Site entry / CRT boot intro (SFX — uses global mute + SFX volume, not music). */
 export const BOOT_INTRO_SFX_VIDEO_ID = 'tajDxBaPBBM';
-/** Extra attenuation vs main SFX fader (boot sting reads loud at the same linear level). */
-const BOOT_INTRO_VOLUME_GAIN = 0.05;
+/** Attenuation vs main SFX fader (startup jingle still needs to be clearly audible). */
+const BOOT_INTRO_VOLUME_GAIN = 0.42;
 export const BOOT_INTRO_SFX_VIDEO_URL = `https://www.youtube.com/watch?v=${BOOT_INTRO_SFX_VIDEO_ID}`;
+
+/** Dispatch on first boot dismiss input so YouTube can start after autoplay policy (sync with user gesture). */
+export const BOOT_INTRO_SFX_GESTURE_EVENT = 'detective-ml-boot-sfx-gesture';
 
 const HiddenHost = styled.div`
   position: fixed;
@@ -52,6 +55,7 @@ const YouTubeBootIntroSfx: React.FC<YouTubeBootIntroSfxProps> = ({ enabled, volu
     };
     let destroyed = false;
     let creating = false;
+    let pendingGesturePlay = false;
 
     const applyPlayback = () => {
       const p = playerRef.current;
@@ -67,11 +71,25 @@ const YouTubeBootIntroSfx: React.FC<YouTubeBootIntroSfxProps> = ({ enabled, volu
       }
     };
 
+    const playFromUserGesture = () => {
+      if (!enabledRef.current) return;
+      const p = playerRef.current;
+      if (!p || destroyed) return;
+      p.setVolume?.(
+        Math.round(Math.max(0, Math.min(1, volumeRef.current * BOOT_INTRO_VOLUME_GAIN)) * 100)
+      );
+      p.playVideo?.();
+    };
+
     const onReady = (e: { target: YtPlayer }) => {
       creating = false;
       if (destroyed) return;
       playerRef.current = e.target;
       applyPlayback();
+      if (pendingGesturePlay) {
+        pendingGesturePlay = false;
+        playFromUserGesture();
+      }
     };
 
     const createPlayer = () => {
@@ -114,7 +132,19 @@ const YouTubeBootIntroSfx: React.FC<YouTubeBootIntroSfxProps> = ({ enabled, volu
       }
     }
 
+    const onGesture = () => {
+      if (!enabledRef.current) return;
+      if (!playerRef.current) {
+        pendingGesturePlay = true;
+        return;
+      }
+      playFromUserGesture();
+    };
+    window.addEventListener(BOOT_INTRO_SFX_GESTURE_EVENT, onGesture);
+
     return () => {
+      window.removeEventListener(BOOT_INTRO_SFX_GESTURE_EVENT, onGesture);
+      pendingGesturePlay = false;
       destroyed = true;
       try {
         playerRef.current?.destroy?.();
