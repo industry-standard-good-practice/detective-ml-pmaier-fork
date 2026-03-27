@@ -307,8 +307,8 @@ export const enforceRelationships = (caseData: any) => {
     }
 
     const hasVictim = caseData.hasVictim !== false; // default true for backwards compat
-    const victim = caseData.suspects.find((s: any) => s.isDeceased);
-    const victimName = victim?.name.trim();
+    const victims = (caseData.suspects || []).filter((x: any) => x.isDeceased);
+    const victimNames = victims.map((v: any) => (v.name || '').trim()).filter(Boolean);
     const aliveSuspectNames = caseData.suspects.filter((s: any) => !s.isDeceased).map((s: any) => s.name.trim());
 
     caseData.suspects.forEach((s: any) => {
@@ -316,45 +316,56 @@ export const enforceRelationships = (caseData: any) => {
         const currentName = s.name.trim();
         const isDeceased = s.isDeceased;
 
-        // 1. Canonicalize "The Victim" relationship (only if hasVictim)
-        if (hasVictim && !isDeceased && victimName) {
-            // If they have a relationship with the victim's name, rename it to "The Victim"
+        // 1. Single victim: canonicalize that person's name → "The Victim" (stable key for legacy + UI).
+        if (hasVictim && !isDeceased && victimNames.length === 1) {
             s.relationships.forEach((r: any) => {
-                if (r.targetName.trim() === victimName) {
+                if (r.targetName.trim() === victimNames[0]) {
                     r.targetName = "The Victim";
                 }
             });
         }
 
-        // If hasVictim is false, strip any "The Victim" relationships that may have been generated
+        // Multiple victims: migrate legacy lone "The Victim" row to the first deceased's name so keys stay unique.
+        if (hasVictim && victimNames.length > 1) {
+            s.relationships.forEach((r: any) => {
+                if (r.targetName.trim() === "The Victim") {
+                    r.targetName = victimNames[0];
+                }
+            });
+        }
+
         if (!hasVictim) {
             s.relationships = s.relationships.filter((r: any) => r.targetName.trim() !== "The Victim");
         }
 
-        // 2. Define targets for this specific suspect
         const targets: string[] = [];
 
         if (!isDeceased) {
-            // Alive suspects need "The Victim" (if applicable) + other alive suspects
-            if (hasVictim) {
+            if (hasVictim && victimNames.length === 1) {
                 targets.push("The Victim");
+            } else if (hasVictim && victimNames.length > 1) {
+                victimNames.forEach((n: string) => targets.push(n));
             }
-            aliveSuspectNames.forEach(name => {
+            aliveSuspectNames.forEach((name: string) => {
                 if (name !== currentName) targets.push(name);
             });
         } else {
-            // The victim has relationships with all ALIVE suspects
-            aliveSuspectNames.forEach(name => targets.push(name));
+            caseData.suspects.forEach((other: any) => {
+                if (other.id === s.id) return;
+                const n = (other.name || "").trim();
+                if (n) targets.push(n);
+            });
         }
 
-        // 3. Ensure relationships with all targets
         targets.forEach((name: string) => {
             const hasRel = s.relationships.some((r: any) => r.targetName.trim() === name);
             if (!hasRel) {
+                const isVictimTarget =
+                    name === "The Victim" || (victimNames.length > 1 && victimNames.includes(name));
                 s.relationships.push({
                     targetName: name,
                     type: "Acquaintance",
-                    description: name === "The Victim"
+                    description: isVictimTarget
                         ? "I didn't know them personally, just another face in the crowd."
                         : "I've seen them around, but we don't talk much. I don't really have an opinion on them one way or the other."
                 });

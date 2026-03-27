@@ -298,6 +298,47 @@ export interface AudioPlayback {
   finished: Promise<void>;
 }
 
+/** One shared "voice" slot: TTS, officer intro, case-review preview — new play always preempts the last. */
+let activeVoiceStop: (() => void) | null = null;
+
+/** Stop whatever is currently playing through `playAudioFromUrl` (same channel as interrogation TTS). */
+export function stopGlobalVoicePlayback(): void {
+  activeVoiceStop?.();
+  activeVoiceStop = null;
+}
+
+/**
+ * Prepare shared voice element: preempt prior TTS, register stop **before** `play()` resolves
+ * so overlapping partner → suspect lines cannot both hold the slot.
+ */
+function beginVoicePlaybackOnElement(audio: HTMLAudioElement, volume: number): AudioPlayback {
+  stopGlobalVoicePlayback();
+  audio.volume = volume;
+  const finished = new Promise<void>((resolve) => {
+    audio.onended = () => resolve();
+    audio.onerror = (e?: unknown) => {
+      if (e) console.error('[Audio] playback error:', e);
+      resolve();
+    };
+  });
+  const stop = () => {
+    audio.pause();
+    audio.currentTime = 0;
+    if (activeVoiceStop === stop) activeVoiceStop = null;
+  };
+  activeVoiceStop = stop;
+  void finished.finally(() => {
+    if (activeVoiceStop === stop) activeVoiceStop = null;
+  });
+  return {
+    stop,
+    setVolume: (v: number) => {
+      audio.volume = v;
+    },
+    finished,
+  };
+}
+
 /**
  * Play audio from a blob URL.
  * Uses cached PCM → WAV data URL → pre-unlocked HTMLAudioElement.
@@ -312,16 +353,8 @@ export async function playAudioFromUrl(blobUrl: string, volume: number = 1): Pro
     
     // Use the warm (pre-unlocked) audio element if available
     const audio = warmAudio || new Audio();
-    audio.volume = volume;
     audio.src = dataUrl;
-    
-    const finished = new Promise<void>((resolve) => {
-      audio.onended = () => resolve();
-      audio.onerror = (e) => {
-        console.error('[Audio] playback error:', e);
-        resolve();
-      };
-    });
+    const playback = beginVoicePlaybackOnElement(audio, volume);
 
     try {
       await audio.play();
@@ -329,23 +362,14 @@ export async function playAudioFromUrl(blobUrl: string, volume: number = 1): Pro
       console.error('[Audio] play() failed:', e);
     }
 
-    return {
-      stop: () => { audio.pause(); audio.currentTime = 0; },
-      setVolume: (v: number) => { audio.volume = v; },
-      finished
-    };
+    return playback;
   }
 
   // Strategy 2: Direct blob URL with HTMLAudioElement — reuse warm element on iOS
   console.warn('[Audio] No PCM cache, using HTMLAudioElement fallback');
   const audio = warmAudio || new Audio();
   audio.src = blobUrl;
-  audio.volume = volume;
-
-  const finished = new Promise<void>((resolve) => {
-    audio.onended = () => resolve();
-    audio.onerror = () => resolve();
-  });
+  const playback = beginVoicePlaybackOnElement(audio, volume);
 
   try {
     await audio.play();
@@ -353,9 +377,5 @@ export async function playAudioFromUrl(blobUrl: string, volume: number = 1): Pro
     console.error('[Audio] fallback play failed:', e);
   }
 
-  return {
-    stop: () => { audio.pause(); audio.currentTime = 0; },
-    setVolume: (v: number) => { audio.volume = v; },
-    finished
-  };
+  return playback;
 }

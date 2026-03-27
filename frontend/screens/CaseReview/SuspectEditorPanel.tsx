@@ -726,24 +726,37 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
       ? { height: pairedRailHeightPx, maxHeight: pairedRailHeightPx, minHeight: 0 as const }
       : undefined;
 
-  const deceasedSuspect = draftCase.suspects?.find(s => s.isDeceased);
+  const deceasedSuspects = draftCase.suspects?.filter(s => s.isDeceased) || [];
+  const deceasedNameSet = new Set(deceasedSuspects.map(d => d.name.trim()));
   const otherSuspects = draftCase.suspects?.filter(s => s.id !== activeSuspect?.id) || [];
 
   const relationshipTargets: string[] = [];
   if (activeSuspect) {
     if (!isSupportChar && !(activeSuspect as Suspect).isDeceased) {
       if (draftCase.hasVictim !== false) {
-        relationshipTargets.push("The Victim");
+        if (deceasedSuspects.length === 1) {
+          relationshipTargets.push("The Victim");
+        } else if (deceasedSuspects.length > 1) {
+          deceasedSuspects.forEach(v => relationshipTargets.push(v.name));
+        }
       }
       otherSuspects.forEach(s => {
         if (!s.isDeceased) relationshipTargets.push(s.name);
       });
-    } else {
-      otherSuspects.forEach(s => {
-        if (!s.isDeceased) relationshipTargets.push(s.name);
-      });
+    } else if (!isSupportChar && (activeSuspect as Suspect).isDeceased) {
+      otherSuspects.forEach(s => relationshipTargets.push(s.name));
     }
   }
+
+  const relationshipRowLabel = (targetName: string) => {
+    if (targetName === "The Victim" && deceasedSuspects.length === 1) {
+      return `The Victim (${deceasedSuspects[0].name})`;
+    }
+    if (deceasedNameSet.has(targetName.trim())) {
+      return `The Victim (${targetName})`;
+    }
+    return targetName;
+  };
 
   const handleRelationshipChange = (targetName: string, field: 'type' | 'description', value: string) => {
     if (!activeSuspect || isSupportChar) return;
@@ -1064,9 +1077,7 @@ const SuspectEditorPanel: React.FC<SuspectEditorPanelProps> = ({
                       <ModuleItem key={`${activeSuspect.id}-${targetName}`}>
                         <FlexRowAligned>
                           <RelTargetLabel>
-                            {targetName === "The Victim" && deceasedSuspect
-                              ? `The Victim (${deceasedSuspect.name})`
-                              : targetName}
+                            {relationshipRowLabel(targetName)}
                           </RelTargetLabel>
                           <RelTypeInput
                             placeholder="Type (e.g. Rival)"

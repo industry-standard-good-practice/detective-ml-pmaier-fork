@@ -5,7 +5,7 @@ import { CaseData, Suspect, ChatMessage, Emotion, Evidence, TimelineStatement } 
 import SuspectCard from '../../components/SuspectCard';
 import SuspectCardDock from '../../components/SuspectCardDock';
 import SuspectPortrait from '../../components/SuspectPortrait';
-import { playAudioFromUrl, AudioPlayback } from '../../services/audioPlayer';
+import { playAudioFromUrl, AudioPlayback, stopGlobalVoicePlayback } from '../../services/audioPlayer';
 import { useOnboarding, OnboardingStep } from '../../contexts/OnboardingContext';
 
 // Sub-components
@@ -239,19 +239,15 @@ const Interrogation: React.FC<InterrogationProps> = ({
 
   const invalidateInFlightTts = useCallback(() => {
     ttsPlaybackGenRef.current += 1;
-    if (audioRef.current) {
-      audioRef.current.stop();
-      audioRef.current = null;
-    }
+    stopGlobalVoicePlayback();
+    audioRef.current = null;
   }, []);
 
   const startTtsPlayback = useCallback((url: string) => {
     ttsPlaybackGenRef.current += 1;
     const gen = ttsPlaybackGenRef.current;
-    if (audioRef.current) {
-      audioRef.current.stop();
-      audioRef.current = null;
-    }
+    stopGlobalVoicePlayback();
+    audioRef.current = null;
     lastPlayedAudioUrlRef.current = url;
     playAudioFromUrl(url, ttsPlaybackVolumeRef.current)
       .then((playback) => {
@@ -281,10 +277,8 @@ const Interrogation: React.FC<InterrogationProps> = ({
   useEffect(() => {
     return () => {
       ttsPlaybackGenRef.current += 1;
-      if (audioRef.current) {
-        audioRef.current.stop();
-        audioRef.current = null;
-      }
+      stopGlobalVoicePlayback();
+      audioRef.current = null;
     };
   }, []);
 
