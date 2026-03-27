@@ -356,7 +356,10 @@ const EvidenceEditor: React.FC<EvidenceEditorProps> = ({
         <EvidenceCard key={ev.id || i}>
           <CardTop>
             <EvidenceImageWrapper>
-              <ImageSlot $src={ev.imageUrl}>
+              <ImageSlot
+                key={ev.imageUrl ? `${ev.id}:${ev.imageUrl}` : `${ev.id}:no-image`}
+                $src={ev.imageUrl}
+              >
                 {onRerollImage && (
                   <RerollButton onClick={() => onRerollImage(ev)} title="Generate new pixel art">
                     REROLL

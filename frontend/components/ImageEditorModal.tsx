@@ -166,6 +166,10 @@ const VariantThumb = styled.button<{ $active: boolean; $slotStatus?: 'idle' | 'l
             ? '#3b82f6'
             : 'rgba(255,255,255,0.35)'};
   }
+  &:disabled {
+    cursor: not-allowed;
+    filter: grayscale(0.15);
+  }
 `;
 
 const VariantThumbSpinnerWrap = styled.div`
@@ -413,6 +417,15 @@ export interface ImageEditorModalProps {
   onCloseWhileBusy?: () => void;
   /** Portrait mode: parent has regen / staged URLs not yet written to the case draft. */
   portraitSessionHasRemoteChanges?: boolean;
+  /**
+   * Portrait mode: push the in-modal image for a variant into the parent (session overrides for the active editor target, or draft merge if the user switched away).
+   * `characterId` is the suspect/officer/partner id this modal was editing when the change was made.
+   */
+  onPersistPortraitSlotBeforeClose?: (characterId: string, variantKey: string, imageDataUrl: string) => void;
+  /** Suspect / officer / partner id this portrait editor is bound to (required for portrait persist paths). */
+  portraitTargetCharacterId?: string;
+  /** Portrait mode: user confirmed Revert — clear staged session overrides in the parent. */
+  onPortraitSessionDiscard?: () => void;
   /** When false, the modal is hidden but stays mounted so in-flight generation can finish. */
   visible?: boolean;
   /** Fires when generate/save/regenerate-all busy state changes (for parent loading UI + keep-alive). */
@@ -422,8 +435,8 @@ export interface ImageEditorModalProps {
       regenerateAll?: boolean;
       regenerateVariant?: boolean;
       saving?: boolean;
-      /** Portrait mode: which variant is being nano-edited (for carousel thumb loading). */
-      generatingVariantKey?: string;
+      /** Portrait mode: variants with in-flight prompt/nano image requests (concurrent allowed). */
+      generatingVariantKeys?: string[];
     }
   ) => void;
   aspectRatio?: string;
@@ -453,6 +466,9 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   onClose,
   onCloseWhileBusy,
   portraitSessionHasRemoteChanges = false,
+  onPersistPortraitSlotBeforeClose,
+  portraitTargetCharacterId,
+  onPortraitSessionDiscard,
   visible = true,
   onBusyChange,
   aspectRatio = '3:4',
@@ -474,7 +490,10 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [currentImageUrl, setCurrentImageUrl] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
+  /** Hero / non-portrait prompt+image pipeline only (single flight). */
+  const [isGeneratingHero, setIsGeneratingHero] = useState(false);
+  /** Portrait: one entry per in-flight nano/prompt request (same slot may appear more than once if concurrent). */
+  const [nanoGeneratingSlots, setNanoGeneratingSlots] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegeneratingAll, setIsRegeneratingAll] = useState(false);
   /** Portrait slots with an in-flight "regen variant" started from this modal (concurrent slots allowed). */
@@ -484,6 +503,9 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+  const selectedVariantKeyRef = useRef(selectedVariantKey);
+  selectedVariantKeyRef.current = selectedVariantKey;
   /** Canonical image URL/string for the selected slot after load; local edits compare against this. */
   const canvasSessionBaselineRef = useRef<string>('');
 
@@ -503,12 +525,29 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     variantRegenInFlight.includes(selectedVariantKey) ||
     extSingleVariantKeys.includes(selectedVariantKey);
 
+  const nanoBusyOnSelectedSlot = nanoGeneratingSlots.some((k) => k === selectedVariantKey);
+  const anyNanoInFlightPortrait = nanoGeneratingSlots.length > 0;
+
+  const anyBlockingPipeline =
+    isSaving ||
+    isRegeneratingAll ||
+    variantRegenInFlight.length > 0 ||
+    extModalBlocking ||
+    (portraitMode ? anyNanoInFlightPortrait : isGeneratingHero);
+
   const showPreviewBusyOverlay =
-    isGenerating ||
     isSaving ||
     isRegeneratingAll ||
     selectedSlotVariantRegenerating ||
-    extModalBlocking;
+    extModalBlocking ||
+    (portraitMode ? nanoBusyOnSelectedSlot : isGeneratingHero);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const applyDataUrlToCanvas = useCallback((dataUrl: string) => {
     setHistory((prev) => [...prev, dataUrl]);
@@ -545,6 +584,11 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         }
         return;
       }
+      // Parent session override caught up to the local canvas (e.g. after prompt edit) — do not reset history/undo.
+      if (portraitMode && src === currentImageUrl) {
+        if (!cancelled) canvasSessionBaselineRef.current = src;
+        return;
+      }
       if (src.startsWith('data:')) {
         if (!cancelled) {
           canvasSessionBaselineRef.current = src;
@@ -575,17 +619,28 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   }, [selectedVariantKey, portraitMode, urlForSelectedVariant, initialImageUrl, fetchRemoteAsDataUrl]);
 
   useEffect(() => {
-    const busy = isGenerating || isSaving || isRegeneratingAll || variantRegenInFlight.length > 0;
+    const busy =
+      isSaving ||
+      isRegeneratingAll ||
+      variantRegenInFlight.length > 0 ||
+      (portraitMode ? anyNanoInFlightPortrait : isGeneratingHero);
+    const generatingVariantKeys =
+      portraitMode && anyNanoInFlightPortrait ? [...new Set(nanoGeneratingSlots)] : undefined;
     onBusyChangeRef.current?.(busy, {
       regenerateAll: isRegeneratingAll,
       regenerateVariant: variantRegenInFlight.length > 0,
       saving: isSaving,
-      generatingVariantKey:
-        portraitMode && isGenerating && !isRegeneratingAll && variantRegenInFlight.length === 0
-          ? selectedVariantKey
-          : undefined,
+      generatingVariantKeys,
     });
-  }, [isGenerating, isSaving, isRegeneratingAll, variantRegenInFlight.length, portraitMode, selectedVariantKey]);
+  }, [
+    isSaving,
+    isRegeneratingAll,
+    variantRegenInFlight.length,
+    portraitMode,
+    anyNanoInFlightPortrait,
+    nanoGeneratingSlots,
+    isGeneratingHero,
+  ]);
 
   /** Clearing busy on unmount avoids stale regen/generate flags when the parent remounts this modal for another character (see CaseReview `key={selectedSuspectId}`). */
   useEffect(() => {
@@ -596,7 +651,55 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   const tryRequestClose = useCallback(() => {
     if (!visible) return;
-    if (showPreviewBusyOverlay) {
+    const canvasDirty = currentImageUrl !== canvasSessionBaselineRef.current;
+
+    if (anyBlockingPipeline) {
+      if (onCloseWhileBusy) {
+        if (
+          portraitMode &&
+          portraitTargetCharacterId &&
+          canvasDirty &&
+          currentImageUrl &&
+          onPersistPortraitSlotBeforeClose
+        ) {
+          onPersistPortraitSlotBeforeClose(portraitTargetCharacterId, selectedVariantKey, currentImageUrl);
+        }
+        onCloseWhileBusy();
+        return;
+      }
+      toast.error('Wait for the current operation to finish before closing.');
+      return;
+    }
+
+    if (portraitMode) {
+      if (canvasDirty && currentImageUrl && onPersistPortraitSlotBeforeClose && portraitTargetCharacterId) {
+        onPersistPortraitSlotBeforeClose(portraitTargetCharacterId, selectedVariantKey, currentImageUrl);
+      }
+      onClose();
+      return;
+    }
+    if (canvasDirty || portraitSessionHasRemoteChanges) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    onClose();
+  }, [
+    visible,
+    anyBlockingPipeline,
+    onCloseWhileBusy,
+    portraitMode,
+    portraitTargetCharacterId,
+    currentImageUrl,
+    selectedVariantKey,
+    onPersistPortraitSlotBeforeClose,
+    portraitSessionHasRemoteChanges,
+    onClose,
+  ]);
+
+  /** Revert button — confirm before dropping session / canvas work (portrait staged overrides or hero unsaved edits). */
+  const openRevertConfirmation = useCallback(() => {
+    if (!visible) return;
+    if (anyBlockingPipeline) {
       if (onCloseWhileBusy) {
         onCloseWhileBusy();
         return;
@@ -609,8 +712,17 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       setDiscardDialogOpen(true);
       return;
     }
+    onPortraitSessionDiscard?.();
     onClose();
-  }, [visible, showPreviewBusyOverlay, onCloseWhileBusy, currentImageUrl, portraitSessionHasRemoteChanges, onClose]);
+  }, [
+    visible,
+    anyBlockingPipeline,
+    onCloseWhileBusy,
+    currentImageUrl,
+    portraitSessionHasRemoteChanges,
+    onPortraitSessionDiscard,
+    onClose,
+  ]);
 
   useEffect(() => {
     if (!visible) setDiscardDialogOpen(false);
@@ -707,29 +819,91 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleEdit = async () => {
-    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || extModalBlocking) return;
+    if (!prompt.trim() || isSaving || isRegeneratingAll || extModalBlocking) return;
+
+    if (!portraitMode) {
+      if (isGeneratingHero) return;
+      setError(null);
+      setIsGeneratingHero(true);
+      try {
+        const promptUsed = prompt.trim();
+        const hadStartingImage = !!currentImageUrl;
+        let base64ForApi: string | null = null;
+        if (hadStartingImage) {
+          base64ForApi = getBase64FromImage();
+          if (!base64ForApi) {
+            setError('Could not process image for editing. This might be a cross-origin issue.');
+            return;
+          }
+        }
+        let result: string | null = null;
+        if (!hadStartingImage) {
+          result = await createImageFromPrompt(promptUsed, aspectRatio);
+        } else {
+          result = await editImageWithPrompt(base64ForApi!, promptUsed, aspectRatio);
+        }
+        if (result) {
+          setHistory((prev) => [...prev, result!]);
+          setCurrentImageUrl(result);
+          setPrompt('');
+          canvasSessionBaselineRef.current = result;
+        } else {
+          setError(
+            !hadStartingImage
+              ? 'Failed to generate image. Try a different description.'
+              : 'Failed to edit image. The AI might have had trouble with your prompt.'
+          );
+        }
+      } catch (err: any) {
+        console.error(err);
+        const errorMsg = err?.message || 'An unexpected error occurred while editing.';
+        setError(errorMsg);
+        toast.error(errorMsg);
+      } finally {
+        setIsGeneratingHero(false);
+      }
+      return;
+    }
+
+    const ownerId = portraitTargetCharacterId;
+    if (!ownerId) {
+      toast.error('Cannot run portrait edit: missing character id.');
+      return;
+    }
+
+    const slotKey = selectedVariantKey;
+    const promptUsed = prompt.trim();
+    const hadStartingImage = !!currentImageUrl;
+    let base64ForApi: string | null = null;
+    if (hadStartingImage) {
+      base64ForApi = getBase64FromImage();
+      if (!base64ForApi) {
+        setError('Could not process image for editing. This might be a cross-origin issue.');
+        return;
+      }
+    }
+
     setError(null);
-    setIsGenerating(true);
+    setNanoGeneratingSlots((prev) => [...prev, slotKey]);
+    setPrompt('');
+
     try {
       let result: string | null = null;
-      if (!currentImageUrl) {
-        result = await createImageFromPrompt(prompt, aspectRatio);
+      if (!hadStartingImage) {
+        result = await createImageFromPrompt(promptUsed, aspectRatio);
       } else {
-        const base64 = getBase64FromImage();
-        if (!base64) {
-          setError('Could not process image for editing. This might be a cross-origin issue.');
-          setIsGenerating(false);
-          return;
-        }
-        result = await editImageWithPrompt(base64, prompt, aspectRatio);
+        result = await editImageWithPrompt(base64ForApi!, promptUsed, aspectRatio);
       }
       if (result) {
-        setHistory((prev) => [...prev, result!]);
-        setCurrentImageUrl(result);
-        setPrompt('');
-      } else {
+        onPersistPortraitSlotBeforeClose?.(ownerId, slotKey, result);
+        if (isMountedRef.current && selectedVariantKeyRef.current === slotKey) {
+          setHistory((prev) => [...prev, result!]);
+          setCurrentImageUrl(result);
+          canvasSessionBaselineRef.current = result;
+        }
+      } else if (isMountedRef.current && selectedVariantKeyRef.current === slotKey) {
         setError(
-          !currentImageUrl
+          !hadStartingImage
             ? 'Failed to generate image. Try a different description.'
             : 'Failed to edit image. The AI might have had trouble with your prompt.'
         );
@@ -737,15 +911,24 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     } catch (err: any) {
       console.error(err);
       const errorMsg = err?.message || 'An unexpected error occurred while editing.';
-      setError(errorMsg);
+      if (isMountedRef.current && selectedVariantKeyRef.current === slotKey) {
+        setError(errorMsg);
+      }
       toast.error(errorMsg);
     } finally {
-      setIsGenerating(false);
+      if (isMountedRef.current) {
+        setNanoGeneratingSlots((prev) => {
+          const i = prev.indexOf(slotKey);
+          if (i < 0) return prev;
+          return [...prev.slice(0, i), ...prev.slice(i + 1)];
+        });
+      }
     }
   };
 
   const handleSave = async () => {
-    if (isSaving || isGenerating || isRegeneratingAll || extModalBlocking) return;
+    if (isSaving || isRegeneratingAll || extModalBlocking) return;
+    if (portraitMode ? nanoBusyOnSelectedSlot : isGeneratingHero) return;
     if (!currentImageUrl) return;
     setIsSaving(true);
     try {
@@ -771,7 +954,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       isRegeneratingAll ||
       anyPortraitSlotVariantBusy ||
       isSaving ||
-      isGenerating ||
+      anyNanoInFlightPortrait ||
       extModalBlocking
     )
       return;
@@ -803,7 +986,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       extSingleVariantKeys.includes(slotKey) ||
       isRegeneratingAll ||
       isSaving ||
-      isGenerating ||
+      nanoGeneratingSlots.some((k) => k === slotKey) ||
       extModalBlocking
     ) {
       return;
@@ -831,7 +1014,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleUndo = () => {
-    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || extModalBlocking) return;
+    if (history.length <= 1 || isSaving || isRegeneratingAll || extModalBlocking) return;
+    if (portraitMode ? nanoBusyOnSelectedSlot : isGeneratingHero) return;
     const newHistory = [...history];
     newHistory.pop();
     setHistory(newHistory);
@@ -847,8 +1031,13 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     selectedVariantKey !== NEUTRAL_KEY &&
     Boolean(neutralPortraitUrl);
 
-  /** Locks nano-edit / save / undo / source — not single-variant regen of other slots. */
-  const pipelineLocked = isGenerating || isSaving || isRegeneratingAll || extModalBlocking;
+  /** Locks nano-edit / save / undo / source for the selected slot only (other variants stay editable). */
+  const pipelineLocked =
+    isSaving ||
+    isRegeneratingAll ||
+    extModalBlocking ||
+    (portraitMode ? nanoBusyOnSelectedSlot : isGeneratingHero);
+
   const regenRemaining =
     isRegeneratingAll && savingProgress.total > 0 ? Math.max(0, savingProgress.total - savingProgress.current) : null;
 
@@ -871,9 +1060,10 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               : 'Working…'
       : null;
 
-  const previewOverlayPrimaryMessage = isGenerating
-    ? 'Nano Banana is working...'
-    : isSaving
+  const previewOverlayPrimaryMessage =
+    (portraitMode && nanoBusyOnSelectedSlot) || (!portraitMode && isGeneratingHero)
+      ? 'Nano Banana is working...'
+      : isSaving
       ? 'Saving...'
       : isRegeneratingAll
         ? regenRemaining !== null && regenRemaining > 0
@@ -981,7 +1171,23 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                           type="button"
                           $active={active}
                           $slotStatus={slotStatus}
-                          onClick={() => setSelectedVariantKey(slot.key)}
+                          onClick={() => {
+                            if (
+                              portraitMode &&
+                              onPersistPortraitSlotBeforeClose &&
+                              portraitTargetCharacterId &&
+                              slot.key !== selectedVariantKey &&
+                              currentImageUrl &&
+                              currentImageUrl !== canvasSessionBaselineRef.current
+                            ) {
+                              onPersistPortraitSlotBeforeClose(
+                                portraitTargetCharacterId,
+                                selectedVariantKey,
+                                currentImageUrl
+                              );
+                            }
+                            setSelectedVariantKey(slot.key);
+                          }}
                           title={slot.label}
                         >
                           {u ? <VariantThumbImg src={u} alt="" /> : <VariantPlaceholder>?</VariantPlaceholder>}
@@ -1070,7 +1276,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               )}
 
               <ButtonGroup>
-                <Button $variant="danger" onClick={tryRequestClose} type="button">
+                <Button $variant="danger" onClick={openRevertConfirmation} type="button">
                   Revert
                 </Button>
                 <Button type="button" $variant="primary" onClick={handleSave} disabled={pipelineLocked || !currentImageUrl}>
@@ -1091,8 +1297,9 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           <ModalBox onClick={(e) => e.stopPropagation()} $borderColor="rgba(255, 170, 0, 0.45)" $glowColor="rgba(255, 170, 0, 0.15)">
             <ModalTitle $color="var(--color-accent-orange)">Revert changes?</ModalTitle>
             <ModalText style={{ color: 'var(--color-text-muted)', fontSize: 'var(--type-body)' }}>
-              This undoes unsaved edits in this session (e.g. nano-generate / paste not yet saved with Save Edit) and
-              restores portrait URLs from the case.
+              {portraitMode
+                ? 'This clears staged portrait changes (prompt edits, paste, etc.) that are not yet saved to storage with Save Edit, and restores thumbnails from the case draft.'
+                : 'This undoes unsaved edits in this session (e.g. nano-generate / paste not yet saved with Save Edit).'}
             </ModalText>
             <ModalButtonRow>
               <UiButton type="button" $variant="ghost" onClick={() => setDiscardDialogOpen(false)}>
@@ -1103,6 +1310,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 $variant="danger"
                 onClick={() => {
                   setDiscardDialogOpen(false);
+                  onPortraitSessionDiscard?.();
                   onClose();
                 }}
               >

@@ -19,6 +19,68 @@ import ImageEditorModal from '@/components/ImageEditorModal';
 import Spinner from '@/components/Spinner';
 import { getPortraitVariantSlots } from '../../utils/portraitVariantSlots';
 
+function strField(a: unknown): string {
+  return String(a ?? '').trim();
+}
+
+/** Evidence files are often overwritten at a fixed storage path; extra query params force a fresh decode in CSS `url()` / browser cache. */
+function withEvidenceImageCacheBust(url: string): string {
+  if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+}
+
+function supportLooksChanged(
+  prev: CaseData['officer'] | undefined,
+  next: CaseData['officer'] | undefined
+): boolean {
+  if (!prev || !next) return false;
+  return (
+    prev.avatarSeed !== next.avatarSeed ||
+    strField(prev.name) !== strField(next.name) ||
+    strField(prev.gender) !== strField(next.gender) ||
+    strField(prev.role) !== strField(next.role) ||
+    strField(prev.personality) !== strField(next.personality)
+  );
+}
+
+function suspectLooksChanged(prev: Suspect | undefined, next: Suspect | undefined): boolean {
+  if (!next) return false;
+  if (!prev) return true;
+  const fields: (keyof Suspect)[] = [
+    'name',
+    'gender',
+    'role',
+    'status',
+    'personality',
+    'bio',
+    'physicalDescription',
+    'witnessObservations',
+    'professionalBackground',
+    'age',
+  ];
+  if (prev.avatarSeed !== next.avatarSeed) return true;
+  return fields.some((f) => strField(prev[f]) !== strField(next[f]));
+}
+
+/** Full portrait regen targets after AI case transform (theme or appearance-related text changed). */
+function collectPortraitRegenIdsAfterCaseTransform(prev: CaseData, next: CaseData): string[] {
+  const ids = new Set<string>();
+  if (prev.type !== next.type) {
+    if (next.officer) ids.add('officer');
+    if (next.partner) ids.add('partner');
+    (next.suspects || []).forEach((s) => ids.add(s.id));
+    return [...ids];
+  }
+  if (next.officer && supportLooksChanged(prev.officer, next.officer)) ids.add('officer');
+  if (next.partner && supportLooksChanged(prev.partner, next.partner)) ids.add('partner');
+  const prevById = new Map((prev.suspects || []).map((s) => [s.id, s]));
+  for (const s of next.suspects || []) {
+    const p = prevById.get(s.id);
+    if (suspectLooksChanged(p, s)) ids.add(s.id);
+  }
+  return [...ids];
+}
+
 // Sub-components
 import CaseDetailsPanel from './CaseDetailsPanel';
 import SuspectEditorPanel from './SuspectEditorPanel';
@@ -212,6 +274,8 @@ interface CaseReviewProps {
 
 const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, onUpdateDraft, onStart, onCancel, userId, userDisplayName, voicePreviewVolume = 0.12, onRegisterSave, onRegisterCheckConsistency, onRegisterClose, onHasUnsavedChanges }) => {
   const [selectedSuspectId, setSelectedSuspectId] = useState<string | null>(draftCase.suspects?.[0]?.id || 'officer');
+  const selectedSuspectIdRef = useRef(selectedSuspectId);
+  selectedSuspectIdRef.current = selectedSuspectId;
   const [loadingState, setLoadingState] = useState<{ visible: boolean, message: string, step?: string, stepDetail?: string }>({ visible: false, message: '' });
   const [showCamera, setShowCamera] = useState(false);
   const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
@@ -458,10 +522,8 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   const isSupportChar = selectedSuspectId === 'officer' || selectedSuspectId === 'partner';
 
   useEffect(() => {
-    if (suspectEditorVisible && activeSuspect) {
-      setPortraitSessionOverrides({});
-    }
-  }, [suspectEditorVisible, selectedSuspectId]);
+    setPortraitSessionOverrides({});
+  }, [selectedSuspectId]);
 
   const suspectPortraitUrlsForEditor: Record<string, string | undefined> = {
     ...(activeSuspect?.portraits || {}),
@@ -612,7 +674,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         forDeceasedVictim: !!ownerSuspect?.isDeceased,
         caseTheme: draftCase.type,
       });
-      if (newUrl) updateImage(newUrl);
+      if (newUrl) updateImage(withEvidenceImageCacheBust(newUrl));
     } catch (e: any) {
       console.error("Evidence reroll failed", e);
       toast.error(`Evidence image reroll failed: ${e?.message || 'Unknown error'}`);
@@ -698,14 +760,72 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     toast.success('Image regeneration complete!');
   };
 
+  /** Runs after user accepts Edit Case results — full portrait regen for characters whose look/theme changed. */
+  const runPortraitRegenAfterCaseTransformAccepted = async (charIds: string[]) => {
+    if (!userId || charIds.length === 0) return;
+    nonModalPortraitPipelineRef.current += 1;
+    try {
+      const { regenerateSingleSuspect } = await import('../../services/geminiImages');
+      for (const charId of charIds) {
+        setImageLoadingStates((prev) => ({ ...prev, [charId]: 'generating' }));
+        try {
+          const currentDraft = latestDraftRef.current;
+          let char: Suspect | CaseData['officer'] | undefined;
+          if (charId === 'officer') char = currentDraft.officer;
+          else if (charId === 'partner') char = currentDraft.partner;
+          else char = currentDraft.suspects?.find((s) => s.id === charId);
+          if (!char) continue;
+
+          const updated = await regenerateSingleSuspect(char as any, currentDraft.id, userId, currentDraft.type || 'Noir');
+          const freshDraft = latestDraftRef.current;
+          if (charId === 'officer') {
+            safeUpdateDraft({
+              ...freshDraft,
+              officer: { ...freshDraft.officer, ...(updated as any), portraits: (updated as any).portraits || freshDraft.officer.portraits },
+            });
+          } else if (charId === 'partner') {
+            safeUpdateDraft({
+              ...freshDraft,
+              partner: { ...freshDraft.partner, ...(updated as any), portraits: (updated as any).portraits || freshDraft.partner.portraits },
+            });
+          } else {
+            const newSuspects = freshDraft.suspects.map((s) =>
+              s.id === charId ? { ...s, ...(updated as Suspect), portraits: (updated as Suspect).portraits || s.portraits } : s
+            );
+            safeUpdateDraft({ ...freshDraft, suspects: newSuspects });
+          }
+        } catch (e) {
+          console.error(`[EditCase] Portrait regen failed for ${charId}:`, e);
+          toast.error(`Portrait regen failed for ${charId}.`);
+        } finally {
+          setImageLoadingStates((prev) => ({ ...prev, [charId]: null }));
+        }
+      }
+      toast.success('Portrait regeneration complete.');
+    } finally {
+      nonModalPortraitPipelineRef.current = Math.max(0, nonModalPortraitPipelineRef.current - 1);
+    }
+  };
+
   const clearPortraitEditSession = () => {
     setPortraitSessionOverrides({});
   };
 
   const handleCloseSuspectImageEditor = () => {
-    clearPortraitEditSession();
     setSuspectEditorVisible(false);
     setSuspectEditorKeepAlive(false);
+  };
+
+  const handlePersistPortraitSlotBeforeClose = (characterId: string, variantKey: string, imageDataUrl: string) => {
+    if (characterId === selectedSuspectIdRef.current) {
+      setPortraitSessionOverrides((prev) => ({ ...prev, [variantKey]: imageDataUrl }));
+      return;
+    }
+    mergePortraitsForCharacterId(characterId, { [variantKey]: imageDataUrl });
+  };
+
+  const handleDiscardPortraitSession = () => {
+    clearPortraitEditSession();
   };
 
   /** Hide the portrait editor overlay only; keep modal mounted while regen/generate/save runs. */
@@ -985,10 +1105,12 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             phase: 'evidence',
             statusMessage: `Evidence: ${ev.title.length > 28 ? `${ev.title.slice(0, 26)}…` : ev.title}`,
           });
-          const evUrl = await generateEvidenceImage(ev, draftCase.id, userId, neutralBase64, {
-            forDeceasedVictim: true,
-            caseTheme: theme,
-          });
+          const evUrl = withEvidenceImageCacheBust(
+            await generateEvidenceImage(ev, draftCase.id, userId, neutralBase64, {
+              forDeceasedVictim: true,
+              caseTheme: theme,
+            })
+          );
           const fresh2 = latestDraftRef.current;
           const victim2 = fresh2.suspects?.find((s) => s.id === charId);
           if (!victim2?.hiddenEvidence) continue;
@@ -1265,12 +1387,27 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   };
 
   const applyConsistencyChanges = () => {
-    if (consistencyModal.updatedCase) {
-      baselineRef.current = JSON.parse(JSON.stringify(consistencyModal.updatedCase));
-      onUpdateDraft(consistencyModal.updatedCase);
+    const updated = consistencyModal.updatedCase;
+    const editReport = consistencyModal.editReport;
+    const previousCase = draftCase;
+    if (updated) {
+      baselineRef.current = JSON.parse(JSON.stringify(updated));
+      onUpdateDraft(updated);
+      if (editReport != null && userId) {
+        const regenIds = collectPortraitRegenIdsAfterCaseTransform(previousCase, updated);
+        if (regenIds.length > 0) {
+          toast.success(
+            `Changes applied. Regenerating ${regenIds.length} character portrait set(s) in the background…`
+          );
+          void runPortraitRegenAfterCaseTransformAccepted(regenIds);
+        } else {
+          toast.success("Changes applied! Remember to click 'Save' to persist.");
+        }
+      } else {
+        toast.success("Changes applied! Remember to click 'Save' to persist.");
+      }
     }
-    setConsistencyModal({ visible: false, report: '', updatedCase: null });
-    toast.success("Changes applied! Remember to click 'Save' to persist.");
+    setConsistencyModal({ visible: false, report: null, updatedCase: null });
   };
 
   const handlePreviewVoice = async () => {
@@ -1370,6 +1507,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           onClose={handleCloseSuspectImageEditor}
           onCloseWhileBusy={handleHideSuspectImageEditorWhileBusy}
           portraitSessionHasRemoteChanges={portraitSessionHasRemoteChanges}
+          onPersistPortraitSlotBeforeClose={handlePersistPortraitSlotBeforeClose}
+          portraitTargetCharacterId={selectedSuspectId ?? undefined}
+          onPortraitSessionDiscard={handleDiscardPortraitSession}
           onBusyChange={(busy, meta) => {
             setSuspectEditorKeepAlive(busy);
             if (!busy) {
@@ -1382,16 +1522,21 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
               }
               return;
             }
-            if (meta?.regenerateAll || meta?.regenerateVariant || meta?.saving) return;
-            if (selectedSuspectId) {
+            if (meta?.regenerateAll || meta?.saving) return;
+            if (meta?.regenerateVariant && !(meta?.generatingVariantKeys && meta.generatingVariantKeys.length > 0)) {
+              return;
+            }
+            if (selectedSuspectId && meta?.generatingVariantKeys && meta.generatingVariantKeys.length > 0) {
               modalPortraitLoadingSyncRef.current = true;
               setImageLoadingStates((prev) => ({
                 ...prev,
-                [selectedSuspectId]:
-                  meta?.generatingVariantKey != null && meta.generatingVariantKey !== ''
-                    ? { kind: 'single-variant', variantKeys: [meta.generatingVariantKey] }
-                    : 'generating',
+                [selectedSuspectId]: { kind: 'single-variant', variantKeys: meta.generatingVariantKeys! },
               }));
+              return;
+            }
+            if (selectedSuspectId && busy && !meta?.regenerateVariant) {
+              modalPortraitLoadingSyncRef.current = true;
+              setImageLoadingStates((prev) => ({ ...prev, [selectedSuspectId]: 'generating' }));
             }
           }}
           onSave={handleSaveEditedSuspect}
