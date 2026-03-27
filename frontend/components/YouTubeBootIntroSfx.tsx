@@ -3,6 +3,8 @@ import styled from 'styled-components';
 
 /** Site entry / CRT boot intro (SFX — uses global mute + SFX volume, not music). */
 export const BOOT_INTRO_SFX_VIDEO_ID = 'tajDxBaPBBM';
+/** Extra attenuation vs main SFX fader (boot sting reads loud at the same linear level). */
+const BOOT_INTRO_VOLUME_GAIN = 0.05;
 export const BOOT_INTRO_SFX_VIDEO_URL = `https://www.youtube.com/watch?v=${BOOT_INTRO_SFX_VIDEO_ID}`;
 
 const HiddenHost = styled.div`
@@ -19,7 +21,7 @@ const HiddenHost = styled.div`
 
 interface YouTubeBootIntroSfxProps {
   enabled: boolean;
-  /** 0–1, mapped to YouTube 0–100 (same as other SFX / TTS volume) */
+  /** 0–1 SFX fader; boot intro is played quieter than other SFX at the same setting */
   volume: number;
 }
 
@@ -54,7 +56,9 @@ const YouTubeBootIntroSfx: React.FC<YouTubeBootIntroSfxProps> = ({ enabled, volu
     const applyPlayback = () => {
       const p = playerRef.current;
       if (!p || destroyed) return;
-      const v = Math.round(Math.max(0, Math.min(1, volumeRef.current)) * 100);
+      const v = Math.round(
+        Math.max(0, Math.min(1, volumeRef.current * BOOT_INTRO_VOLUME_GAIN)) * 100
+      );
       p.setVolume?.(v);
       if (enabledRef.current) {
         p.playVideo?.();
@@ -132,7 +136,9 @@ const YouTubeBootIntroSfx: React.FC<YouTubeBootIntroSfxProps> = ({ enabled, volu
   }, [enabled]);
 
   useEffect(() => {
-    playerRef.current?.setVolume?.(Math.round(Math.max(0, Math.min(1, volume)) * 100));
+    playerRef.current?.setVolume?.(
+      Math.round(Math.max(0, Math.min(1, volume * BOOT_INTRO_VOLUME_GAIN)) * 100)
+    );
   }, [volume]);
 
   return <HiddenHost id={hostIdRef.current} aria-hidden />;

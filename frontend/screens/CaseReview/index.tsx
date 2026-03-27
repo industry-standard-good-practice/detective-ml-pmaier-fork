@@ -8,7 +8,11 @@ import { TTS_VOICES, getRandomVoice } from '../../constants';
 import { generateTTS } from '../../services/geminiTTS';
 import { playAudioFromUrl } from '../../services/audioPlayer';
 import { generateEvidenceImage, checkCaseConsistency, editCaseWithPrompt, calculateDifficulty, computeUserDiff, formatUserChangeLog, generateOnePortraitVariantFromBase, generateNeutralPortraitForSuspect } from '../../services/geminiService';
-import { type ImageLoadingState, type RerollImageLoadingState } from '@/components/SuspectPortrait';
+import {
+  type ImageLoadingState,
+  type RerollImageLoadingState,
+  singleVariantInFlightKeys,
+} from '@/components/SuspectPortrait';
 import SuspectPortrait from '@/components/SuspectPortrait';
 import ExitCaseDialog from '@/components/ExitCaseDialog';
 import ImageEditorModal from '@/components/ImageEditorModal';
@@ -214,6 +218,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
   /** Visible overlay vs hidden-but-mounted (in-flight generate / regen). */
   const [suspectEditorVisible, setSuspectEditorVisible] = useState(false);
   const [suspectEditorKeepAlive, setSuspectEditorKeepAlive] = useState(false);
+  /** Portrait URLs when the suspect image modal was opened; regen in the modal stages into overrides until Save. */
+  const [portraitSessionBaseline, setPortraitSessionBaseline] = useState<Record<string, string | undefined> | null>(null);
+  const [portraitSessionOverrides, setPortraitSessionOverrides] = useState<Record<string, string>>({});
   const [showHeroEditor, setShowHeroEditor] = useState(false);
   const [heroMode, setHeroMode] = useState<'suspect' | 'evidence' | 'custom'>('custom');
   const [editPrompt, setEditPrompt] = useState('');
@@ -427,6 +434,20 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       draftCase.suspects?.find(s => s.id === selectedSuspectId);
   const isSupportChar = selectedSuspectId === 'officer' || selectedSuspectId === 'partner';
 
+  useEffect(() => {
+    if (suspectEditorVisible && activeSuspect) {
+      setPortraitSessionBaseline({ ...(activeSuspect.portraits || {}) });
+      setPortraitSessionOverrides({});
+    }
+  }, [suspectEditorVisible, selectedSuspectId]);
+
+  const suspectPortraitUrlsForEditor =
+    portraitSessionBaseline != null
+      ? { ...portraitSessionBaseline, ...portraitSessionOverrides }
+      : activeSuspect?.portraits || {};
+
+  const portraitSessionHasRemoteChanges = Object.keys(portraitSessionOverrides).length > 0;
+
   const portraitCarouselSlotStatus = useMemo(() => {
     if (!selectedSuspectId || !activeSuspect) return null;
     const st = imageLoadingStates[selectedSuspectId];
@@ -434,6 +455,11 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
 
     const slots = getPortraitVariantSlots(activeSuspect as any);
     if (slots.length === 0) return null;
+
+    const portraitsForStatus =
+      suspectEditorVisible && portraitSessionBaseline != null
+        ? { ...portraitSessionBaseline, ...portraitSessionOverrides }
+        : (activeSuspect as Suspect).portraits;
 
     if (st === 'generating') {
       const out: Record<string, 'idle' | 'loading' | 'done'> = {};
@@ -476,18 +502,25 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     }
 
     if (st.kind === 'single-variant') {
+      const inFlight = singleVariantInFlightKeys(st);
       const out: Record<string, 'idle' | 'loading' | 'done'> = {};
-      const portraits = (activeSuspect as Suspect).portraits;
       for (const s of slots) {
-        if (s.key === st.variantKey) out[s.key] = 'loading';
-        else if (portraits?.[s.key]) out[s.key] = 'done';
+        if (inFlight.includes(s.key)) out[s.key] = 'loading';
+        else if (portraitsForStatus?.[s.key]) out[s.key] = 'done';
         else out[s.key] = 'idle';
       }
       return out;
     }
 
     return null;
-  }, [imageLoadingStates, selectedSuspectId, activeSuspect]);
+  }, [
+    imageLoadingStates,
+    selectedSuspectId,
+    activeSuspect,
+    suspectEditorVisible,
+    portraitSessionBaseline,
+    portraitSessionOverrides,
+  ]);
 
   // --- HANDLERS ---
 
@@ -645,6 +678,17 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     toast.success('Image regeneration complete!');
   };
 
+  const clearPortraitEditSession = () => {
+    setPortraitSessionBaseline(null);
+    setPortraitSessionOverrides({});
+  };
+
+  const handleCloseSuspectImageEditor = () => {
+    clearPortraitEditSession();
+    setSuspectEditorVisible(false);
+    setSuspectEditorKeepAlive(false);
+  };
+
   const handleSaveEditedSuspect = async (
     newImageUrl: string,
     _onProgress?: (current: number, total: number) => void,
@@ -665,7 +709,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
     const path = `images/${userId}/cases/${currentDraft.id}/${folder}/${sid}/${fileName}`;
 
     try {
-      const uploadedUrl = await uploadImage(newImageUrl, path);
       const char =
         sid === 'officer'
           ? currentDraft.officer
@@ -673,7 +716,19 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
             ? currentDraft.partner
             : currentDraft.suspects?.find((s) => s.id === sid);
       if (!char) return;
-      const portraits = { ...(char.portraits || {}), [variantKey]: uploadedUrl };
+
+      const base = portraitSessionBaseline ?? { ...(char.portraits || {}) };
+      let urlForVariant = newImageUrl;
+      if (newImageUrl.startsWith('data:')) {
+        urlForVariant = await uploadImage(newImageUrl, path);
+      }
+
+      const portraits: Record<string, string> = { ...(char.portraits || {}) };
+      for (const [k, v] of Object.entries(base)) {
+        if (typeof v === 'string' && v) portraits[k] = v;
+      }
+      Object.assign(portraits, portraitSessionOverrides);
+      portraits[variantKey] = urlForVariant;
       if (sid === 'officer') {
         safeUpdateDraft({ ...currentDraft, officer: { ...currentDraft.officer, portraits } });
       } else if (sid === 'partner') {
@@ -682,6 +737,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         const newSuspects = currentDraft.suspects.map((s) => (s.id === sid ? { ...s, portraits } : s));
         safeUpdateDraft({ ...currentDraft, suspects: newSuspects });
       }
+      clearPortraitEditSession();
       setSuspectEditorVisible(false);
       setSuspectEditorKeepAlive(false);
       toast.success('Portrait saved.');
@@ -721,8 +777,6 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
       [sid]: { kind: 'variants', remaining: total, total },
     }));
 
-    let portraits: Record<string, string> = { ...(char.portraits || {}) };
-
     for (let i = 0; i < slots.length; i++) {
       const slot = slots[i];
       const { url } = await generateOnePortraitVariantFromBase(
@@ -733,36 +787,18 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         userId,
         currentDraft.type || 'Noir'
       );
-      portraits = { ...portraits, [slot.key]: url };
+      setPortraitSessionOverrides((prevOverrides) => ({ ...prevOverrides, [slot.key]: url }));
       const completed = i + 1;
       onProgress?.(completed, total);
 
-      const fresh = latestDraftRef.current;
       const remaining = total - completed;
       setImageLoadingStates((prev) => ({
         ...prev,
         [sid]: remaining > 0 ? { kind: 'variants', remaining, total } : null,
       }));
-
-      if (sid === 'officer') {
-        safeUpdateDraft({
-          ...fresh,
-          officer: { ...fresh.officer, portraits: { ...fresh.officer.portraits, ...portraits } },
-        });
-      } else if (sid === 'partner') {
-        safeUpdateDraft({
-          ...fresh,
-          partner: { ...fresh.partner, portraits: { ...fresh.partner.portraits, ...portraits } },
-        });
-      } else {
-        const newSuspects = fresh.suspects.map((s) =>
-          s.id === sid ? { ...s, portraits: { ...s.portraits, ...portraits } } : s
-        );
-        safeUpdateDraft({ ...fresh, suspects: newSuspects });
-      }
     }
 
-    toast.success('All variants regenerated.');
+    toast.success('All variants regenerated. Click Save to keep them on the case.');
   };
 
   const handleRegenerateOneVariantFromModal = async (neutralDataUrl: string, variantKey: string) => {
@@ -782,7 +818,15 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           : currentDraft.suspects?.find((s) => s.id === sid);
     if (!char) return;
 
-    setImageLoadingStates((prev) => ({ ...prev, [sid]: { kind: 'single-variant', variantKey } }));
+    setImageLoadingStates((prev) => {
+      const cur = prev[sid];
+      const existing =
+        cur && typeof cur === 'object' && cur.kind === 'single-variant'
+          ? singleVariantInFlightKeys(cur)
+          : [];
+      const variantKeys = [...new Set([...existing, variantKey])];
+      return { ...prev, [sid]: { kind: 'single-variant', variantKeys } };
+    });
     try {
       const { url } = await generateOnePortraitVariantFromBase(
         neutralDataUrl,
@@ -792,30 +836,22 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
         userId,
         currentDraft.type || 'Noir'
       );
-      const fresh = latestDraftRef.current;
-      const charNow =
-        sid === 'officer'
-          ? fresh.officer
-          : sid === 'partner'
-            ? fresh.partner
-            : fresh.suspects?.find((s) => s.id === sid);
-      if (!charNow) return;
-      const portraits = { ...(charNow.portraits || {}), [variantKey]: url };
-      if (sid === 'officer') {
-        safeUpdateDraft({ ...fresh, officer: { ...fresh.officer, portraits } });
-      } else if (sid === 'partner') {
-        safeUpdateDraft({ ...fresh, partner: { ...fresh.partner, portraits } });
-      } else {
-        const newSuspects = fresh.suspects.map((s) => (s.id === sid ? { ...s, portraits } : s));
-        safeUpdateDraft({ ...fresh, suspects: newSuspects });
-      }
-      toast.success('Variant regenerated.');
+      setPortraitSessionOverrides((prev) => ({ ...prev, [variantKey]: url }));
+      toast.success('Variant regenerated. Click Save to apply to the case.');
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Variant regeneration failed.');
       throw err;
     } finally {
-      setImageLoadingStates((prev) => ({ ...prev, [sid]: null }));
+      setImageLoadingStates((prev) => {
+        const cur = prev[sid];
+        if (!cur || typeof cur !== 'object' || cur.kind !== 'single-variant') {
+          return { ...prev, [sid]: null };
+        }
+        const next = singleVariantInFlightKeys(cur).filter((k) => k !== variantKey);
+        if (next.length === 0) return { ...prev, [sid]: null };
+        return { ...prev, [sid]: { kind: 'single-variant', variantKeys: next } };
+      });
     }
   };
 
@@ -1323,8 +1359,9 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
           visible={suspectEditorVisible}
           title={activeSuspect.portraits?.[Emotion.NEUTRAL] ? `Edit ${activeSuspect.name}` : `Create ${activeSuspect.name}`}
           portraitSlots={getPortraitVariantSlots(activeSuspect as any)}
-          portraitUrls={activeSuspect.portraits || {}}
-          onClose={() => setSuspectEditorVisible(false)}
+          portraitUrls={suspectPortraitUrlsForEditor}
+          onClose={handleCloseSuspectImageEditor}
+          portraitSessionHasRemoteChanges={portraitSessionHasRemoteChanges}
           onBusyChange={(busy, meta) => {
             setSuspectEditorKeepAlive(busy);
             if (!busy) {
@@ -1344,7 +1381,7 @@ const CaseReview: React.FC<CaseReviewProps> = ({ draftCase, originalBaseline, on
                 ...prev,
                 [selectedSuspectId]:
                   meta?.generatingVariantKey != null && meta.generatingVariantKey !== ''
-                    ? { kind: 'single-variant', variantKey: meta.generatingVariantKey }
+                    ? { kind: 'single-variant', variantKeys: [meta.generatingVariantKey] }
                     : 'generating',
               }));
             }

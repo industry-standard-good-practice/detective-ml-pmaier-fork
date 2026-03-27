@@ -158,7 +158,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
   onCloseMobileIntel,
   soundEnabled = true,
   volume = 0.4,
-  ttsPlaybackVolume = 0.12,
+  ttsPlaybackVolume = 0.16,
   isAdmin,
   userId,
   unreadSuspectIds = new Map(),

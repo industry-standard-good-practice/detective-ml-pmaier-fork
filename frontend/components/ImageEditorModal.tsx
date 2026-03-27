@@ -9,7 +9,8 @@ import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiIm
 import Spinner from './Spinner';
 import { HorizontalScrollStrip } from './HorizontalScrollStrip';
 import type { PortraitVariantSlot } from '../utils/portraitVariantSlots';
-import type { ImageLoadingState } from './SuspectPortrait';
+import { singleVariantInFlightKeys, type ImageLoadingState } from './SuspectPortrait';
+import { ModalBox, ModalTitle, ModalText, ModalButtonRow, Button as UiButton } from './ui';
 
 const Overlay = styled.div`
   position: absolute;
@@ -383,6 +384,19 @@ const HiddenFileInput = styled.input`
   display: none;
 `;
 
+/** Plain div — avoid `styled(styled.div)` on the shared Overlay (can crash styled-components in some builds). */
+const DiscardOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  background: var(--color-surface-overlay-heavy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: calc(var(--space) * 2.5);
+`;
+
 export interface ImageEditorModalProps {
   initialImageUrl?: string;
   onSave: (
@@ -391,6 +405,8 @@ export interface ImageEditorModalProps {
     meta?: { variantKey?: string }
   ) => Promise<void>;
   onClose: () => void;
+  /** Portrait mode: parent has regen / staged URLs not yet written to the case draft. */
+  portraitSessionHasRemoteChanges?: boolean;
   /** When false, the modal is hidden but stays mounted so in-flight generation can finish. */
   visible?: boolean;
   /** Fires when generate/save/regenerate-all busy state changes (for parent loading UI + keep-alive). */
@@ -429,6 +445,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   initialImageUrl,
   onSave,
   onClose,
+  portraitSessionHasRemoteChanges = false,
   visible = true,
   onBusyChange,
   aspectRatio = '3:4',
@@ -453,14 +470,38 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegeneratingAll, setIsRegeneratingAll] = useState(false);
-  const [isRegeneratingVariant, setIsRegeneratingVariant] = useState(false);
+  /** Portrait slots with an in-flight "regen variant" started from this modal (concurrent slots allowed). */
+  const [variantRegenInFlight, setVariantRegenInFlight] = useState<string[]>([]);
   const [savingProgress, setSavingProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Canonical image URL/string for the selected slot after load; local edits compare against this. */
+  const canvasSessionBaselineRef = useRef<string>('');
 
   const urlForSelectedVariant = portraitMode ? portraitUrls?.[selectedVariantKey] : initialImageUrl;
   const neutralPortraitUrl = portraitMode ? portraitUrls?.[NEUTRAL_KEY] : undefined;
+
+  const extSingleVariantKeys = singleVariantInFlightKeys(externalPortraitLoading);
+  const extModalBlocking =
+    externalPortraitLoading === 'waiting' ||
+    externalPortraitLoading === 'generating' ||
+    (externalPortraitLoading != null &&
+      typeof externalPortraitLoading === 'object' &&
+      (externalPortraitLoading.kind === 'variants' || externalPortraitLoading.kind === 'reroll'));
+  const anyPortraitSlotVariantBusy =
+    variantRegenInFlight.length > 0 || extSingleVariantKeys.length > 0;
+  const selectedSlotVariantRegenerating =
+    variantRegenInFlight.includes(selectedVariantKey) ||
+    extSingleVariantKeys.includes(selectedVariantKey);
+
+  const showPreviewBusyOverlay =
+    isGenerating ||
+    isSaving ||
+    isRegeneratingAll ||
+    selectedSlotVariantRegenerating ||
+    extModalBlocking;
 
   const applyDataUrlToCanvas = useCallback((dataUrl: string) => {
     setHistory((prev) => [...prev, dataUrl]);
@@ -491,6 +532,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       const src = portraitMode ? urlForSelectedVariant : initialImageUrl;
       if (!src) {
         if (!cancelled) {
+          canvasSessionBaselineRef.current = '';
           setCurrentImageUrl('');
           setHistory([]);
         }
@@ -498,6 +540,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       }
       if (src.startsWith('data:')) {
         if (!cancelled) {
+          canvasSessionBaselineRef.current = src;
           setCurrentImageUrl(src);
           setHistory([src]);
         }
@@ -506,9 +549,11 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       const prepared = await fetchRemoteAsDataUrl(src);
       if (!cancelled) {
         if (prepared) {
+          canvasSessionBaselineRef.current = prepared;
           setCurrentImageUrl(prepared);
           setHistory([prepared]);
         } else {
+          canvasSessionBaselineRef.current = src;
           setCurrentImageUrl(src);
           setHistory([src]);
         }
@@ -523,17 +568,17 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   }, [selectedVariantKey, portraitMode, urlForSelectedVariant, initialImageUrl, fetchRemoteAsDataUrl]);
 
   useEffect(() => {
-    const busy = isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant;
+    const busy = isGenerating || isSaving || isRegeneratingAll || variantRegenInFlight.length > 0;
     onBusyChangeRef.current?.(busy, {
       regenerateAll: isRegeneratingAll,
-      regenerateVariant: isRegeneratingVariant,
+      regenerateVariant: variantRegenInFlight.length > 0,
       saving: isSaving,
       generatingVariantKey:
-        portraitMode && isGenerating && !isRegeneratingAll && !isRegeneratingVariant
+        portraitMode && isGenerating && !isRegeneratingAll && variantRegenInFlight.length === 0
           ? selectedVariantKey
           : undefined,
     });
-  }, [isGenerating, isSaving, isRegeneratingAll, isRegeneratingVariant, portraitMode, selectedVariantKey]);
+  }, [isGenerating, isSaving, isRegeneratingAll, variantRegenInFlight.length, portraitMode, selectedVariantKey]);
 
   /** Clearing busy on unmount avoids stale regen/generate flags when the parent remounts this modal for another character (see CaseReview `key={selectedSuspectId}`). */
   useEffect(() => {
@@ -541,6 +586,39 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       onBusyChangeRef.current?.(false, {});
     };
   }, []);
+
+  const tryRequestClose = useCallback(() => {
+    if (!visible) return;
+    if (showPreviewBusyOverlay) {
+      toast.error('Wait for the current operation to finish before closing.');
+      return;
+    }
+    const canvasDirty = currentImageUrl !== canvasSessionBaselineRef.current;
+    if (canvasDirty || portraitSessionHasRemoteChanges) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    onClose();
+  }, [visible, showPreviewBusyOverlay, currentImageUrl, portraitSessionHasRemoteChanges, onClose]);
+
+  useEffect(() => {
+    if (!visible) setDiscardDialogOpen(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (discardDialogOpen) {
+        setDiscardDialogOpen(false);
+        return;
+      }
+      tryRequestClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, discardDialogOpen, tryRequestClose]);
 
   const handlePasteFromClipboard = async () => {
     if (!onPasteFromClipboard) {
@@ -618,8 +696,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleEdit = async () => {
-    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading)
-      return;
+    if (!prompt.trim() || isGenerating || isSaving || isRegeneratingAll || extModalBlocking) return;
     setError(null);
     setIsGenerating(true);
     try {
@@ -657,7 +734,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading) return;
+    if (isSaving || isGenerating || isRegeneratingAll || extModalBlocking) return;
     if (!currentImageUrl) return;
     setIsSaving(true);
     try {
@@ -681,10 +758,10 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       selectedVariantKey !== NEUTRAL_KEY ||
       !currentImageUrl ||
       isRegeneratingAll ||
-      isRegeneratingVariant ||
+      anyPortraitSlotVariantBusy ||
       isSaving ||
       isGenerating ||
-      externalPortraitLoading
+      extModalBlocking
     )
       return;
     const base64 = getBase64FromImage();
@@ -706,19 +783,21 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   };
 
   const handleRegenerateVariant = async () => {
+    const slotKey = selectedVariantKey;
     if (
       !onRegenerateVariant ||
-      selectedVariantKey === NEUTRAL_KEY ||
+      slotKey === NEUTRAL_KEY ||
       !neutralPortraitUrl ||
-      isRegeneratingVariant ||
+      variantRegenInFlight.includes(slotKey) ||
+      extSingleVariantKeys.includes(slotKey) ||
       isRegeneratingAll ||
       isSaving ||
       isGenerating ||
-      externalPortraitLoading
+      extModalBlocking
     ) {
       return;
     }
-    setIsRegeneratingVariant(true);
+    setVariantRegenInFlight((prev) => [...new Set([...prev, slotKey])]);
     setError(null);
     try {
       let neutralDataUrl: string;
@@ -732,17 +811,16 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         }
         neutralDataUrl = prepared;
       }
-      await onRegenerateVariant(neutralDataUrl, selectedVariantKey);
+      await onRegenerateVariant(neutralDataUrl, slotKey);
     } catch (err: any) {
       console.error(err);
     } finally {
-      setIsRegeneratingVariant(false);
+      setVariantRegenInFlight((prev) => prev.filter((k) => k !== slotKey));
     }
   };
 
   const handleUndo = () => {
-    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || isRegeneratingVariant || externalPortraitLoading)
-      return;
+    if (history.length <= 1 || isSaving || isGenerating || isRegeneratingAll || extModalBlocking) return;
     const newHistory = [...history];
     newHistory.pop();
     setHistory(newHistory);
@@ -758,33 +836,45 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     selectedVariantKey !== NEUTRAL_KEY &&
     Boolean(neutralPortraitUrl);
 
-  const busyOverlay = isGenerating || isSaving || isRegeneratingAll || isRegeneratingVariant;
-  const extPipelineBusy = Boolean(externalPortraitLoading);
-  const pipelineLocked = busyOverlay || extPipelineBusy;
+  /** Locks nano-edit / save / undo / source — not single-variant regen of other slots. */
+  const pipelineLocked = isGenerating || isSaving || isRegeneratingAll || extModalBlocking;
   const regenRemaining =
     isRegeneratingAll && savingProgress.total > 0 ? Math.max(0, savingProgress.total - savingProgress.current) : null;
 
-  const externalPipelineMessage =
-    busyOverlay || !externalPortraitLoading
-      ? null
-      : externalPortraitLoading === 'waiting'
+  const externalBlockingOnlyMessage =
+    extModalBlocking && externalPortraitLoading
+      ? externalPortraitLoading === 'waiting'
         ? 'Waiting in queue…'
         : externalPortraitLoading === 'generating'
           ? 'Regenerating portrait…'
-          : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'variants'
+          : externalPortraitLoading != null &&
+              typeof externalPortraitLoading === 'object' &&
+              externalPortraitLoading.kind === 'variants'
             ? externalPortraitLoading.total > 0
               ? `Regenerating variants… ${externalPortraitLoading.total - externalPortraitLoading.remaining} / ${externalPortraitLoading.total}`
               : 'Regenerating variants…'
-            : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'single-variant'
-              ? 'Regenerating portrait…'
-            : typeof externalPortraitLoading === 'object' && externalPortraitLoading.kind === 'reroll'
-              ? externalPortraitLoading.statusMessage
-              : 'Working…';
+            : externalPortraitLoading != null &&
+                typeof externalPortraitLoading === 'object' &&
+                externalPortraitLoading.kind === 'reroll'
+              ? externalPortraitLoading.statusMessage || 'Working…'
+              : 'Working…'
+      : null;
+
+  const previewOverlayPrimaryMessage = isGenerating
+    ? 'Nano Banana is working...'
+    : isSaving
+      ? 'Saving...'
+      : isRegeneratingAll
+        ? regenRemaining !== null && regenRemaining > 0
+          ? `Regenerating variants… ${regenRemaining} left`
+          : 'Regenerating variants…'
+        : externalBlockingOnlyMessage ??
+          (selectedSlotVariantRegenerating ? 'Regenerating variant…' : '');
 
   return (
     <>
       <Overlay
-        onClick={onClose}
+        onClick={tryRequestClose}
         style={!visible ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
         <Modal onClick={(e) => e.stopPropagation()}>
@@ -794,7 +884,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 ? `${title} — ${portraitSlots!.find((s) => s.key === selectedVariantKey)?.label ?? selectedVariantKey}`
                 : title}
             </Title>
-            <CloseButton onClick={onClose} type="button">
+            <CloseButton onClick={tryRequestClose} type="button">
               <X size={20} />
             </CloseButton>
           </Header>
@@ -829,7 +919,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <RegenAllOverlayButton
                     type="button"
                     onClick={handleRegenerateAll}
-                    disabled={pipelineLocked}
+                    disabled={pipelineLocked || anyPortraitSlotVariantBusy}
                     title="Regenerate all emotional / examination variants from this neutral image"
                   >
                     <RefreshCw size={14} />
@@ -840,29 +930,17 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                   <RegenAllOverlayButton
                     type="button"
                     onClick={handleRegenerateVariant}
-                    disabled={pipelineLocked}
+                    disabled={pipelineLocked || selectedSlotVariantRegenerating}
                     title="Regenerate only this variant from the neutral portrait"
                   >
                     <RefreshCw size={14} />
                     Regen variant
                   </RegenAllOverlayButton>
                 )}
-                {pipelineLocked && (
+                {showPreviewBusyOverlay && (
                   <LoadingOverlay>
                     <Spinner $size={32} $color="#3b82f6" />
-                    <span>
-                      {busyOverlay
-                        ? isRegeneratingVariant
-                          ? 'Regenerating variant…'
-                          : isRegeneratingAll
-                            ? regenRemaining !== null && regenRemaining > 0
-                              ? `Regenerating variants… ${regenRemaining} left`
-                              : 'Regenerating variants…'
-                            : isSaving
-                              ? 'Saving...'
-                              : 'Nano Banana is working...'
-                        : externalPipelineMessage}
-                    </span>
+                    <span>{previewOverlayPrimaryMessage}</span>
                     {savingProgress.total > 0 && (isSaving || isRegeneratingAll) && (
                       <>
                         <span style={{ fontSize: 'var(--type-small)', opacity: 0.8 }}>
@@ -981,7 +1059,12 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               )}
 
               <ButtonGroup>
-                <Button $variant="danger" onClick={onClose} type="button">
+                <Button
+                  $variant="danger"
+                  onClick={tryRequestClose}
+                  type="button"
+                  disabled={showPreviewBusyOverlay}
+                >
                   Cancel
                 </Button>
                 <Button type="button" $variant="primary" onClick={handleSave} disabled={pipelineLocked || !currentImageUrl}>
@@ -993,6 +1076,36 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           </Content>
         </Modal>
       </Overlay>
+
+      {discardDialogOpen && (
+        <DiscardOverlay
+          onClick={() => setDiscardDialogOpen(false)}
+          role="presentation"
+        >
+          <ModalBox onClick={(e) => e.stopPropagation()} $borderColor="rgba(255, 170, 0, 0.45)" $glowColor="rgba(255, 170, 0, 0.15)">
+            <ModalTitle $color="var(--color-accent-orange)">Discard changes?</ModalTitle>
+            <ModalText style={{ color: 'var(--color-text-muted)', fontSize: 'var(--type-body)' }}>
+              You have unsaved image edits and generated portraits that are not on the case yet. Closing now will discard
+              them. Save keeps them on the case.
+            </ModalText>
+            <ModalButtonRow>
+              <UiButton type="button" $variant="ghost" onClick={() => setDiscardDialogOpen(false)}>
+                Keep editing
+              </UiButton>
+              <UiButton
+                type="button"
+                $variant="danger"
+                onClick={() => {
+                  setDiscardDialogOpen(false);
+                  onClose();
+                }}
+              >
+                Discard
+              </UiButton>
+            </ModalButtonRow>
+          </ModalBox>
+        </DiscardOverlay>
+      )}
     </>
   );
 };

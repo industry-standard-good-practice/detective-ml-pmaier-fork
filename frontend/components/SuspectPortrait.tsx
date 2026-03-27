@@ -14,14 +14,19 @@ export type RerollImageLoadingState = {
 };
 
 /** `variants` = multi-slot portrait regen (case-review editor). */
-/** `single-variant` = one slot regen or modal nano-generate for that key. */
+/** `single-variant` = one or more portrait slots regen/nano in flight (concurrent allowed). */
 export type ImageLoadingState =
   | 'waiting'
   | 'generating'
   | { kind: 'variants'; remaining: number; total: number }
-  | { kind: 'single-variant'; variantKey: string }
+  | { kind: 'single-variant'; variantKeys: string[] }
   | RerollImageLoadingState
   | null;
+
+export function singleVariantInFlightKeys(state: ImageLoadingState | null | undefined): string[] {
+  if (!state || typeof state !== 'object' || state.kind !== 'single-variant') return [];
+  return Array.isArray(state.variantKeys) ? state.variantKeys : [];
+}
 
 const Container = styled.div<{ $size?: number; $fillHeight?: boolean }>`
   width: ${props => props.$size ? `${props.$size}px` : '100%'};

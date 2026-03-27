@@ -156,7 +156,7 @@ const App: React.FC = () => {
   });
   const [musicVolume, setMusicVolume] = useState(() => {
     const saved = localStorage.getItem('musicVolume');
-    return saved !== null ? parseFloat(saved) : 0.15;
+    return saved !== null ? parseFloat(saved) : 0.05;
   });
   useEffect(() => {
     localStorage.setItem('musicEnabled', String(musicEnabled));
@@ -172,7 +172,7 @@ const App: React.FC = () => {
   });
   const [ttsVolume, setTtsVolume] = useState(() => {
     const saved = localStorage.getItem('ttsVolume');
-    return saved !== null ? parseFloat(saved) : 0.3;
+    return saved !== null ? parseFloat(saved) : 0.4;
   });
   useEffect(() => {
     localStorage.setItem('ttsEnabled', String(ttsEnabled));

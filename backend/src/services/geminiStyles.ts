@@ -11,8 +11,13 @@ export const INSTRUCTION_NEW_CHAR = "[STRICT INSTRUCTION]: Use the provided refe
 
 export const INSTRUCTION_PRESERVE_CHAR = "[STRICT INSTRUCTION]: The provided image is the REFERENCE CHARACTER. You MUST generate THIS EXACT CHARACTER. Keep facial features, hair, clothing, accessories, and colors EXACTLY the same. Only change the facial expression as requested. Do not change the art style or background color.";
 
+/** Interrogation-style cards: head and upper torso only — never full-length standing figures. */
+export const LIVING_CHARACTER_PORTRAIT_FRAMING =
+  "COMPOSITION: Bust / upper-chest portrait only — camera close enough that head, face, shoulders, and upper torso dominate the frame; crop at mid-chest or higher. FORBIDDEN: full-body, head-to-toe, full-length standing figure, visible legs, knees, shins, feet, or shoes as a readable subject. FORBIDDEN: zooming out to show the whole figure.";
+
 /** Suspect/partner emotional portrait variants: expression + pose; still one coherent mugshot frame. */
-export const INSTRUCTION_EDIT_EMOTION_POSE = "[STRICT INSTRUCTION]: The provided image is the REFERENCE CHARACTER. You MUST generate THIS EXACT SAME PERSON (same face structure, hair, outfit, accessories, and colors). Keep the solid background color unchanged. Apply BOTH a clear facial expression AND matching body language (shoulders, arms, hands, stance, weight shift) as described in the prompt. Do not change the pixel art style. FORBIDDEN: collage, split screen, multiple poses in one image, inset panels, or picture-in-picture.";
+export const INSTRUCTION_EDIT_EMOTION_POSE =
+  "[STRICT INSTRUCTION]: The provided image is the REFERENCE CHARACTER. You MUST generate THIS EXACT SAME PERSON (same face structure, hair, outfit, accessories, and colors). Keep the solid background color unchanged. Apply BOTH a clear facial expression AND matching upper-body language (shoulders, arms, hands, posture above the waist) as described in the prompt — stay at the same bust-scale crop as the reference; do not zoom out to reveal legs or feet. Do not change the pixel art style. FORBIDDEN: collage, split screen, multiple poses in one image, inset panels, or picture-in-picture.";
 
 /** Victim forensic reframes: same identity and scene, new camera — not expression-only edits. */
 export const INSTRUCTION_EDIT_REFRAME = "[STRICT INSTRUCTION]: The provided image is the REFERENCE crime scene and victim. Preserve the SAME deceased victim identity, clothing, and room materials. You MAY and MUST change camera distance, angle, height, and crop exactly as the prompt requires. Output exactly ONE unified image from a single viewpoint. FORBIDDEN: multiple viewpoints, inset frames, overlaid regions at mismatched scale, split panels, or any composite layout. FORBIDDEN: reviving the victim or open eyes. Do not add text or UI.";

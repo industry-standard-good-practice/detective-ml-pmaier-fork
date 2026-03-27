@@ -10,6 +10,7 @@ import {
   INSTRUCTION_EDIT_REFRAME,
   INSTRUCTION_RELATED_EVIDENCE,
   EVIDENCE_CARD_CLOSEUP_FRAMING,
+  LIVING_CHARACTER_PORTRAIT_FRAMING,
   getStyleRefBase64,
 } from "./geminiStyles.js";
 import {
@@ -225,7 +226,7 @@ const buildSuspectEmotionVariantPrompt = (emo: string, colorDesc: string): strin
   const directive =
     SUSPECT_EMOTION_DIRECTIVES[key] ||
     'Encode the label through congruent facial affect and upper-body posture; at least two independent channels (face, shoulders, arms, or stance) must change from neutral.';
-  return `Emotional state: ${key}. ${directive} Keep solid ${colorDesc} background. Single portrait — one figure, one camera. No text, no words.`;
+  return `Emotional state: ${key}. ${directive} Keep solid ${colorDesc} background. Single portrait — one figure, one camera. ${LIVING_CHARACTER_PORTRAIT_FRAMING} No text, no words.`;
 };
 
 // --- EMOTION GENERATION ---
@@ -570,6 +571,7 @@ export const generateSuspectFromUpload = async (
       POSE OVERRIDE: Standard MUGSHOT POSE facing DIRECTLY at the camera.
       Output Style: ${PIXEL_ART_BASE}
       Background: Solid ${colorDesc} background.
+      ${LIVING_CHARACTER_PORTRAIT_FRAMING}
       NEGATIVE PROMPT: Photorealistic, photography, high resolution, smooth shading.
     `;
   }
@@ -658,7 +660,7 @@ export const generateNeutralPortraitForSuspect = async (
       Visual cues: ${(suspect as any).physicalDescription || suspect.personality || "Detective style"}. 
       Expression: Neutral.
       Background: Solid ${colorDesc} background.
-      Composition: Front-facing mugshot, full-bleed to the left and right edges.
+      Composition: Front-facing mugshot, full-bleed to the left and right edges. ${LIVING_CHARACTER_PORTRAIT_FRAMING}
       NEGATIVE PROMPT: Text, words, letters, UI, interface, signature, watermark, multiple people, photo-realistic.
     `;
   }
@@ -738,7 +740,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
           Visual cues: ${s.physicalDescription || "Noir style"}. 
           Expression: Neutral.
           Background: Solid ${colorDesc} background.
-          Composition: Front-facing mugshot, full-bleed.
+          Composition: Front-facing mugshot, full-bleed. ${LIVING_CHARACTER_PORTRAIT_FRAMING}
           NEGATIVE PROMPT: Text, UI, border, letters, photo-realistic.
         `;
       }
@@ -756,7 +758,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
   if (caseData.partner) {
     characterTasks.push((async () => {
       const p = caseData.partner;
-      const prompt = `Subject: Portrait of a ${p.gender} ${p.role} named ${p.name}. Theme: ${caseData.type}. Expression: Eager, helpful. Background: City street or tech lab. Composition: Front-facing mugshot, full-bleed. Pixel Art.`;
+      const prompt = `Subject: Portrait of a ${p.gender} ${p.role} named ${p.name}. Theme: ${caseData.type}. Expression: Eager, helpful. Background: City street or tech lab. Composition: Front-facing mugshot, full-bleed. ${LIVING_CHARACTER_PORTRAIT_FRAMING} ${PIXEL_ART_BASE}`;
       const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create', GEMINI_MODELS.IMAGE_HD);
       if (b64) {
         const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/partner/neutral.png`);
@@ -771,7 +773,7 @@ export const pregenerateCaseImages = async (caseData: CaseData, userId: string) 
   if (caseData.officer) {
     characterTasks.push((async () => {
       const o = caseData.officer;
-      const prompt = `Subject: Portrait of a ${o.gender} ${o.role} named ${o.name}. Theme: ${caseData.type}. Expression: Stern, commanding. Background: Office or Command Center. Composition: Front-facing mugshot, full-bleed. Pixel Art.`;
+      const prompt = `Subject: Portrait of a ${o.gender} ${o.role} named ${o.name}. Theme: ${caseData.type}. Expression: Stern, commanding. Background: Office or Command Center. Composition: Front-facing mugshot, full-bleed. ${LIVING_CHARACTER_PORTRAIT_FRAMING} ${PIXEL_ART_BASE}`;
       const b64 = await generateImageRaw(prompt, '3:4', styleRefs, 'create', GEMINI_MODELS.IMAGE_HD);
       if (b64) {
         const url = await uploadImage(b64, `images/${userId}/cases/${caseData.id}/officer.png`);

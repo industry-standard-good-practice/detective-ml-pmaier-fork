@@ -834,11 +834,11 @@ const Layout: React.FC<LayoutProps> = ({
   onVolumeChange,
   musicEnabled = true,
   onToggleMusic = () => {},
-  musicVolume = 0.15,
+  musicVolume = 0.05,
   onMusicVolumeChange,
   ttsEnabled = true,
   onToggleTts = () => {},
-  ttsVolume = 0.3,
+  ttsVolume = 0.4,
   onTtsVolumeChange,
   bootIntroSfxActive = false
 }) => {
