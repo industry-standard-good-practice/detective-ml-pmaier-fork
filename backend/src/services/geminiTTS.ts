@@ -45,7 +45,7 @@ export const generateTTS = async (text: string, voiceName: string, stylePrompt?:
       return base64Audio; // Return raw PCM base64 — frontend builds WAV
     }
     throw new Error(
-      "TTS returned no audio (empty response). You may be rate limited — wait and try again, or turn off TTS."
+      "Gemini text-to-speech returned no audio (empty response). Often a rate or quota limit—wait and retry, or turn off TTS."
     );
   } catch (error) {
     console.error("[TTS] Generation Error:", error);

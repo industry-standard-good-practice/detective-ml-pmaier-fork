@@ -36,11 +36,17 @@ function extractErrorString(errorData: unknown, status: number): string {
  * @param body - Request body (will be JSON-serialized)
  * @returns Parsed JSON response
  */
+function geminiErrorContext(path: string): { geminiBackend: true; geminiTts: boolean } {
+  const isTts = path === '/tts' || path.startsWith('/tts/');
+  return { geminiBackend: true, geminiTts: isTts };
+}
+
 export const geminiPost = async <T = any>(path: string, body: any): Promise<T> => {
   const user = auth.currentUser;
   if (!user) throw new Error('Not authenticated. Please sign in first.');
 
   const token = await user.getIdToken();
+  const errCtx = geminiErrorContext(path);
 
   let response: Response;
   try {
@@ -55,7 +61,7 @@ export const geminiPost = async <T = any>(path: string, body: any): Promise<T> =
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Network error';
     const message =
-      getHttpErrorMessage(0, msg).trim() || 'Network error. Please try again.';
+      getHttpErrorMessage(0, msg, errCtx).trim() || 'Network error. Please try again.';
     showGeminiApiErrorToast(message);
     throw new Error(message);
   }
@@ -64,7 +70,7 @@ export const geminiPost = async <T = any>(path: string, body: any): Promise<T> =
     const errorData = await response.json().catch(() => ({}));
     const fallback = extractErrorString(errorData, response.status);
     const message =
-      getHttpErrorMessage(response.status, fallback).trim() ||
+      getHttpErrorMessage(response.status, fallback, errCtx).trim() ||
       'Request failed. Please try again.';
     showGeminiApiErrorToast(message);
     throw new Error(message);

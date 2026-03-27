@@ -78,7 +78,9 @@ export const generateTTS = async (text: string, voiceName: string, stylePrompt?:
       return registerPcmData(result.audio, id);
     }
     // Defensive: backend should not return 200 + null after a real failure; if it does, show feedback
-    showGeminiApiErrorToast('TTS returned no audio. Try again, or disable TTS if you are rate limited.');
+    showGeminiApiErrorToast(
+      'Gemini text-to-speech returned no audio (empty response). Often rate or quota limits—wait and retry, or disable TTS.'
+    );
     return null;
   } catch (error: unknown) {
     console.error("[TTS] Generation Error:", error);
