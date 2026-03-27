@@ -41,6 +41,12 @@ const initPatch = () => {
   const instance = AnimeCursor.instance;
   if (!instance || !instance._onMouseMove) return;
 
+  // Above CRTOverlay (z-index 9999) so the custom cursor paints on top of scanlines.
+  instance.cursorEl.style.zIndex = '10000';
+  if (instance.debugEl) {
+    instance.debugEl.style.zIndex = '10000';
+  }
+
   // Remove original handler (library uses mousemove)
   document.removeEventListener('mousemove', instance._onMouseMove);
 

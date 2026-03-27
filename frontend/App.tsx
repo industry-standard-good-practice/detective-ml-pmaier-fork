@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import styled from 'styled-components';
 import toast from './services/appToast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
@@ -30,6 +31,8 @@ import EndGame from './screens/EndGame';
 import CreateCase from './screens/CreateCase';
 import CaseReview from './screens/CaseReview';
 import BootSequence from './components/BootSequence';
+import BootUpGate from './components/BootUpGate';
+import { BOOT_INTRO_SFX_GESTURE_EVENT } from './components/YouTubeBootIntroSfx';
 import Login from './components/Login';
 
 // --- MODAL BUTTON VARIANTS ---
@@ -52,10 +55,13 @@ const App: React.FC = () => {
 
   // --- STATE ---
   const [hasBooted, setHasBooted] = useState(false);
-  /** Keep YouTube boot SFX enabled after dismiss until the clip can finish (Layout was disabling at ~600ms). */
-  const [bootIntroAudioHold, setBootIntroAudioHold] = useState(false);
-  const bootIntroHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [powerState, setPowerState] = useState<'on' | 'off' | 'turning-on' | 'turning-off'>('turning-on');
+  /** Cut Win98-style YouTube intro as soon as user dismisses boot (hasBooted stays false during CRT collapse). */
+  const [bootIntroSfxKilled, setBootIntroSfxKilled] = useState(false);
+  /** After explicit BootUpGate click: CRT turn-on, boot SFX, then BIOS-style text. */
+  const [bootSequenceStarted, setBootSequenceStarted] = useState(false);
+  const [powerState, setPowerState] = useState<
+    'standby' | 'on' | 'off' | 'turning-on' | 'turning-off'
+  >('standby');
   
   const [communityCases, setCommunityCases] = useState<CaseData[]>([]);
   const [loadingCommunity, setLoadingCommunity] = useState(false);
@@ -205,25 +211,20 @@ const App: React.FC = () => {
     });
   }, [gameState.currentScreen, gameState.selectedCaseId, gameState.currentSuspectId, gameState.aggravationLevels, gameState.gameTime]);
 
-  useEffect(() => {
-    return () => {
-      if (bootIntroHoldTimerRef.current) {
-        clearTimeout(bootIntroHoldTimerRef.current);
-        bootIntroHoldTimerRef.current = null;
-      }
-    };
-  }, []);
+  const handleBootGateClick = () => {
+    primeSfxAudioContext();
+    flushSync(() => {
+      setPowerState('turning-on');
+      setBootSequenceStarted(true);
+    });
+    window.dispatchEvent(new CustomEvent(BOOT_INTRO_SFX_GESTURE_EVENT));
+  };
 
   // Handle Boot Sequence Completion
   const handleBootComplete = () => {
+    setBootIntroSfxKilled(true);
     // Prime Web Audio in this user gesture so the delayed boot SFX can play (mobile autoplay policy)
     primeSfxAudioContext();
-    setBootIntroAudioHold(true);
-    if (bootIntroHoldTimerRef.current) clearTimeout(bootIntroHoldTimerRef.current);
-    bootIntroHoldTimerRef.current = setTimeout(() => {
-      bootIntroHoldTimerRef.current = null;
-      setBootIntroAudioHold(false);
-    }, 14000);
     // 1. Start turning off (collapse screen)
     setPowerState('turning-off');
 
@@ -1506,6 +1507,7 @@ const App: React.FC = () => {
       canEdit={canEdit}
       isBooting={!hasBooted}
       powerState={powerState}
+      crtShaderEnabled={hasBooted || bootSequenceStarted}
       mobileAction={gameState.currentScreen === ScreenState.INTERROGATION ? {
         label: mobileIntelOpen ? 'CLOSE' : 'PARTNER',
         onClick: () => setMobileIntelOpen(!mobileIntelOpen),
@@ -1528,10 +1530,14 @@ const App: React.FC = () => {
         draftCheckConsistencyFnRef.current?.();
       } : undefined}
       onTestInvestigation={gameState.currentScreen === ScreenState.CASE_REVIEW ? handleTestInvestigation : undefined}
-      bootIntroSfxActive={!hasBooted || bootIntroAudioHold}
+      bootIntroSfxActive={!hasBooted && !bootIntroSfxKilled && bootSequenceStarted}
     >
       {!hasBooted ? (
-        <BootSequence onComplete={handleBootComplete} />
+        bootSequenceStarted ? (
+          <BootSequence onComplete={handleBootComplete} />
+        ) : (
+          <BootUpGate onBootUp={handleBootGateClick} />
+        )
       ) : (
         <>
           {gameState.currentScreen === ScreenState.CASE_SELECTION && (

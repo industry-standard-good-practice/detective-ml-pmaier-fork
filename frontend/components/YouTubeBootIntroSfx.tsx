@@ -7,7 +7,7 @@ export const BOOT_INTRO_SFX_VIDEO_ID = 'tajDxBaPBBM';
 const BOOT_INTRO_VOLUME_GAIN = 0.42;
 export const BOOT_INTRO_SFX_VIDEO_URL = `https://www.youtube.com/watch?v=${BOOT_INTRO_SFX_VIDEO_ID}`;
 
-/** Dispatch on first boot dismiss input so YouTube can start after autoplay policy (sync with user gesture). */
+/** Dispatch after BOOT SYSTEM click (App) once boot SFX is enabled — satisfies autoplay policy. */
 export const BOOT_INTRO_SFX_GESTURE_EVENT = 'detective-ml-boot-sfx-gesture';
 
 const HiddenHost = styled.div`

@@ -191,7 +191,11 @@ const MainContainer = styled.div`
 `;
 
 // The Inner Screen
-const Screen = styled.div<{ $powerState: 'on' | 'off' | 'turning-on' | 'turning-off' }>`
+const Screen = styled.div<{
+  $powerState: 'standby' | 'on' | 'off' | 'turning-on' | 'turning-off';
+  /** False on pre-boot gate: flat panel until user powers on (then shader + scanlines). */
+  $crtShaderEnabled?: boolean;
+}>`
   width: 100%;
   height: 100%;
   background-color: var(--color-bg);
@@ -200,6 +204,13 @@ const Screen = styled.div<{ $powerState: 'on' | 'off' | 'turning-on' | 'turning-
   display: flex;
   flex-direction: column;
   transform-origin: center center;
+
+  /* Pre-boot: monitor shell visible, no power-on sweep (user clicks BOOT SYSTEM first). */
+  ${props => props.$powerState === 'standby' && css`
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  `}
 
   /* Apply animations to the whole screen container so it masks the content + overlay */
   ${props => props.$powerState === 'turning-on' && css`
@@ -215,16 +226,23 @@ const Screen = styled.div<{ $powerState: 'on' | 'off' | 'turning-on' | 'turning-
     transform: scale(0);
   `}
   
-  /* Subtle generic distortion for DOM elements */
+  /* Subtle generic distortion for DOM elements (off on BOOT SYSTEM standby screen). */
   &::after {
     content: " ";
     display: block;
     position: absolute;
-    top: 0; left: 0; bottom: 0; right: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+      linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
     z-index: 2;
     background-size: 100% 2px, 3px 100%;
     pointer-events: none;
+    ${props => props.$crtShaderEnabled === false && css`
+      display: none;
+    `}
   }
 `;
 
@@ -779,7 +797,7 @@ interface LayoutProps {
   onEdit?: () => void;
   canEdit?: boolean;
   isBooting?: boolean;
-  powerState?: 'on' | 'off' | 'turning-on' | 'turning-off';
+  powerState?: 'standby' | 'on' | 'off' | 'turning-on' | 'turning-off';
   mobileAction?: {
     label: string;
     onClick: () => void;
@@ -806,6 +824,8 @@ interface LayoutProps {
   onTtsVolumeChange?: (v: number) => void;
   /** CRT boot intro YouTube SFX (video id tajDxBaPBBM); uses mute + SFX volume, not music. */
   bootIntroSfxActive?: boolean;
+  /** WebGL CRT + scanlines; false on boot gate until user clicks BOOT SYSTEM. */
+  crtShaderEnabled?: boolean;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -840,7 +860,8 @@ const Layout: React.FC<LayoutProps> = ({
   onToggleTts = () => {},
   ttsVolume = 0.4,
   onTtsVolumeChange,
-  bootIntroSfxActive = false
+  bootIntroSfxActive = false,
+  crtShaderEnabled = true
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
@@ -957,8 +978,8 @@ const Layout: React.FC<LayoutProps> = ({
           enabled={bootIntroSfxActive && !isMuted}
           volume={volume}
         />
-        <Screen $powerState={powerState}>
-          <CRTOverlay />
+        <Screen $powerState={powerState} $crtShaderEnabled={crtShaderEnabled}>
+          {crtShaderEnabled && <CRTOverlay />}
           <ToastMount id={TOAST_MOUNT_ID} aria-hidden />
           <OnboardingTour />
           <ContentInset>
