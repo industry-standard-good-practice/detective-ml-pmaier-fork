@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from "firebase/auth";
 import toast from './appToast';
 
 const firebaseConfig = {
@@ -15,13 +15,27 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
+// Handle redirect result on page load (fires after signInWithRedirect completes)
+getRedirectResult(auth).catch((error) => {
+  if (error) {
+    console.error("Redirect sign-in error", error);
+    toast.error(`Sign-in failed: ${(error as any)?.message || 'Could not sign in with Google. Please try again.'}`);
+  }
+});
+
 export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (error) {
-    console.error("Error signing in with Google", error);
-    toast.error(`Sign-in failed: ${(error as any)?.message || 'Could not sign in with Google. Please try again.'}`);
+  } catch (error: any) {
+    console.warn("signInWithPopup failed, falling back to redirect:", error?.code || error?.message);
+    // Fallback to redirect for any popup failure (blocked, closed, or internal error)
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (redirectError) {
+      console.error("Redirect sign-in also failed", redirectError);
+      toast.error(`Sign-in failed: ${(redirectError as any)?.message || 'Could not sign in with Google. Please try again.'}`);
+    }
     return null;
   }
 };
