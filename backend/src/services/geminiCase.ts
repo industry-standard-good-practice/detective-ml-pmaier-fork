@@ -1493,6 +1493,21 @@ const REPORT_SCHEMA = {
     required: ["issuesFound", "changesMade", "conclusion"]
 };
 
+/**
+ * When the user changes who is guilty (vs last baseline), hidden items tied to the old narrative
+ * almost always need new card art. Clear URLs so the image pipeline regenerates even if the model
+ * only tweaks copy lightly.
+ */
+function invalidateHiddenEvidenceImagesForGuiltChanges(finalCase: CaseData, baseline: CaseData): void {
+    (finalCase.suspects || []).forEach((s: any) => {
+        const bs = baseline.suspects?.find((b: any) => b.id === s.id);
+        if (!bs || Boolean(bs.isGuilty) === Boolean(s.isGuilty)) return;
+        (s.hiddenEvidence || []).forEach((ev: any) => {
+            delete ev.imageUrl;
+        });
+    });
+}
+
 /** Drop evidence imageUrl when narrative fields changed vs baseline so assets regenerate. */
 function invalidateEvidenceImagesOnNarrativeChange(
     finalCase: CaseData,
@@ -1862,6 +1877,8 @@ ${userChangeLog}
     ? `2. **PROPAGATE USER-AUTHORITATIVE CHANGES THROUGH DEPENDENCIES.**
        - The current JSON values are authoritative for any user-edited field.
        - You MAY rewrite dependent narrative fields when required for coherence.
+       - **Hidden evidence vs guilt (CRITICAL):** Audit every suspect's \`hiddenEvidence\`. Each clue must **belong** on that suspect (where it is hidden), fit the **current** \`isGuilty\` layout, and read as a plausible discoverable item for interrogation. If the user reassigned guilt, you MUST **rewrite or replace** items that still frame the wrong person, sit on the wrong owner, or contradict the new perpetrator narrative. Prefer keeping the same \`id\` when revising an item in place; use a new \`id\` only when replacing an entry entirely. Guilty suspects must still have damning discoverable items; innocents must not carry clues that only make sense if someone else committed the crime (unless clearly a coherent red herring).
+       - **initialEvidence:** If any scene clue's description implies the wrong perpetrator or conflicts with the user's guilt flags, fix the text to match the current truth (do not change how many items exist unless a line is truly unusable).
        - Keep all unaffected content stable; only change what is needed to resolve newly introduced narrative conflicts.
        - Do NOT introduce unrelated twists or brand-new plotlines.`
     : `2. **NEVER CHANGE THE STORY.**
@@ -1904,11 +1921,12 @@ ${userChangeLog}
     - A relationship description is just one word repeating the type → add a minimal 2-sentence description
     ${shouldPropagateNarrative ? `
     - Dependent fields that became inconsistent after user edits (e.g. motives/secrets/alibis/bios/evidence links no longer match current role flags) → rewrite those dependencies to restore coherence
+    - **Per-suspect \`hiddenEvidence\`:** Verify relevance to the story, correct **ownership** (this suspect actually has or would conceal this item), and alignment with \`isGuilty\` / innocence. Rewrite title, description, location, and victim-only discovery fields as needed. If an item is irreconcilable with the new guilty party, replace it with a new clue that fits the same investigative role (maintain minimum evidence counts per DATA COMPLETENESS).
     - Case description or suspect summaries that conflict with authoritative edited fields → update to align with current truth` : ''}
     
     **WHAT YOU MUST NEVER DO:**
     - Rewrite content for stylistic preference only
-    - Add new evidence to "fill gaps"
+    - Add new evidence to "fill gaps"${shouldPropagateNarrative ? ' (you MAY **replace** an existing hiddenEvidence or initialEvidence entry that became invalid after user edits — do not invent extra items beyond required counts)' : ''}
     - Change secrets or motives arbitrarily without dependency reason
     - Modify personality traits
     - Alter the startTime unless it literally contradicts timeline events
@@ -2052,6 +2070,7 @@ ${userChangeLog}
                 applyUserDiff(finalData, userDiff);
                 console.log('[DEBUG] checkCaseConsistency: Safety-net re-applied user field values');
             }
+            invalidateHiddenEvidenceImagesForGuiltChanges(finalData, baseline);
         }
 
         if (options?.narrativeOnly) {
