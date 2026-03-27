@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
-import toast from 'react-hot-toast';
+import toast from './services/appToast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
 import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
 import { generateTTS } from './services/geminiTTS';
+import { GEMINI_API_ERROR_TOAST_ID } from './services/backendGemini';
 import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx, playClickGlitchSfx } from './services/audioPlayer';
 import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft } from './services/persistence';
 import { CaseStats } from './types';
@@ -104,10 +105,17 @@ const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('isMuted') === 'true');
   const [volume, setVolume] = useState(() => {
     const saved = localStorage.getItem('globalVolume');
-    return saved !== null ? parseFloat(saved) : 0.7;
+    return saved !== null ? parseFloat(saved) : 0.4;
   });
   const [mobileIntelOpen, setMobileIntelOpen] = useState(false);
   const [unreadSuspects, setUnreadSuspects] = useState<Map<string, number>>(new Map());
+  const clearInterrogationUnread = useCallback((suspectId: string) => {
+    setUnreadSuspects((prev) => {
+      const next = new Map(prev);
+      next.delete(suspectId);
+      return next;
+    });
+  }, []);
   const [newEvidenceTitles, setNewEvidenceTitles] = useState<Set<string>>(new Set());
   const [newTimelineIds, setNewTimelineIds] = useState<Set<string>>(new Set());
   const [caseSelectionTab, setCaseSelectionTab] = useState<'featured' | 'network' | 'mycases'>('featured');
@@ -148,7 +156,7 @@ const App: React.FC = () => {
   });
   const [musicVolume, setMusicVolume] = useState(() => {
     const saved = localStorage.getItem('musicVolume');
-    return saved !== null ? parseFloat(saved) : 0.35;
+    return saved !== null ? parseFloat(saved) : 0.15;
   });
   useEffect(() => {
     localStorage.setItem('musicEnabled', String(musicEnabled));
@@ -164,7 +172,7 @@ const App: React.FC = () => {
   });
   const [ttsVolume, setTtsVolume] = useState(() => {
     const saved = localStorage.getItem('ttsVolume');
-    return saved !== null ? parseFloat(saved) : 1;
+    return saved !== null ? parseFloat(saved) : 0.3;
   });
   useEffect(() => {
     localStorage.setItem('ttsEnabled', String(ttsEnabled));
@@ -648,7 +656,7 @@ const App: React.FC = () => {
 
     } catch (e: any) {
         console.error("Partner Action Error:", e);
-        toast.error(`Partner action failed: ${e?.message || 'Connection interrupted. Please try again.'}`);
+        toast.error(`Partner action failed: ${e?.message || 'Connection interrupted. Please try again.'}`, { id: GEMINI_API_ERROR_TOAST_ID });
         setGameState(prev => ({
           ...prev,
           sidekickComment: "I... lost my train of thought. Let's try that again.",
@@ -844,7 +852,7 @@ const App: React.FC = () => {
       setCurrentSuggestions(response.hints);
     } catch (e: any) {
       console.error("AI Generation Error:", e);
-      toast.error(`Response failed: ${e?.message || 'Connection interrupted. Please try again.'}`);
+      toast.error(`Response failed: ${e?.message || 'Connection interrupted. Please try again.'}`, { id: GEMINI_API_ERROR_TOAST_ID });
       setGameState(prev => ({
         ...prev,
         chatHistory: {
@@ -921,7 +929,7 @@ const App: React.FC = () => {
       }
     } catch (e: any) {
       console.error("Officer Chat Error:", e);
-      toast.error(`Officer response failed: ${e?.message || 'Ask for help disconnected. Try again.'}`);
+      toast.error(`Officer response failed: ${e?.message || 'Ask for help disconnected. Try again.'}`, { id: GEMINI_API_ERROR_TOAST_ID });
       setGameState(prev => ({
         ...prev,
         officerHistory: [...prev.officerHistory, { sender: 'system', text: 'ASK FOR HELP DISCONNECTED', timestamp: formatTime(newGameTime) }]
@@ -1651,13 +1659,7 @@ const App: React.FC = () => {
               userId={user?.uid}
               unreadSuspectIds={unreadSuspects}
               thinkingSuspectIds={thinkingSuspectIds}
-              onClearUnread={(suspectId) => {
-                setUnreadSuspects(prev => {
-                  const next = new Map(prev);
-                  next.delete(suspectId);
-                  return next;
-                });
-              }}
+              onClearUnread={clearInterrogationUnread}
             />
           )}
 

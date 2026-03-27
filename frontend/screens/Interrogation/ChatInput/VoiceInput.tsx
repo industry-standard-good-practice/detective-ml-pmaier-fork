@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
-import toast from 'react-hot-toast';
+import toast from '../../../services/appToast';
 import { hasNativeSpeechRecognition } from '../../../services/geminiSTT';
 
 // --- Styled Components ---

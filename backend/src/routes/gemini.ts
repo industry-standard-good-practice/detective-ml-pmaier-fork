@@ -271,6 +271,12 @@ router.post('/tts', async (req: Request, res: Response) => {
   try {
     const { text, voiceName, stylePrompt } = req.body;
     const base64Audio = await generateTTS(text, voiceName, stylePrompt);
+    // generateTTS returns null only for skipped paths (no voice / no key); never 200 + null for a real failure
+    if (base64Audio == null) {
+      return res.status(503).json({
+        error: 'TTS is unavailable (skipped or not configured). Check voice selection and API key.',
+      });
+    }
     res.json({ audio: base64Audio });
   } catch (error: any) {
     console.error('[Gemini Route] tts error:', error);

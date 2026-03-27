@@ -1,6 +1,5 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import SwipeableToaster from './SwipeableToaster';
 import styled, { createGlobalStyle, keyframes, css } from 'styled-components';
 import { ScreenState } from '../types';
 import CRTOverlay from './CRTOverlay';
@@ -17,6 +16,7 @@ import YouTubeBackgroundMusic, {
   BACKGROUND_MUSIC_VIDEO_URL,
 } from './YouTubeBackgroundMusic';
 import YouTubeBootIntroSfx from './YouTubeBootIntroSfx';
+import { TOAST_MOUNT_ID } from '../services/appToast';
 
 const GlobalStyle = createGlobalStyle`
   :root {
@@ -26,6 +26,9 @@ const GlobalStyle = createGlobalStyle`
     --screen-edge-top: 50px;
     --screen-edge-bottom: 30px;
     --screen-edge-horizontal: 80px;
+
+    /* Fixed toasts: offset from viewport = MainContainer padding (matches Screen edges) */
+    --toast-crt-inset: calc(var(--space) * 2);
     
     /* Typographic Scale */
     --type-h1: 3rem;
@@ -42,6 +45,7 @@ const GlobalStyle = createGlobalStyle`
 
   @media (max-width: 768px) {
     :root {
+      --toast-crt-inset: 0px;
       --screen-edge-top: 20px;
       --screen-edge-bottom: 10px;
       --screen-edge-horizontal: 15px;
@@ -222,6 +226,14 @@ const Screen = styled.div<{ $powerState: 'on' | 'off' | 'turning-on' | 'turning-
     background-size: 100% 2px, 3px 100%;
     pointer-events: none;
   }
+`;
+
+/** Below CRT shader (z-index 9999); hosts #detective-ml-toast-host from appToast. */
+const ToastMount = styled.div`
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
 `;
 
 const TopBar = styled.div`
@@ -945,6 +957,7 @@ const Layout: React.FC<LayoutProps> = ({
         />
         <Screen $powerState={powerState}>
           <CRTOverlay />
+          <ToastMount id={TOAST_MOUNT_ID} aria-hidden />
           <OnboardingTour />
           <ContentInset>
             {!isBooting && (
@@ -1262,8 +1275,6 @@ const Layout: React.FC<LayoutProps> = ({
             <ScreenContent>
               {children}
             </ScreenContent>
-
-            <SwipeableToaster />
 
           </ContentInset>
         </Screen>

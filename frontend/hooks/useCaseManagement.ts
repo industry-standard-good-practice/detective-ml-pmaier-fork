@@ -1,6 +1,6 @@
 
 import { useState, useRef } from 'react';
-import toast from 'react-hot-toast';
+import toast from '../services/appToast';
 import { GameState, ScreenState, CaseData, CaseStats } from '../types';
 import { generateCaseFromPrompt, calculateDifficulty } from '../services/geminiService';
 import { publishCase, deleteCase, updateCase, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, fetchCommunityCases, fetchUserCases, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult } from '../services/persistence';

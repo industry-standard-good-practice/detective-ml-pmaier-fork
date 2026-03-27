@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { OnboardingProvider } from './contexts/OnboardingContext';
 import AnimeCursor from 'anime-cursor';
+import InstallPrompt from './components/InstallPrompt';
 
 // Initialize retro pixel cursor
 new AnimeCursor({
@@ -11,7 +12,7 @@ new AnimeCursor({
       size: [32, 32],
       image: 'https://animecursor.js.org/i/cursor/cursor_default.gif',
       pixel: true,
-      default: true
+      default: true,
     },
     pointer: {
       tags: ['a', 'button', 'label', 'select'],
@@ -21,16 +22,16 @@ new AnimeCursor({
       duration: 0.3,
       pingpong: true,
       offset: [10, 4],
-      pixel: true
+      pixel: true,
     },
     text: {
       tags: ['p', 'h1', 'h2', 'h3', 'h4', 'span', 'td', 'th', 'pre', 'code', 'textarea', 'input'],
       size: [32, 32],
       image: 'https://animecursor.js.org/i/cursor/cursor_text.png',
       offset: [10, 16],
-      pixel: true
-    }
-  }
+      pixel: true,
+    },
+  },
 });
 
 // Monkey-patch: the library only checks data-cursor on the direct element
@@ -39,7 +40,7 @@ new AnimeCursor({
 const initPatch = () => {
   const instance = AnimeCursor.instance;
   if (!instance || !instance._onMouseMove) return;
-  
+
   // Remove original handler (library uses mousemove)
   document.removeEventListener('mousemove', instance._onMouseMove);
 
@@ -54,34 +55,34 @@ const initPatch = () => {
   // Create patched handler that walks up the DOM
   const patchedHandler = (e: MouseEvent | PointerEvent) => {
     if (instance.disabled) return;
-    
+
     const x = e.clientX;
     const y = e.clientY;
-    
+
     instance.cursorEl.style.left = x + 'px';
     instance.cursorEl.style.top = y + 'px';
-    
+
     // Check if mouse is inside the monitor screen area
     const targetEl = document.elementFromPoint(x, y) as HTMLElement | null;
     const insideMonitor = targetEl?.closest('[data-monitor]') !== null;
-    
+
     if (!insideMonitor) {
       // Outside monitor — hide custom cursor, show OS cursor
       instance.cursorEl.style.display = 'none';
       document.body.style.cursor = '';
       return;
     }
-    
+
     // Inside monitor — show custom cursor
     instance.cursorEl.style.display = 'block';
-    
+
     if (instance.debugEl) {
       instance.debugEl.style.left = x + 'px';
       instance.debugEl.style.top = y + 'px';
     }
-    
+
     let nextCursorType: string | null = null;
-    
+
     // Walk up from the target to find data-cursor.
     // Pointer on an ancestor overrides text on a descendant.
     let el = targetEl;
@@ -100,17 +101,19 @@ const initPatch = () => {
       }
       el = el.parentElement as HTMLElement | null;
     }
-    
+
     // Fallback to default
     if (!nextCursorType && instance.defaultCursorType) {
       nextCursorType = instance.defaultCursorType;
     }
-    
+
     if (!nextCursorType) return;
-    if (instance.debugEl) { instance.debugEl.textContent = `(${x}px , ${y}px) ${nextCursorType}`; }
-    
+    if (instance.debugEl) {
+      instance.debugEl.textContent = `(${x}px , ${y}px) ${nextCursorType}`;
+    }
+
     if (nextCursorType !== instance.lastCursorType) {
-      instance.cursorEl.className = instance.debugEl 
+      instance.cursorEl.className = instance.debugEl
         ? `cursor-${nextCursorType} cursor-debugmode`
         : `cursor-${nextCursorType}`;
       instance.lastCursorType = nextCursorType;
@@ -139,8 +142,6 @@ if (document.readyState === 'loading') {
 } else {
   startObserving();
 }
-
-import InstallPrompt from './components/InstallPrompt';
 
 const root = createRoot(document.getElementById('root')!);
 root.render(

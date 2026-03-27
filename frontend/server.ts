@@ -1,9 +1,11 @@
-
 import express from "express";
-import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
 import fetch from "node-fetch";
+
+/** Same folder as this file (frontend/). Vite must use this — not process.cwd() — or the wrong index.html may load. */
+const FRONTEND_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 async function startServer() {
   const app = express();
@@ -39,6 +41,8 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
+      root: FRONTEND_ROOT,
+      configFile: path.join(FRONTEND_ROOT, "vite.config.ts"),
       server: {
         middlewareMode: true,
         allowedHosts: true,
@@ -48,9 +52,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
-    app.get("*", (req, res) => {
-      res.sendFile("dist/index.html", { root: "." });
+    app.use(express.static(path.join(FRONTEND_ROOT, "dist")));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(FRONTEND_ROOT, "dist", "index.html"));
     });
   }
 

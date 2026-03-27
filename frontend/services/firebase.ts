@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
-import toast from 'react-hot-toast';
+import toast from './appToast';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -31,6 +31,7 @@ export const logout = () => signOut(auth);
 // --- API HELPER ---
 
 import { API_BASE } from './apiBase';
+import { getHttpErrorMessage } from '../utils/httpErrorMessages';
 
 /**
  * Uploads a base64 image via the backend service.
@@ -68,7 +69,8 @@ export const uploadImage = async (base64: string, path: string): Promise<string>
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Upload failed: ${response.status}`);
+      const fallback = errorData.error || `Upload failed: ${response.status}`;
+      throw new Error(getHttpErrorMessage(response.status, fallback));
     }
 
     const result = await response.json();

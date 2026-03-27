@@ -211,7 +211,7 @@ const STEPS: Record<number, StepConfig> = {
   },
   [OnboardingStep.PARTNER_SUPPORT]: {
     title: "Partner Support",
-    description: "Your partner is here to help. Ask them to intervene if you're having trouble getting evidence. They can perform an initial exam, be a good cop, or be a bad cop. Choose wisely, their actions can have an effect on the aggravation meter if you're interrogating a suspect.",
+    description: "Your partner is here to help. Ask them to intervene if you're having trouble getting evidence. They can make an observation, be a good cop, or be a bad cop. Choose wisely, their actions can have an effect on the aggravation meter if you're interrogating a suspect.",
     targetId: "partner-support",
     position: "left",
     requiresIntel: true

@@ -169,6 +169,11 @@ const CRTOverlay: React.FC = () => {
           float alpha = mix(1.0, interiorAlpha * 0.4, edgeFade);
           finalColor = mix(vec3(0.0), finalColor, edgeFade);
 
+          // Toast stack is bottom-right; interior glass is very transparent so DOM behind reads through.
+          // Nudge opacity only there (undistorted vUv). Three plane: v=0 bottom, v=1 top → bottom-right = high u, low v.
+          float toastMask = smoothstep(0.62, 0.98, vUv.x) * smoothstep(0.0, 0.36, 1.0 - vUv.y);
+          alpha = mix(alpha, 0.64, toastMask * 0.26);
+
           gl_FragColor = vec4(finalColor, clamp(alpha, 0.0, 1.0));
         }
       `,

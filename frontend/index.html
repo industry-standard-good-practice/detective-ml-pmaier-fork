@@ -31,6 +31,15 @@
       * {
         box-sizing: border-box;
       }
+      /* Matches Layout MainContainer padding until GlobalStyle loads (2 * 8px space) */
+      :root {
+        --toast-crt-inset: 16px;
+      }
+      @media (max-width: 768px) {
+        :root {
+          --toast-crt-inset: 0px;
+        }
+      }
     </style>
   <script type="importmap">
 {
@@ -49,8 +58,88 @@
 <link rel="stylesheet" href="/index.css">
 </head>
   <body>
+    <script>
+      (function () {
+        var dedupe = Object.create(null);
+        function remove(el) {
+          var id = el.getAttribute('data-toast-dedupe');
+          if (id) delete dedupe[id];
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+        window.__showDetectiveToast = function (variant, text, opts) {
+          opts = opts || {};
+          var duration =
+            opts.duration != null ? Number(opts.duration) : variant === 'error' ? 6500 : 4000;
+          var dedupeId = opts.id;
+          var stackStyle =
+            'position:absolute;bottom:calc(var(--toast-crt-inset, 0px) + var(--screen-edge-bottom, 30px) + 12px);right:calc(var(--toast-crt-inset, 0px) + var(--screen-edge-horizontal, 80px));left:auto;top:auto;max-width:min(96vw,420px);display:flex;flex-direction:column-reverse;gap:8px;align-items:flex-end;pointer-events:none';
+          var mount = document.getElementById('detective-ml-toast-mount');
+          var parent = mount || document.body;
+          var hostStyle =
+            parent === document.body
+              ? 'position:fixed;inset:0;pointer-events:none;z-index:9998'
+              : 'position:absolute;inset:0;pointer-events:none;z-index:0';
+          var stack = document.getElementById('detective-ml-toast-stack');
+          if (!stack) {
+            var host = document.createElement('div');
+            host.id = 'detective-ml-toast-host';
+            host.setAttribute('aria-live', 'polite');
+            host.style.cssText = hostStyle;
+            stack = document.createElement('div');
+            stack.id = 'detective-ml-toast-stack';
+            stack.style.cssText = stackStyle;
+            host.appendChild(stack);
+            parent.appendChild(host);
+          } else {
+            stack.style.cssText = stackStyle;
+            var h = document.getElementById('detective-ml-toast-host');
+            if (h && mount && h.parentNode !== mount) {
+              h.style.cssText = hostStyle;
+              mount.appendChild(h);
+            }
+          }
+          if (dedupeId && dedupe[dedupeId]) {
+            try {
+              remove(dedupe[dedupeId]);
+            } catch (e) {}
+          }
+          var div = document.createElement('div');
+          div.setAttribute('role', 'status');
+          div.textContent = String(text);
+          if (dedupeId) {
+            div.setAttribute('data-toast-dedupe', dedupeId);
+            dedupe[dedupeId] = div;
+          }
+          var bg = '#1a1a1a';
+          var borderW = variant === 'error' ? '3px solid #ff2222' : '1px solid #555555';
+          var color =
+            variant === 'error' ? '#ff8888' : variant === 'success' ? '#66ff99' : '#eeeeee';
+          div.style.cssText =
+            'pointer-events:auto;max-width:420px;padding:12px 16px;font-family:VT323,ui-monospace,monospace;font-size:20px;line-height:1.35;white-space:pre-wrap;word-break:break-word;background:' +
+            bg +
+            ';color:' +
+            color +
+            ';border:' +
+            borderW +
+            ';box-shadow:0 4px 24px rgba(0,0,0,0.65)';
+          stack.appendChild(div);
+          var hostEl = document.getElementById('detective-ml-toast-host');
+          if (hostEl && hostEl.parentNode) {
+            hostEl.parentNode.appendChild(hostEl);
+          }
+          setTimeout(function () {
+            if (div.parentNode) remove(div);
+          }, duration);
+        };
+      })();
+    </script>
+    <!-- Dev-only: confirms toast host + positioning before React bundle runs -->
+    <script type="module">
+      if (import.meta.env.DEV) {
+        window.__showDetectiveToast?.('success', 'DEV: Toast OK', { duration: 5000 });
+      }
+    </script>
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

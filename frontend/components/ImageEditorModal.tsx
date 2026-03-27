@@ -4,7 +4,7 @@ import { type } from '../theme';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Wand2, Save, Undo, AlertCircle, ImagePlus, ClipboardPaste, Upload, Camera, RefreshCw } from 'lucide-react';
-import toast from 'react-hot-toast';
+import toast from '../services/appToast';
 import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiImages';
 import Spinner from './Spinner';
 import { HorizontalScrollStrip } from './HorizontalScrollStrip';

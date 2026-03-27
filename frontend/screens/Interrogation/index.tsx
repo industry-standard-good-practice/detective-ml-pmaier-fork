@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import { CaseData, Suspect, ChatMessage, Emotion, Evidence, TimelineStatement } from '../../types';
 import SuspectCard from '../../components/SuspectCard';
@@ -157,8 +157,8 @@ const Interrogation: React.FC<InterrogationProps> = ({
   mobileIntelOpen = false,
   onCloseMobileIntel,
   soundEnabled = true,
-  volume = 0.7,
-  ttsPlaybackVolume = 0.7,
+  volume = 0.4,
+  ttsPlaybackVolume = 0.12,
   isAdmin,
   userId,
   unreadSuspectIds = new Map(),
@@ -184,11 +184,18 @@ const Interrogation: React.FC<InterrogationProps> = ({
   const audioRef = useRef<AudioPlayback | null>(null);
   const voiceRef = useRef<string | null>(null);
   const ttsPlaybackVolumeRef = useRef(ttsPlaybackVolume);
-  const [lastPlayedAudioUrl, setLastPlayedAudioUrl] = useState<string | null>(null);
-  const isMounted = useRef(true);
-  const prevChatLengthRef = useRef(chatHistory.length);
+  /** Last TTS blob URL started (for volume-off reset and suspect-switch bookkeeping). */
+  const lastPlayedAudioUrlRef = useRef<string | null>(null);
+  /** Bumps when starting TTS or invalidating in-flight play so stale play() promises cannot assign audioRef. */
+  const ttsPlaybackGenRef = useRef(0);
   const prevSuspectIdRef = useRef(suspect.id);
   const isFirstRenderRef = useRef(true);
+  /** Dedup TTS start per chat tail; cleared in effect cleanup so React Strict Mode can replay after gen invalidation. */
+  const lastTtsTailKeyRef = useRef<string | null>(null);
+  const unreadSuspectIdsRef = useRef(unreadSuspectIds);
+  const onClearUnreadRef = useRef(onClearUnread);
+  unreadSuspectIdsRef.current = unreadSuspectIds;
+  onClearUnreadRef.current = onClearUnread;
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -230,6 +237,30 @@ const Interrogation: React.FC<InterrogationProps> = ({
   const isCreator = userId === activeCase.authorId;
   const canDebug = isAdmin || isCreator;
 
+  const invalidateInFlightTts = useCallback(() => {
+    ttsPlaybackGenRef.current += 1;
+    if (audioRef.current) {
+      audioRef.current.stop();
+      audioRef.current = null;
+    }
+  }, []);
+
+  const startTtsPlayback = useCallback((url: string) => {
+    ttsPlaybackGenRef.current += 1;
+    const gen = ttsPlaybackGenRef.current;
+    if (audioRef.current) {
+      audioRef.current.stop();
+      audioRef.current = null;
+    }
+    lastPlayedAudioUrlRef.current = url;
+    playAudioFromUrl(url, ttsPlaybackVolumeRef.current)
+      .then((playback) => {
+        if (gen !== ttsPlaybackGenRef.current) return;
+        audioRef.current = playback;
+      })
+      .catch((e) => console.error('Audio playback failed', e));
+  }, []);
+
   // --- TTS ---
   useEffect(() => {
     ttsPlaybackVolumeRef.current = ttsPlaybackVolume;
@@ -237,20 +268,19 @@ const Interrogation: React.FC<InterrogationProps> = ({
   }, [ttsPlaybackVolume]);
 
   useEffect(() => {
-    if (ttsPlaybackVolume <= 0 && audioRef.current) {
-      audioRef.current.stop();
-      audioRef.current = null;
+    if (ttsPlaybackVolume <= 0) {
+      invalidateInFlightTts();
+      lastPlayedAudioUrlRef.current = null;
     }
-  }, [ttsPlaybackVolume]);
+  }, [ttsPlaybackVolume, invalidateInFlightTts]);
 
   useEffect(() => {
     voiceRef.current = suspect.voice || null;
   }, [suspect.id]);
 
   useEffect(() => {
-    isMounted.current = true;
     return () => {
-      isMounted.current = false;
+      ttsPlaybackGenRef.current += 1;
       if (audioRef.current) {
         audioRef.current.stop();
         audioRef.current = null;
@@ -258,53 +288,58 @@ const Interrogation: React.FC<InterrogationProps> = ({
     };
   }, []);
 
-  // TTS Playback Logic
+  // TTS Playback Logic — tail-key dedup (not chatGrew): Strict Mode invalidates gen; cleanup clears key so the retry run can start TTS again.
   useEffect(() => {
     const suspectChanged = suspect.id !== prevSuspectIdRef.current;
-    const chatGrew = chatHistory.length > prevChatLengthRef.current;
     const isFirstRender = isFirstRenderRef.current;
 
     prevSuspectIdRef.current = suspect.id;
-    prevChatLengthRef.current = chatHistory.length;
     isFirstRenderRef.current = false;
 
+    const lastMsg = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : undefined;
+    const tailKey =
+      lastMsg?.audioUrl != null
+        ? `${chatHistory.length}:${lastMsg.audioUrl}:${lastMsg.sender}`
+        : '';
+
+    const tryPlay = (audioUrl: string) => {
+      if (tailKey && lastTtsTailKeyRef.current === tailKey) return;
+      if (tailKey) lastTtsTailKeyRef.current = tailKey;
+      console.log('TTS Playing message from audioUrl', { text: lastMsg?.text, audioUrl });
+      startTtsPlayback(audioUrl);
+    };
+
     if (isFirstRender || suspectChanged) {
-      if (audioRef.current) {
-        audioRef.current.stop();
-        audioRef.current = null;
-      }
-      const lastMsg = chatHistory[chatHistory.length - 1];
-      if ((lastMsg?.sender === 'suspect' || lastMsg?.sender === 'partner') && lastMsg?.audioUrl && ttsPlaybackVolume > 0 && unreadSuspectIds.has(suspect.id)) {
-        console.log("TTS Playing unread notification message", { text: lastMsg.text, audioUrl: lastMsg.audioUrl });
-        setLastPlayedAudioUrl(lastMsg.audioUrl);
-        playAudioFromUrl(lastMsg.audioUrl, ttsPlaybackVolumeRef.current)
-          .then(playback => { audioRef.current = playback; })
-          .catch(e => console.error("Audio playback failed", e));
-        onClearUnread?.(suspect.id);
+      invalidateInFlightTts();
+      lastPlayedAudioUrlRef.current = null;
+      lastTtsTailKeyRef.current = null;
+      if (
+        lastMsg &&
+        (lastMsg.sender === 'suspect' || lastMsg.sender === 'partner') &&
+        lastMsg.audioUrl &&
+        ttsPlaybackVolume > 0 &&
+        unreadSuspectIdsRef.current.has(suspect.id)
+      ) {
+        console.log('TTS Playing unread notification message', { text: lastMsg.text, audioUrl: lastMsg.audioUrl });
+        tryPlay(lastMsg.audioUrl);
+        onClearUnreadRef.current?.(suspect.id);
       } else {
-        setLastPlayedAudioUrl(lastMsg?.audioUrl || null);
-        if (unreadSuspectIds.has(suspect.id)) onClearUnread?.(suspect.id);
+        lastPlayedAudioUrlRef.current = lastMsg?.audioUrl || null;
+        if (unreadSuspectIdsRef.current.has(suspect.id)) onClearUnreadRef.current?.(suspect.id);
       }
-      return;
+    } else if (
+      lastMsg?.audioUrl &&
+      ttsPlaybackVolume > 0 &&
+      (lastMsg.sender === 'suspect' || lastMsg.sender === 'partner')
+    ) {
+      tryPlay(lastMsg.audioUrl);
+      if (unreadSuspectIdsRef.current.has(suspect.id)) onClearUnreadRef.current?.(suspect.id);
     }
 
-    if (!chatGrew || chatHistory.length === 0) return;
-    if (unreadSuspectIds.has(suspect.id)) onClearUnread?.(suspect.id);
-    if (ttsPlaybackVolume <= 0) return;
-
-    const lastMsg = chatHistory[chatHistory.length - 1];
-    if ((lastMsg.sender === 'suspect' || lastMsg.sender === 'partner') && lastMsg.audioUrl && lastMsg.audioUrl !== lastPlayedAudioUrl) {
-      console.log("TTS Playing message from audioUrl", { text: lastMsg.text, audioUrl: lastMsg.audioUrl });
-      setLastPlayedAudioUrl(lastMsg.audioUrl);
-      if (audioRef.current) {
-        audioRef.current.stop();
-        audioRef.current = null;
-      }
-      playAudioFromUrl(lastMsg.audioUrl, ttsPlaybackVolumeRef.current)
-        .then(playback => { audioRef.current = playback; })
-        .catch(e => console.error("Audio playback failed", e));
-    }
-  }, [chatHistory, ttsPlaybackVolume, suspect.id, lastPlayedAudioUrl, unreadSuspectIds, onClearUnread]);
+    return () => {
+      lastTtsTailKeyRef.current = null;
+    };
+  }, [chatHistory, ttsPlaybackVolume, suspect.id, startTtsPlayback, invalidateInFlightTts]);
 
   // Force Action type if Deceased
   useEffect(() => {
@@ -325,10 +360,7 @@ const Interrogation: React.FC<InterrogationProps> = ({
   const handleSend = () => {
     if (inputVal.trim() && !isThinking) {
       // Stop any currently playing TTS
-      if (audioRef.current) {
-        audioRef.current.stop();
-        audioRef.current = null;
-      }
+      invalidateInFlightTts();
       const evidenceTitle = selectedEvidence.length > 0
         ? selectedEvidence.map(ev => 'title' in ev ? ev.title : `Timeline: ${ev.time} - ${ev.statement}`).join(' | ')
         : undefined;

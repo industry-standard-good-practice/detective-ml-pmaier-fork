@@ -323,9 +323,9 @@ const PartnerPanel: React.FC<PartnerPanelProps> = ({
                   $type="neutral"
                   onClick={() => { onPartnerAction('examine'); onCloseMobileIntel?.(); }}
                   disabled={partnerCharges <= 0 || initialExamDone || isThinking}
-                  title="Perform Initial Examination (Once)"
+                  title="Make observation (once)"
                 >
-                  {initialExamDone ? "Exam Done" : "Initial Exam"}
+                  {initialExamDone ? "Observation made" : "Make observation"}
                 </ActionButton>
               </>
             ) : (

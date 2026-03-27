@@ -2,7 +2,7 @@
  * Frontend geminiTTS.ts — refactored to delegate TTS generation to the backend.
  * WAV construction and AudioContext registration remain client-side.
  */
-import { geminiPost } from './backendGemini';
+import { geminiPost, showGeminiApiErrorToast } from './backendGemini';
 import { registerPcmData as registerPcmCache } from './audioPlayer';
 
 // --- AudioContext PCM registration (client-side only) ---
@@ -72,14 +72,17 @@ export const generateTTS = async (text: string, voiceName: string, stylePrompt?:
 
   try {
     const result = await geminiPost<{ audio: string | null }>('/tts', { text, voiceName, stylePrompt });
-    
+
     if (result.audio) {
       const id = `tts-${Date.now()}`;
       return registerPcmData(result.audio, id);
     }
+    // Defensive: backend should not return 200 + null after a real failure; if it does, show feedback
+    showGeminiApiErrorToast('TTS returned no audio. Try again, or disable TTS if you are rate limited.');
     return null;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[TTS] Generation Error:", error);
+    // geminiPost already showed toast + threw for HTTP / network errors
     return null;
   }
 };

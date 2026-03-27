@@ -1,7 +1,8 @@
 import { CaseData, CaseStats } from '../types';
 import { auth } from './firebase';
-import toast from 'react-hot-toast';
+import toast from './appToast';
 import { API_BASE } from './apiBase';
+import { getHttpErrorMessage } from '../utils/httpErrorMessages';
 
 /**
  * Makes an authenticated API call to the backend.
@@ -29,7 +30,8 @@ async function apiCall<T = any>(method: string, path: string, body?: any): Promi
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(errorData.error || `API call failed: ${response.status}`);
+    const fallback = errorData.error || `API call failed: ${response.status}`;
+    throw new Error(getHttpErrorMessage(response.status, fallback));
   }
 
   return response.json();

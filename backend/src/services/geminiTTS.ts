@@ -44,9 +44,12 @@ export const generateTTS = async (text: string, voiceName: string, stylePrompt?:
     if (base64Audio) {
       return base64Audio; // Return raw PCM base64 — frontend builds WAV
     }
-    return null;
+    throw new Error(
+      "TTS returned no audio (empty response). You may be rate limited — wait and try again, or turn off TTS."
+    );
   } catch (error) {
     console.error("[TTS] Generation Error:", error);
-    return null;
+    if (error instanceof Error) throw error;
+    throw new Error(String(error));
   }
 };

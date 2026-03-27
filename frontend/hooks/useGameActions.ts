@@ -1,6 +1,7 @@
 
 import { useState, useRef, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import toast from '../services/appToast';
+import { GEMINI_API_ERROR_TOAST_ID } from '../services/backendGemini';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from '../types';
 import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, getBadCopHint, getPartnerIntervention } from '../services/geminiService';
 import { generateTTS } from '../services/geminiTTS';
@@ -419,7 +420,10 @@ export const useGameActions = ({
 
     } catch (e: any) {
         console.error("Partner Action Error:", e);
-        toast.error(`Partner action failed: ${e?.message || 'Connection interrupted. Please try again.'}`);
+        toast.error(`Partner action failed: ${e?.message || 'Connection interrupted. Please try again.'}`, {
+          id: GEMINI_API_ERROR_TOAST_ID,
+          duration: 6500,
+        });
         setGameState(prev => ({
           ...prev,
           sidekickComment: "I... lost my train of thought. Let's try that again.",
@@ -619,7 +623,10 @@ export const useGameActions = ({
       }));
     } catch (e: any) {
       console.error("Officer Chat Error:", e);
-      toast.error(`Officer response failed: ${e?.message || 'Secure line disconnected. Try again.'}`);
+      toast.error(`Officer response failed: ${e?.message || 'Secure line disconnected. Try again.'}`, {
+        id: GEMINI_API_ERROR_TOAST_ID,
+        duration: 6500,
+      });
       setGameState(prev => ({
         ...prev,
         officerHistory: [...prev.officerHistory, { sender: 'system', text: "[SECURE LINE DISCONNECTED]", timestamp: formatTime(newGameTime) }]

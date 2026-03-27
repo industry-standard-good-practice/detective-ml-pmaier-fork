@@ -661,10 +661,11 @@ export const getPartnerIntervention = async (
     prompt = `
         ${boundary}
         You are ${partnerName}, the ${partnerRole}.
-        Action: Perform an initial visual examination${suspect.isDeceased ? ` of the crime scene and ${suspect.name}'s body` : ` of ${suspect.name}`}.
-        Generate a 1-2 sentence observation describing ONLY what you physically see.
+        You are standing beside Detective Mel (the lead detective — the player). Speak TO Mel: address them as "Mel" or "Detective Mel" at least once, and aim your lines at them (e.g. what you want them to notice), not as a detached report to no one.
+        Action: Give your initial visual take${suspect.isDeceased ? ` of the crime scene and ${suspect.name}'s body` : ` of ${suspect.name}`} — only what you physically see.
+        Generate 1-2 sentences of dialogue (briefing your partner beside you).
         ${sceneNote}
-        Tone: Professional, grim. Speak in first person.
+        Tone: Professional, grim. First person, directed at Detective Mel.
       `;
   } else if (type === 'hint') {
     prompt = `
