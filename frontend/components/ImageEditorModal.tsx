@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { type } from '../theme';
 import styled from 'styled-components';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Wand2, Save, Undo, AlertCircle, ImagePlus, ClipboardPaste, Upload, Camera, RefreshCw } from 'lucide-react';
 import toast from '../services/appToast';
 import { editImageWithPrompt, createImageFromPrompt } from '../services/geminiImages';
@@ -11,11 +11,10 @@ import { HorizontalScrollStrip } from './HorizontalScrollStrip';
 import type { PortraitVariantSlot } from '../utils/portraitVariantSlots';
 import type { ImageLoadingState } from './SuspectPortrait';
 
-const Overlay = styled(motion.div)`
+const Overlay = styled.div`
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(8px);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -23,7 +22,7 @@ const Overlay = styled(motion.div)`
   padding: calc(var(--space) * 3);
 `;
 
-const Modal = styled(motion.div)`
+const Modal = styled.div`
   background: #1a1a1a;
   border: 1px solid rgba(255, 255, 255, 0.1);
   width: 100%;
@@ -783,20 +782,12 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               : 'Working…';
 
   return (
-    <AnimatePresence>
+    <>
       <Overlay
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
         onClick={onClose}
         style={!visible ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
       >
-        <Modal
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <Modal onClick={(e) => e.stopPropagation()}>
           <Header>
             <Title>
               {portraitMode
@@ -1002,7 +993,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
           </Content>
         </Modal>
       </Overlay>
-    </AnimatePresence>
+    </>
   );
 };
 
