@@ -1,6 +1,10 @@
-node_modules
-dist
-.auth
-.env
-.env.*
-*.local
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env.local
+dist/
+src/
+*.ts
+tsconfig.json
+.git

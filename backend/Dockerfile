@@ -1,29 +1,20 @@
-# --- Build stage ---
-FROM node:20-slim AS builder
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY tsconfig.json ./
-COPY src/ ./src/
-COPY openapi.yaml ./
+# Copy application code
+COPY app/ ./app/
+COPY function.py .
+COPY .env .env
+COPY assets/ ./assets/ 2>/dev/null || true
 
-RUN npm run build
-
-# --- Production stage ---
-FROM node:20-slim
-
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
-
-COPY --from=builder /app/dist ./dist
-COPY openapi.yaml ./
-
+# Cloud Run uses PORT env var
 ENV PORT=8080
+
 EXPOSE 8080
 
-CMD ["npx", "functions-framework", "--target=api", "--source=./dist/function.js"]
+CMD ["uvicorn", "app.main:fastapi_app", "--host", "0.0.0.0", "--port", "8080"]
