@@ -2,6 +2,7 @@
 TTS generation via Gemini.
 """
 from __future__ import annotations
+import base64
 import os
 from google.genai import Client as GoogleGenAI
 
@@ -45,7 +46,11 @@ async def generate_tts(text: str, voice_name: str, style_prompt: str | None = No
             if parts:
                 inline_data = getattr(parts[0], "inline_data", None)
                 if inline_data and getattr(inline_data, "data", None):
-                    return inline_data.data
+                    raw = inline_data.data
+                    # Ensure we return a base64 string, not raw bytes
+                    if isinstance(raw, bytes):
+                        return base64.b64encode(raw).decode("ascii")
+                    return raw
 
         raise RuntimeError(
             "Gemini text-to-speech returned no audio (empty response). "

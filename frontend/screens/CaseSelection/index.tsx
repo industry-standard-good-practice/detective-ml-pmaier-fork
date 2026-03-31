@@ -198,6 +198,8 @@ interface CaseSelectionProps {
   onPlayDraft?: (caseData: CaseData) => void;
   onUnpublish?: (caseId: string) => void;
   onDeleteMyCase?: (caseId: string) => void;
+  /** Called when a generating (pending/in-progress) case card is clicked */
+  onClickGeneratingCase?: (caseData: CaseData) => void;
   initialTab?: 'featured' | 'network' | 'mycases';
   onTabChange?: (tab: 'featured' | 'network' | 'mycases') => void;
 }
@@ -206,7 +208,7 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
   communityCases, localDrafts, caseStats, onSelectCase, onCreateNew,
   isLoadingCommunity, isAdmin, userId, onDeleteCase, onToggleFeatured,
   onEditCase, onPublishDraft, onDeleteDraft, onPlayDraft, onUnpublish,
-  onDeleteMyCase, initialTab = 'featured', onTabChange
+  onDeleteMyCase, onClickGeneratingCase, initialTab = 'featured', onTabChange
 }) => {
   const [activeTab, setActiveTabLocal] = useState<'featured' | 'network' | 'mycases'>(initialTab);
   const setActiveTab = (tab: 'featured' | 'network' | 'mycases') => {
@@ -431,6 +433,7 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
           {myCases.map(c => {
             if (!c.id) return null;
             const isPublished = !!c.isUploaded;
+            const isGenerating = c.status === 'pending' || c.status === 'in-progress';
             const colors = THEME_COLORS['gold'];
             return (
               <CaseCardRenderer
@@ -439,17 +442,22 @@ const CaseSelection: React.FC<CaseSelectionProps> = ({
                 theme="gold"
                 caseStats={caseStats[c.id]}
                 isActive={activeMyCaseId === c.id}
-                onClick={() => isPublished ? onSelectCase(c.id) : onPlayDraft?.(c)}
+                onClick={() => isGenerating ? onClickGeneratingCase?.(c) : isPublished ? onSelectCase(c.id) : onPlayDraft?.(c)}
                 extraBadges={
                   <>
-                    {isPublished
+                    {isGenerating && (
+                      <Badge $bg={c.generationPhase === 'images' ? '#f0c020' : '#0af'} $color="#000" style={{
+                        animation: 'pulse-badge 1.5s ease-in-out infinite',
+                      }}>{c.generationPhase === 'images' ? 'GENERATING IMAGES…' : 'GENERATING…'}</Badge>
+                    )}
+                    {!isGenerating && (isPublished
                       ? <Badge $bg={colors.bright} $color="#000">LIVE</Badge>
                       : <Badge $bg={colors.border} $color="#000">DRAFT</Badge>
-                    }
+                    )}
                     {c.isFeatured && <Badge $bg={colors.border} $color="#000">FEATURED</Badge>}
                   </>
                 }
-                adminControls={renderMyCaseAdminControls(c, isPublished)}
+                adminControls={isGenerating ? undefined : renderMyCaseAdminControls(c, isPublished)}
               />
             );
           })}

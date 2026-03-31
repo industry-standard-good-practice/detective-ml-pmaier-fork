@@ -230,6 +230,25 @@ async def get_suspect_response(
 
     parsed = json.loads(text)
 
+    # Map AI field names to what the frontend expects
+    if "dialogue" in parsed and "text" not in parsed:
+        parsed["text"] = parsed.pop("dialogue")
+    # Map timelineReferences → revealedTimelineStatements
+    if "timelineReferences" in parsed:
+        refs = parsed.pop("timelineReferences")
+        parsed["revealedTimelineStatements"] = [
+            {
+                "time": r.get("time", ""),
+                "statement": r.get("activity", ""),
+                "day": r.get("day", "Today"),
+                "dayOffset": r.get("dayOffset", 0),
+            }
+            for r in (refs or [])
+        ]
+    parsed.setdefault("revealedTimelineStatements", [])
+    parsed.setdefault("revealedEvidence", [])
+    parsed.setdefault("hints", [])
+
     # Normalize revealed evidence titles
     raw_evidence = parsed.get("revealedEvidence", [])
     if raw_evidence:

@@ -8,7 +8,7 @@ import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, 
 import { generateTTS } from './services/geminiTTS';
 import { GEMINI_API_ERROR_TOAST_ID } from './services/backendGemini';
 import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx, playClickGlitchSfx } from './services/audioPlayer';
-import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, triggerCaseGeneration } from './services/persistence';
+import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, triggerCaseGeneration, fetchCase } from './services/persistence';
 import { CaseStats } from './types';
 import { auth, logout } from './services/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -288,6 +288,30 @@ const App: React.FC = () => {
   const loadDrafts = () => {
     setLocalDrafts(fetchLocalDrafts());
   };
+
+  // Re-fetch user cases from the backend when My Cases tab is selected
+  // so newly generated images / updated data are picked up.
+  useEffect(() => {
+    if (caseSelectionTab === 'mycases' && user?.uid) {
+      (async () => {
+        try {
+          const freshUserCases = await fetchUserCases(user.uid);
+          // Merge fresh backend data into communityCases
+          setCommunityCases(prev => {
+            const caseMap = new Map(prev.map(c => [c.id, c]));
+            freshUserCases.forEach(c => caseMap.set(c.id, c));
+            return Array.from(caseMap.values()).filter(c =>
+              c && c.id && typeof c.id === 'string' && c.id.trim() !== ''
+            );
+          });
+          // Also update local drafts from localStorage
+          setLocalDrafts(fetchLocalDrafts());
+        } catch (e) {
+          console.warn('[App] Failed to refresh user cases on tab switch:', e);
+        }
+      })();
+    }
+  }, [caseSelectionTab, user?.uid]);
 
 
 
@@ -798,7 +822,7 @@ const App: React.FC = () => {
         // Supports MULTIPLE timeline entries per response
         // Trust AI-provided timeline entries if they have valid time fields;
         // normalize any spelled-out times to numerical format.
-        let timelineEntries = response.revealedTimelineStatements
+        let timelineEntries = (response.revealedTimelineStatements || [])
           .filter(e => e && e.time)
           .map(e => ({ ...e, time: normalizeTimeString(e.time) }));
         // If the AI returned entries but the times don't match any known timeline,
@@ -1121,7 +1145,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEditCase = (caseId?: string | any) => {
+  const handleEditCase = async (caseId?: string | any) => {
     const idToEdit = (typeof caseId === 'string') ? caseId : gameState.selectedCaseId;
 
     // If returning to edit a case that's already in draft (e.g. after test play),
@@ -1131,7 +1155,27 @@ const App: React.FC = () => {
       return;
     }
 
-    const caseToEdit = communityCases.find(c => c.id === idToEdit) || localDrafts.find(d => d.id === idToEdit);
+    // Re-fetch the case from the backend to pick up any newly generated images
+    let caseToEdit: CaseData | undefined;
+    if (idToEdit) {
+      try {
+        const fresh = await fetchCase(idToEdit);
+        if (fresh && fresh.title) {
+          caseToEdit = fresh;
+          // Update in-memory lists so stale data doesn't persist
+          setCommunityCases(prev => prev.map(c => c.id === idToEdit ? fresh : c));
+          saveLocalDraft(fresh);
+          setLocalDrafts(fetchLocalDrafts());
+        }
+      } catch (e) {
+        console.warn('[App] Failed to refresh case for edit, using cached:', e);
+      }
+    }
+
+    // Fall back to cached data if backend fetch didn't return a result
+    if (!caseToEdit) {
+      caseToEdit = communityCases.find(c => c.id === idToEdit) || localDrafts.find(d => d.id === idToEdit);
+    }
     if (!caseToEdit) return;
 
     originalDraftRef.current = JSON.parse(JSON.stringify(caseToEdit));
@@ -1585,6 +1629,33 @@ const App: React.FC = () => {
                 onPlayDraft={handlePlayDraft}
                 onUnpublish={handleUnpublishCase}
                 onDeleteMyCase={handleDeleteMyCase}
+                onClickGeneratingCase={async (caseData) => {
+                  // Re-fetch to get latest state from backend
+                  let latest = caseData;
+                  try {
+                    const fresh = await fetchCase(caseData.id);
+                    if (fresh) latest = fresh;
+                  } catch (e) { /* use passed-in data */ }
+
+                  // Use the backend's generationPhase field to decide routing:
+                  // 'text' or 'pending' (not yet claimed) → show progress page
+                  // 'images' or null/completed → open editor (text is done)
+                  const textStillGenerating = latest.generationPhase === 'text' 
+                    || latest.status === 'pending';
+
+                  if (textStillGenerating) {
+                    // Text still generating — show progress page
+                    setPendingGenerationCaseId(latest.id);
+                    setGameState(prev => ({ ...prev, currentScreen: ScreenState.CREATE_CASE }));
+                  } else {
+                    // Text is ready (images may still be generating) — open in editor
+                    saveLocalDraft(latest);
+                    setLocalDrafts(fetchLocalDrafts());
+                    setDraftCase(latest);
+                    originalDraftRef.current = JSON.parse(JSON.stringify(latest));
+                    setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
+                  }
+                }}
                 initialTab={caseSelectionTab}
                 onTabChange={setCaseSelectionTab}
             />
@@ -1597,6 +1668,11 @@ const App: React.FC = () => {
                 onCancel={() => {
                   setPendingGenerationCaseId(null);
                   setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_SELECTION }));
+                }}
+                onGoHome={() => {
+                  // Navigate home without cancelling — generation continues in background
+                  setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_SELECTION }));
+                  setCaseSelectionTab('mycases');
                 }}
                 isLoading={isGenerating}
                 loadingStatus={generationStatus}

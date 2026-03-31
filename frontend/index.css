@@ -5,6 +5,11 @@
   75% { content: "..."; }
   100% { content: ""; }
 }
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 .animate-typewriter-dots::after {
   content: "";
   animation: typewriter-dots 1.5s infinite;

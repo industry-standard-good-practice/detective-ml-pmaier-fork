@@ -95,7 +95,7 @@ async def handle_case_written(request: Request):
         return {"status": "ignored", "reason": f"status is {status}"}
 
     # --- 3. Claim the case: set status=in-progress + lease ---
-    _extend_lease(case_ref, {"status": "in-progress", "generationStep": "ai-thinking"})
+    _extend_lease(case_ref, {"status": "in-progress", "generationStep": "ai-thinking", "generationPhase": "text"})
     print(f"[Eventarc] Claimed case {case_id}: status=in-progress")
 
     prompt = case_data.get("generationPrompt", "")
@@ -186,8 +186,8 @@ async def handle_case_written(request: Request):
         })
         await asyncio.sleep(0)
 
-        # Chunk 6: Image generation — full pregeneration pipeline
         print(f"[Eventarc] {case_id}: Starting chunk 6/6 — image generation")
+        case_ref.update({"generationPhase": "images", "generationStep": "generating-images", "updatedAt": _now_ms()})
         _extend_lease(case_ref)  # Fresh lease for the long image phase
 
         # Build the full case dict for pregenerate_case_images
@@ -228,6 +228,8 @@ async def handle_case_written(request: Request):
         case_ref.update({
             "status": "completed",
             "progress": 100,
+            "generationPhase": None,
+            "generationStep": None,
             "leaseUntil": None,
             "generationPrompt": None,
             "generationIsLucky": None,

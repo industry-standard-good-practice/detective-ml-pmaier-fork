@@ -213,13 +213,14 @@ const ErrorBox = styled.div`
 interface CreateCaseProps {
   onGenerate: (prompt: string, isLucky: boolean) => void;
   onCancel: () => void;
+  onGoHome?: () => void;
   isLoading: boolean;
   loadingStatus?: string;
   /** If set, we're in async polling mode — show progressive checklist */
   pollingState?: CasePollingState | null;
 }
 
-const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading, loadingStatus, pollingState }) => {
+const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, onGoHome, isLoading, loadingStatus, pollingState }) => {
   const [prompt, setPrompt] = useState('');
 
   // Determine which loading mode we're in
@@ -326,6 +327,12 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
               : 'Multi-step generation in progress: concept design, suspect construction, evidence drafting, timeline synthesis, and final validation. This usually takes 1-2 minutes.'
             }
           </NoteText>
+
+          {pollingState && onGoHome && (
+            <SmallCancelButton onClick={onGoHome} style={{ marginTop: 'calc(var(--space) * 2)' }}>
+              Return to Home
+            </SmallCancelButton>
+          )}
         </LoadingWrapper>
       )}
     </Container>
