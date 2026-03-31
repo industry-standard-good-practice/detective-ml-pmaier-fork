@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY function.py .
 COPY .env .env
-COPY assets/ ./assets/ 2>/dev/null || true
+COPY assets/ ./assets/
 
 # Cloud Run uses PORT env var
 ENV PORT=8080

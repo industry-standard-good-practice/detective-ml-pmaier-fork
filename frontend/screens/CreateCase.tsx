@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { type } from '../theme';
+import { CasePollingState } from '../hooks/useCasePolling';
 
 const Container = styled.div`
   display: flex;
@@ -151,22 +152,110 @@ const NoteText = styled.p`
   max-width: 400px;
 `;
 
+// --- Progressive generation checklist ---
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const ChecklistWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.25);
+  margin-top: calc(var(--space) * 2.5);
+  width: 100%;
+  max-width: 360px;
+`;
+
+const CheckItem = styled.div<{ $done: boolean; $active: boolean }>`
+  ${type.body}
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) * 1.5);
+  color: ${p => p.$done ? 'var(--color-accent-green)' : p.$active ? 'var(--color-text-bright)' : 'var(--color-text-dim)'};
+  transition: color 0.3s;
+  animation: ${p => p.$done ? css`${fadeIn} 0.3s ease-out` : 'none'};
+`;
+
+const CheckIcon = styled.span<{ $done: boolean; $active: boolean }>`
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 12px;
+  border: 1px solid ${p => p.$done ? 'var(--color-accent-green)' : 'var(--color-border-strong)'};
+  background: ${p => p.$done ? 'var(--color-accent-green-dark, rgba(0,255,0,0.15))' : 'transparent'};
+  flex-shrink: 0;
+
+  ${p => p.$active && !p.$done && css`
+    border-color: var(--color-accent-green);
+    &::after {
+      content: '…';
+      animation: ${blink} 1s infinite;
+    }
+  `}
+`;
+
+const ErrorBox = styled.div`
+  ${type.body}
+  color: #ff6b6b;
+  background: rgba(255, 80, 80, 0.1);
+  border: 1px solid rgba(255, 80, 80, 0.3);
+  padding: calc(var(--space) * 2) calc(var(--space) * 3);
+  max-width: 400px;
+  text-align: center;
+  margin-top: calc(var(--space) * 2);
+`;
+
 interface CreateCaseProps {
   onGenerate: (prompt: string, isLucky: boolean) => void;
   onCancel: () => void;
   isLoading: boolean;
   loadingStatus?: string;
+  /** If set, we're in async polling mode — show progressive checklist */
+  pollingState?: CasePollingState | null;
 }
 
-const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading, loadingStatus }) => {
+const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading, loadingStatus, pollingState }) => {
   const [prompt, setPrompt] = useState('');
-  const activeStatus = loadingStatus || "Step 1/6: Building case concept from your prompt...";
+
+  // Determine which loading mode we're in
+  const isAsyncGenerating = !!(pollingState && pollingState.isPolling);
+  const isAsyncComplete = !!(pollingState && pollingState.isComplete);
+  const isAsyncFailed = !!(pollingState && pollingState.isFailed);
+  const showLoading = isLoading || isAsyncGenerating;
+
+  // Derive status text
+  let activeStatus = loadingStatus || '';
+  if (isAsyncGenerating && pollingState) {
+    const { progress } = pollingState;
+    if (!progress.hasTitle) {
+      activeStatus = 'Building case concept from your prompt...';
+    } else if (!progress.hasSuspects) {
+      activeStatus = `Case: "${pollingState.caseData?.title}" — generating suspects...`;
+    } else if (!progress.hasEvidence) {
+      activeStatus = `${progress.suspectCount} suspects created — drafting evidence...`;
+    } else if (!progress.hasTimeline) {
+      activeStatus = 'Constructing timeline and chronology...';
+    } else if (!progress.hasOfficer || !progress.hasPartner) {
+      activeStatus = 'Finalizing officer and partner profiles...';
+    } else if (!progress.hasImages) {
+      activeStatus = 'Generating character art & evidence photos...';
+    } else {
+      activeStatus = 'Wrapping up — almost ready!';
+    }
+  } else if (!activeStatus && showLoading) {
+    activeStatus = 'Submitting case generation request...';
+  }
 
   return (
     <Container>
       <Title>New Investigation</Title>
 
-      {!isLoading ? (
+      {!showLoading && !isAsyncFailed ? (
         <>
           <DescriptionText>
             Describe the crime you want to solve. Be as specific or as vague as you like.
@@ -196,6 +285,15 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
             Cancel
           </SmallCancelButton>
         </>
+      ) : isAsyncFailed ? (
+        <LoadingWrapper>
+          <ErrorBox>
+            ⚠ Case generation failed: {pollingState?.error || 'Unknown error'}
+          </ErrorBox>
+          <SmallCancelButton onClick={onCancel} style={{ marginTop: 'calc(var(--space) * 3)' }}>
+            Go Back
+          </SmallCancelButton>
+        </LoadingWrapper>
       ) : (
         <LoadingWrapper>
           <LoadingText>
@@ -204,8 +302,70 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
 
           <ProgressBar />
 
+          {/* Progressive checklist when polling */}
+          {pollingState && (
+            <ChecklistWrapper>
+              <CheckItem $done={pollingState.progress.hasTitle} $active={!pollingState.progress.hasTitle}>
+                <CheckIcon $done={pollingState.progress.hasTitle} $active={!pollingState.progress.hasTitle}>
+                  {pollingState.progress.hasTitle ? '✓' : ''}
+                </CheckIcon>
+                Case concept & theme
+                {pollingState.progress.hasTitle && pollingState.caseData?.title && (
+                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — "{pollingState.caseData.title}"</span>
+                )}
+              </CheckItem>
+
+              <CheckItem $done={pollingState.progress.hasSuspects} $active={pollingState.progress.hasTitle && !pollingState.progress.hasSuspects}>
+                <CheckIcon $done={pollingState.progress.hasSuspects} $active={pollingState.progress.hasTitle && !pollingState.progress.hasSuspects}>
+                  {pollingState.progress.hasSuspects ? '✓' : ''}
+                </CheckIcon>
+                Suspects & profiles
+                {pollingState.progress.hasSuspects && (
+                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — {pollingState.progress.suspectCount} created</span>
+                )}
+              </CheckItem>
+
+              <CheckItem $done={pollingState.progress.hasEvidence} $active={pollingState.progress.hasSuspects && !pollingState.progress.hasEvidence}>
+                <CheckIcon $done={pollingState.progress.hasEvidence} $active={pollingState.progress.hasSuspects && !pollingState.progress.hasEvidence}>
+                  {pollingState.progress.hasEvidence ? '✓' : ''}
+                </CheckIcon>
+                Evidence & clues
+                {pollingState.progress.hasEvidence && (
+                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — {pollingState.progress.evidenceCount} items</span>
+                )}
+              </CheckItem>
+
+              <CheckItem $done={pollingState.progress.hasTimeline} $active={pollingState.progress.hasEvidence && !pollingState.progress.hasTimeline}>
+                <CheckIcon $done={pollingState.progress.hasTimeline} $active={pollingState.progress.hasEvidence && !pollingState.progress.hasTimeline}>
+                  {pollingState.progress.hasTimeline ? '✓' : ''}
+                </CheckIcon>
+                Timeline & chronology
+              </CheckItem>
+
+              <CheckItem $done={pollingState.progress.hasOfficer && pollingState.progress.hasPartner} $active={pollingState.progress.hasTimeline && !(pollingState.progress.hasOfficer && pollingState.progress.hasPartner)}>
+                <CheckIcon $done={pollingState.progress.hasOfficer && pollingState.progress.hasPartner} $active={pollingState.progress.hasTimeline && !(pollingState.progress.hasOfficer && pollingState.progress.hasPartner)}>
+                  {(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) ? '✓' : ''}
+                </CheckIcon>
+                Officer & partner
+              </CheckItem>
+
+              <CheckItem $done={pollingState.progress.hasImages} $active={(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) && !pollingState.progress.hasImages}>
+                <CheckIcon $done={pollingState.progress.hasImages} $active={(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) && !pollingState.progress.hasImages}>
+                  {pollingState.progress.hasImages ? '✓' : ''}
+                </CheckIcon>
+                Character art & evidence photos
+                {pollingState.progress.hasImages && (
+                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — portraits & scenes generated</span>
+                )}
+              </CheckItem>
+            </ChecklistWrapper>
+          )}
+
           <NoteText>
-            Multi-step generation in progress: concept design, suspect construction, evidence drafting, timeline synthesis, and final validation. This usually takes 1-2 minutes.
+            {pollingState
+              ? 'Your case is being generated in the background. You can safely navigate away — come back to find it in My Cases.'
+              : 'Multi-step generation in progress: concept design, suspect construction, evidence drafting, timeline synthesis, and final validation. This usually takes 1-2 minutes.'
+            }
           </NoteText>
         </LoadingWrapper>
       )}

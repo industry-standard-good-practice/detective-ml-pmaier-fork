@@ -132,6 +132,38 @@ export const updateCase = async (caseId: string, updates: Partial<CaseData>): Pr
   }
 };
 
+/**
+ * Triggers async case generation on the backend.
+ * Creates a stubbed case in Firebase RTDB and returns the caseId immediately.
+ * The backend Eventarc worker will pick up the stub and run AI generation.
+ */
+export const triggerCaseGeneration = async (
+  prompt: string,
+  isLucky: boolean,
+  authorId: string,
+  authorDisplayName: string
+): Promise<{ caseId: string }> => {
+  console.log(`[DEBUG] triggerCaseGeneration: prompt="${prompt.slice(0, 50)}..." lucky=${isLucky}`);
+  return apiCall<{ caseId: string }>('POST', '/api/cases/generate', {
+    prompt,
+    isLucky,
+    authorId,
+    authorDisplayName,
+  });
+};
+
+/**
+ * Fetches a single case by ID. Used for polling during async generation.
+ */
+export const fetchCase = async (caseId: string): Promise<CaseData | null> => {
+  try {
+    return await apiCall<CaseData>('GET', `/api/cases/${encodeURIComponent(caseId)}`);
+  } catch (error: any) {
+    console.warn(`[DEBUG] fetchCase(${caseId}): Failed:`, error);
+    return null;
+  }
+};
+
 // --- CASE STATS ---
 
 export interface AttemptDetail {
