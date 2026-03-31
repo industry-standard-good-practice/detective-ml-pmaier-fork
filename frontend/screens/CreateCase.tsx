@@ -228,24 +228,14 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
   const isAsyncFailed = !!(pollingState && pollingState.isFailed);
   const showLoading = isLoading || isAsyncGenerating;
 
-  // Derive status text
+  // Derive status text — just two meaningful states
   let activeStatus = loadingStatus || '';
   if (isAsyncGenerating && pollingState) {
     const { progress } = pollingState;
-    if (!progress.hasTitle) {
-      activeStatus = 'Building case concept from your prompt...';
-    } else if (!progress.hasSuspects) {
-      activeStatus = `Case: "${pollingState.caseData?.title}" — generating suspects...`;
-    } else if (!progress.hasEvidence) {
-      activeStatus = `${progress.suspectCount} suspects created — drafting evidence...`;
-    } else if (!progress.hasTimeline) {
-      activeStatus = 'Constructing timeline and chronology...';
-    } else if (!progress.hasOfficer || !progress.hasPartner) {
-      activeStatus = 'Finalizing officer and partner profiles...';
-    } else if (!progress.hasImages) {
-      activeStatus = 'Generating character art & evidence photos...';
+    if (!progress.isClaimed) {
+      activeStatus = 'Waiting for service to begin processing your request...';
     } else {
-      activeStatus = 'Wrapping up — almost ready!';
+      activeStatus = 'Designing case details...';
     }
   } else if (!activeStatus && showLoading) {
     activeStatus = 'Submitting case generation request...';
@@ -302,64 +292,33 @@ const CreateCase: React.FC<CreateCaseProps> = ({ onGenerate, onCancel, isLoading
 
           <ProgressBar />
 
-          {/* Progressive checklist when polling */}
-          {pollingState && (
+          {/* Two-step checklist */}
+          {pollingState && (() => {
+            const p = pollingState.progress;
+            return (
             <ChecklistWrapper>
-              <CheckItem $done={pollingState.progress.hasTitle} $active={!pollingState.progress.hasTitle}>
-                <CheckIcon $done={pollingState.progress.hasTitle} $active={!pollingState.progress.hasTitle}>
-                  {pollingState.progress.hasTitle ? '✓' : ''}
+              <CheckItem $done={p.isClaimed} $active={!p.isClaimed}>
+                <CheckIcon $done={p.isClaimed} $active={!p.isClaimed}>
+                  {p.isClaimed ? '✓' : ''}
                 </CheckIcon>
-                Case concept & theme
-                {pollingState.progress.hasTitle && pollingState.caseData?.title && (
+                Queued for processing
+              </CheckItem>
+
+              <CheckItem $done={p.hasTitle} $active={p.isClaimed && !p.hasTitle}>
+                <CheckIcon $done={p.hasTitle} $active={p.isClaimed && !p.hasTitle}>
+                  {p.hasTitle ? '✓' : ''}
+                </CheckIcon>
+                Designing case details
+                {p.generationStep === 'ai-thinking' && (
+                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — this takes about a minute</span>
+                )}
+                {p.hasTitle && pollingState.caseData?.title && (
                   <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — "{pollingState.caseData.title}"</span>
                 )}
               </CheckItem>
-
-              <CheckItem $done={pollingState.progress.hasSuspects} $active={pollingState.progress.hasTitle && !pollingState.progress.hasSuspects}>
-                <CheckIcon $done={pollingState.progress.hasSuspects} $active={pollingState.progress.hasTitle && !pollingState.progress.hasSuspects}>
-                  {pollingState.progress.hasSuspects ? '✓' : ''}
-                </CheckIcon>
-                Suspects & profiles
-                {pollingState.progress.hasSuspects && (
-                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — {pollingState.progress.suspectCount} created</span>
-                )}
-              </CheckItem>
-
-              <CheckItem $done={pollingState.progress.hasEvidence} $active={pollingState.progress.hasSuspects && !pollingState.progress.hasEvidence}>
-                <CheckIcon $done={pollingState.progress.hasEvidence} $active={pollingState.progress.hasSuspects && !pollingState.progress.hasEvidence}>
-                  {pollingState.progress.hasEvidence ? '✓' : ''}
-                </CheckIcon>
-                Evidence & clues
-                {pollingState.progress.hasEvidence && (
-                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — {pollingState.progress.evidenceCount} items</span>
-                )}
-              </CheckItem>
-
-              <CheckItem $done={pollingState.progress.hasTimeline} $active={pollingState.progress.hasEvidence && !pollingState.progress.hasTimeline}>
-                <CheckIcon $done={pollingState.progress.hasTimeline} $active={pollingState.progress.hasEvidence && !pollingState.progress.hasTimeline}>
-                  {pollingState.progress.hasTimeline ? '✓' : ''}
-                </CheckIcon>
-                Timeline & chronology
-              </CheckItem>
-
-              <CheckItem $done={pollingState.progress.hasOfficer && pollingState.progress.hasPartner} $active={pollingState.progress.hasTimeline && !(pollingState.progress.hasOfficer && pollingState.progress.hasPartner)}>
-                <CheckIcon $done={pollingState.progress.hasOfficer && pollingState.progress.hasPartner} $active={pollingState.progress.hasTimeline && !(pollingState.progress.hasOfficer && pollingState.progress.hasPartner)}>
-                  {(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) ? '✓' : ''}
-                </CheckIcon>
-                Officer & partner
-              </CheckItem>
-
-              <CheckItem $done={pollingState.progress.hasImages} $active={(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) && !pollingState.progress.hasImages}>
-                <CheckIcon $done={pollingState.progress.hasImages} $active={(pollingState.progress.hasOfficer && pollingState.progress.hasPartner) && !pollingState.progress.hasImages}>
-                  {pollingState.progress.hasImages ? '✓' : ''}
-                </CheckIcon>
-                Character art & evidence photos
-                {pollingState.progress.hasImages && (
-                  <span style={{ opacity: 0.6, fontSize: '0.85em' }}> — portraits & scenes generated</span>
-                )}
-              </CheckItem>
             </ChecklistWrapper>
-          )}
+            );
+          })()}
 
           <NoteText>
             {pollingState

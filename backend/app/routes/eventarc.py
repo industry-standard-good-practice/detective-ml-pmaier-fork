@@ -95,7 +95,7 @@ async def handle_case_written(request: Request):
         return {"status": "ignored", "reason": f"status is {status}"}
 
     # --- 3. Claim the case: set status=in-progress + lease ---
-    _extend_lease(case_ref, {"status": "in-progress"})
+    _extend_lease(case_ref, {"status": "in-progress", "generationStep": "ai-thinking"})
     print(f"[Eventarc] Claimed case {case_id}: status=in-progress")
 
     prompt = case_data.get("generationPrompt", "")
@@ -106,12 +106,14 @@ async def handle_case_written(request: Request):
     try:
         generated = await generate_case_from_prompt(prompt, is_lucky)
         print(f"[Eventarc] AI generation complete for {case_id}: title=\"{generated.get('title')}\"")
+        case_ref.update({"generationStep": "writing-chunks", "updatedAt": _now_ms()})
     except Exception as e:
         print(f"[Eventarc] AI generation FAILED for {case_id}: {e}")
         traceback.print_exc()
         # Leave status=in-progress with expired lease for cron retry
         case_ref.update({
             "status": "failed",
+            "generationStep": None,
             "generationError": str(e)[:500],
             "updatedAt": _now_ms(),
         })

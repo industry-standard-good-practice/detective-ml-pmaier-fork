@@ -30,6 +30,10 @@ export interface CasePollingState {
     hasPartner: boolean;
     hasImages: boolean;
     progressPercent: number;
+    /** Backend generation step: 'ai-thinking' | 'writing-chunks' | 'generating-images' | null */
+    generationStep: string | null;
+    /** True when backend has claimed the case (status=in-progress) */
+    isClaimed: boolean;
   };
 }
 
@@ -66,6 +70,8 @@ export function useCasePolling(
     hasPartner: !!(caseData?.partner?.name),
     hasImages: !!(caseData?.suspects?.some(s => s.portraits && Object.keys(s.portraits).length > 0)),
     progressPercent: (caseData as any)?.progress ?? 0,
+    generationStep: ((caseData as any)?.generationStep as string) ?? null,
+    isClaimed: caseData?.status === 'in-progress' || caseData?.status === 'completed',
   };
 
   const status = caseData?.status ?? null;
