@@ -60,6 +60,7 @@ async def generate_case(request: Request):
         "generationPrompt": prompt,
         "generationIsLucky": is_lucky,
         "leaseUntil": None,
+        "retryCount": 0,
         "suspects": [],
         "initialEvidence": [],
         "initialTimeline": [],
