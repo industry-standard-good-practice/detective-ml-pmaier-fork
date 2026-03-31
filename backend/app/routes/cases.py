@@ -29,6 +29,77 @@ def _get_db():
     return rtdb.reference()
 
 
+@router.post("/generate")
+async def generate_case(request: Request):
+    """
+    POST /api/cases/generate
+    Creates a stubbed case in Firebase RTDB with status='pending' and returns the caseId.
+    The Eventarc trigger on /cases/{caseId} will pick this up and run AI generation.
+    Body: { prompt, isLucky, authorId, authorDisplayName }
+    """
+    body = await request.json()
+    prompt = body.get("prompt", "")
+    is_lucky = body.get("isLucky", False)
+    author_id = body.get("authorId")
+    author_display_name = body.get("authorDisplayName")
+
+    if not author_id:
+        return JSONResponse({"error": "authorId is required."}, status_code=400)
+    if not author_display_name or author_display_name.strip().lower() in PLACEHOLDER_NAMES:
+        return JSONResponse({"error": "Valid authorDisplayName is required."}, status_code=400)
+
+    now_ms = int(time.time() * 1000)
+    case_id = f"custom-{now_ms}"
+
+    stubbed_case = {
+        "id": case_id,
+        "title": "",
+        "type": "",
+        "description": "",
+        "status": "pending",
+        "generationPrompt": prompt,
+        "generationIsLucky": is_lucky,
+        "leaseUntil": None,
+        "suspects": [],
+        "initialEvidence": [],
+        "initialTimeline": [],
+        "officer": None,
+        "partner": None,
+        "authorId": author_id,
+        "authorDisplayName": author_display_name,
+        "createdAt": now_ms,
+        "updatedAt": now_ms,
+        "version": 1,
+        "isUploaded": False,
+        "difficulty": "Medium",
+        "partnerCharges": 3,
+    }
+
+    try:
+        _get_db().child(f"cases/{case_id}").set(_strip_undefined(stubbed_case))
+        print(f"[Cases] POST /api/cases/generate: Created stub {case_id} for user {author_id}")
+        return {"caseId": case_id}
+    except Exception as e:
+        print(f"[Cases] POST /api/cases/generate error: {e}")
+        return JSONResponse({"error": "Failed to create case stub."}, status_code=500)
+
+
+@router.get("/{case_id}")
+async def get_case(case_id: str, request: Request):
+    """
+    GET /api/cases/:id
+    Returns a single case by ID. Used by frontend polling during async generation.
+    """
+    try:
+        data = _get_db().child(f"cases/{case_id}").get()
+        if not data:
+            return JSONResponse({"error": "Case not found."}, status_code=404)
+        return data
+    except Exception as e:
+        print(f"[Cases] GET /api/cases/{case_id} error: {e}")
+        return JSONResponse({"error": "Failed to fetch case."}, status_code=500)
+
+
 @router.get("")
 async def get_cases(request: Request, authorId: Optional[str] = Query(default=None)):
     """

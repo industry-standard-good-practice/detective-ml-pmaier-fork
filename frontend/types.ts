@@ -138,6 +138,13 @@ export interface CaseData {
   createdAt?: number; // Epoch timestamp for when the case was first created
   updatedAt?: number; // Epoch timestamp for when the case was last edited
   hasVictim?: boolean; // Whether the crime has a victim (auto-set by AI during creation/edit/consistency)
+  
+  // --- Async Generation Fields ---
+  status?: 'pending' | 'in-progress' | 'completed' | 'failed'; // Generation status (missing = completed for legacy)
+  leaseUntil?: number | null; // Epoch ms — active processing lease for cron retry
+  generationPrompt?: string; // Stored prompt for async generation
+  generationIsLucky?: boolean; // Stored lucky flag for async generation
+  generationError?: string; // Error message if generation failed
 }
 
 export interface CaseStats {

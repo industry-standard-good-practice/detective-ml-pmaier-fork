@@ -4,11 +4,11 @@ import { flushSync } from 'react-dom';
 import styled from 'styled-components';
 import toast from './services/appToast';
 import { GameState, ScreenState, ChatMessage, Emotion, CaseData, Evidence } from './types';
-import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, pregenerateCaseImages, calculateDifficulty } from './services/geminiService';
+import { getSuspectResponse, getOfficerChatResponse, mapTimelineForOfficerChat, generateCaseFromPrompt, getBadCopHint, getPartnerIntervention, calculateDifficulty } from './services/geminiService';
 import { generateTTS } from './services/geminiTTS';
 import { GEMINI_API_ERROR_TOAST_ID } from './services/backendGemini';
 import { playAudioFromUrl, primeSfxAudioContext, playCrtBootSfx, playClickGlitchSfx } from './services/audioPlayer';
-import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft } from './services/persistence';
+import { fetchCommunityCases, fetchUserCases, publishCase, deleteCase, updateCase, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, triggerCaseGeneration } from './services/persistence';
 import { CaseStats } from './types';
 import { auth, logout } from './services/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -29,6 +29,7 @@ import Interrogation from './screens/Interrogation';
 import Accusation from './screens/Accusation';
 import EndGame from './screens/EndGame';
 import CreateCase from './screens/CreateCase';
+import { useCasePolling } from './hooks/useCasePolling';
 import CaseReview from './screens/CaseReview';
 import BootSequence from './components/BootSequence';
 import BootUpGate from './components/BootUpGate';
@@ -100,6 +101,7 @@ const App: React.FC = () => {
   const [draftCase, setDraftCase] = useState<CaseData | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<string>("");
+  const [pendingGenerationCaseId, setPendingGenerationCaseId] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [pendingPublishDraftId, setPendingPublishDraftId] = useState<string | null>(null);
@@ -967,33 +969,57 @@ const App: React.FC = () => {
     }
     
     setIsGenerating(true);
-    setGenerationStatus("Step 1/6: Building case concept from your prompt...");
+    setGenerationStatus('Submitting case generation request...');
     try {
-        const newCase = await generateCaseFromPrompt(prompt, isLucky, (msg) => {
-          setGenerationStatus(msg);
-        });
-        // CRITICAL: Always stamp creator identity — never optional
-        newCase.authorId = user.uid;
-        newCase.authorDisplayName = formatAuthorName(user.displayName);
-        newCase.createdAt = Date.now();
-        setGenerationStatus("");
-        
-        // Save immediately — images will be generated in the background on the edit screen
-        saveLocalDraft(newCase);
-        setLocalDrafts(fetchLocalDrafts());
-        
-        // Open edit screen first
-        setDraftCase(newCase);
-        originalDraftRef.current = JSON.parse(JSON.stringify(newCase));
-        setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
+        // Trigger async generation — returns caseId instantly
+        const { caseId } = await triggerCaseGeneration(
+            prompt,
+            isLucky,
+            user.uid,
+            formatAuthorName(user.displayName)
+        );
+        console.log(`[handleGenerateCase] Async generation triggered: ${caseId}`);
+        setPendingGenerationCaseId(caseId);
+        // CREATE_CASE screen stays visible and shows progressive polling UI
     } catch (e: any) {
-        console.error("Generation Error:", e);
+        console.error('Generation trigger Error:', e);
         toast.error(`Case generation failed: ${e.message || 'Unknown error'}`);
     } finally {
         setIsGenerating(false);
-        setGenerationStatus("");
+        setGenerationStatus('');
     }
   };
+
+  // --- Async generation polling ---
+  const pollingState = useCasePolling(
+    pendingGenerationCaseId,
+    gameState.currentScreen === ScreenState.CREATE_CASE
+  );
+
+  // When polling detects all metadata is ready (officer + partner populated),
+  // transition to the case editor — images continue generating in background
+  const metadataReady = !!(
+    pollingState.progress.hasOfficer &&
+    pollingState.progress.hasPartner &&
+    pollingState.caseData
+  );
+
+  useEffect(() => {
+    if (metadataReady && pollingState.caseData && pendingGenerationCaseId) {
+      const readyCase = pollingState.caseData;
+      console.log(`[App] Metadata ready for "${readyCase.title}" (${readyCase.id}) — opening editor (images still generating)`);
+      setPendingGenerationCaseId(null);
+
+      // Save to local drafts
+      saveLocalDraft(readyCase);
+      setLocalDrafts(fetchLocalDrafts());
+
+      // Open in the case review editor
+      setDraftCase(readyCase);
+      originalDraftRef.current = JSON.parse(JSON.stringify(readyCase));
+      setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
+    }
+  }, [metadataReady, pendingGenerationCaseId]);
 
   const handleSaveAndStart = async () => {
     if (!draftCase) return;
@@ -1568,9 +1594,13 @@ const App: React.FC = () => {
             <CreateCase 
                 key="screen-create"
                 onGenerate={handleGenerateCase}
-                onCancel={() => setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_SELECTION }))}
+                onCancel={() => {
+                  setPendingGenerationCaseId(null);
+                  setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_SELECTION }));
+                }}
                 isLoading={isGenerating}
                 loadingStatus={generationStatus}
+                pollingState={pendingGenerationCaseId ? pollingState : null}
             />
           )}
 

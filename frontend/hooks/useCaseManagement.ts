@@ -2,8 +2,8 @@
 import { useState, useRef } from 'react';
 import toast from '../services/appToast';
 import { GameState, ScreenState, CaseData, CaseStats } from '../types';
-import { generateCaseFromPrompt, calculateDifficulty } from '../services/geminiService';
-import { publishCase, deleteCase, updateCase, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, fetchCommunityCases, fetchUserCases, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult } from '../services/persistence';
+import { calculateDifficulty } from '../services/geminiService';
+import { publishCase, deleteCase, updateCase, saveLocalDraft, fetchLocalDrafts, deleteLocalDraft, fetchCommunityCases, fetchUserCases, fetchAllCaseStats, fetchCaseStats, fetchUserVote, submitVote, recordGameResult, triggerCaseGeneration } from '../services/persistence';
 import { formatAuthorName } from '../utils/timeUtils';
 import { User } from 'firebase/auth';
 
@@ -53,6 +53,8 @@ export const useCaseManagement = ({
   const [currentCaseStats, setCurrentCaseStats] = useState<CaseStats | null>(null);
   const [currentUserVote, setCurrentUserVote] = useState<'up' | 'down' | null>(null);
   const [hasRecordedResult, setHasRecordedResult] = useState(false);
+  // Async generation: ID of the case currently being generated (drives polling)
+  const [pendingGenerationCaseId, setPendingGenerationCaseId] = useState<string | null>(null);
 
   const loadCommunity = async () => {
     const fetches: [Promise<CaseData[]>, Promise<CaseData[]>, Promise<Record<string, CaseStats>>] = [
@@ -69,7 +71,9 @@ export const useCaseManagement = ({
     const validCases = Array.from(caseMap.values()).filter(c => 
       c && 
       c.id && typeof c.id === 'string' && c.id.trim() !== '' &&
-      c.title && typeof c.title === 'string' && c.title.trim() !== ''
+      // Allow pending/in-progress cases even without a title (they're still generating)
+      ((c.title && typeof c.title === 'string' && c.title.trim() !== '') ||
+       c.status === 'pending' || c.status === 'in-progress')
     );
     setCommunityCases(validCases);
     setAllCaseStats(stats);
@@ -87,28 +91,43 @@ export const useCaseManagement = ({
     }
     
     setIsGenerating(true);
-    setGenerationStatus("Creating criminal profiles...");
+    setGenerationStatus('Submitting case generation request...');
     try {
-        const newCase = await generateCaseFromPrompt(prompt, isLucky);
-        newCase.authorId = user.uid;
-        newCase.authorDisplayName = formatAuthorName(user.displayName);
-        newCase.createdAt = Date.now();
-        setGenerationStatus("");
-        
-        // Save immediately — images will be generated in the background on the edit screen
-        saveLocalDraft(newCase);
-        setLocalDrafts(fetchLocalDrafts());
-        
-        setDraftCase(newCase);
-        originalDraftRef.current = JSON.parse(JSON.stringify(newCase));
-        setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
+        // Trigger async generation — returns caseId instantly
+        const { caseId } = await triggerCaseGeneration(
+            prompt,
+            isLucky,
+            user.uid,
+            formatAuthorName(user.displayName)
+        );
+        console.log(`[handleGenerateCase] Async generation triggered: ${caseId}`);
+        setPendingGenerationCaseId(caseId);
+        // The CREATE_CASE screen stays visible and hooks into polling
     } catch (e: any) {
-        console.error("Generation Error:", e);
+        console.error('Generation trigger Error:', e);
         toast.error(`Case generation failed: ${e.message || 'Unknown error'}`);
     } finally {
         setIsGenerating(false);
-        setGenerationStatus("");
+        setGenerationStatus('');
     }
+  };
+
+  /**
+   * Called when polling detects that async generation has completed.
+   * Transitions the completed case into the draft editor.
+   */
+  const handleGenerationComplete = (completedCase: CaseData) => {
+    console.log(`[handleGenerationComplete] Case "${completedCase.title}" (${completedCase.id}) is ready`);
+    setPendingGenerationCaseId(null);
+
+    // Save to local drafts
+    saveLocalDraft(completedCase);
+    setLocalDrafts(fetchLocalDrafts());
+
+    // Open in the case review editor
+    setDraftCase(completedCase);
+    originalDraftRef.current = JSON.parse(JSON.stringify(completedCase));
+    setGameState(prev => ({ ...prev, currentScreen: ScreenState.CASE_REVIEW }));
   };
 
   const handleSaveAndStart = async () => {
@@ -402,11 +421,15 @@ export const useCaseManagement = ({
     currentCaseStats,
     currentUserVote,
     hasRecordedResult,
+    // Async generation
+    pendingGenerationCaseId,
+    setPendingGenerationCaseId,
     // Data fetching
     loadCommunity,
     loadDrafts,
     // Actions
     handleGenerateCase,
+    handleGenerationComplete,
     handleSaveAndStart,
     handleTestInvestigation,
     handleSaveDraftFromHeader,
